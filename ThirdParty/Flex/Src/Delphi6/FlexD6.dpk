@@ -1,0 +1,49 @@
+package FlexD6;
+
+{$R *.res}
+{$R '..\FlexReg.dcr'}
+{$ALIGN 8}
+{$ASSERTIONS ON}
+{$BOOLEVAL OFF}
+{$DEBUGINFO ON}
+{$EXTENDEDSYNTAX ON}
+{$IMPORTEDDATA ON}
+{$IOCHECKS ON}
+{$LOCALSYMBOLS ON}
+{$LONGSTRINGS ON}
+{$OPENSTRINGS ON}
+{$OPTIMIZATION ON}
+{$OVERFLOWCHECKS OFF}
+{$RANGECHECKS OFF}
+{$REFERENCEINFO ON}
+{$SAFEDIVIDE OFF}
+{$STACKFRAMES OFF}
+{$TYPEDADDRESS OFF}
+{$VARSTRINGCHECKS ON}
+{$WRITEABLECONST ON}
+{$MINENUMSIZE 1}
+{$IMAGEBASE $400000}
+{$DESCRIPTION 'FlexGraphics components'}
+{$IMPLICITBUILD OFF}
+
+requires
+  vcl,
+  vcljpg;
+
+contains
+  FlexReg in '..\FlexReg.pas',
+  FlexBase in '..\FlexBase.pas',
+  FlexControls in '..\FlexControls.pas',
+  FlexLibs in '..\FlexLibs.pas',
+  FlexProps in '..\FlexProps.pas',
+  FlexPath in '..\FlexPath.pas',
+  FlexUtils in '..\FlexUtils.pas',
+  FlexAlpha in '..\FlexAlpha.pas',
+  FlexHistory in '..\FlexHistory.pas',
+  FlexActions in '..\FlexActions.pas',
+  FlexFileFormats in '..\FlexFileFormats.pas',
+  FormatMetaFile in '..\FormatMetaFile.pas',
+  FormatStdFiles in '..\FormatStdFiles.pas',
+  FormatSvgFile in '..\FormatSvgFile.pas';
+
+end.

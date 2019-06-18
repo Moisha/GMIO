@@ -1,0 +1,341 @@
+﻿<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+    <PropertyGroup>
+        <ProjectGuid>{37F4A166-1E38-4654-A478-6F6389DCA4AC}</ProjectGuid>
+        <ProjectVersion>14.6</ProjectVersion>
+        <FrameworkType>VCL</FrameworkType>
+        <MainSource>GMIOPSvc.dpr</MainSource>
+        <Base>True</Base>
+        <Config Condition="'$(Config)'==''">Application</Config>
+        <Platform Condition="'$(Platform)'==''">Win32</Platform>
+        <TargetedPlatforms>1</TargetedPlatforms>
+        <AppType>Application</AppType>
+    </PropertyGroup>
+    <PropertyGroup Condition="'$(Config)'=='Base' or '$(Base)'!=''">
+        <Base>true</Base>
+    </PropertyGroup>
+    <PropertyGroup Condition="('$(Platform)'=='Win32' and '$(Base)'=='true') or '$(Base_Win32)'!=''">
+        <Base_Win32>true</Base_Win32>
+        <CfgParent>Base</CfgParent>
+        <Base>true</Base>
+    </PropertyGroup>
+    <PropertyGroup Condition="('$(Platform)'=='Win64' and '$(Base)'=='true') or '$(Base_Win64)'!=''">
+        <Base_Win64>true</Base_Win64>
+        <CfgParent>Base</CfgParent>
+        <Base>true</Base>
+    </PropertyGroup>
+    <PropertyGroup Condition="'$(Config)'=='Debug' or '$(Cfg_1)'!=''">
+        <Cfg_1>true</Cfg_1>
+        <CfgParent>Base</CfgParent>
+        <Base>true</Base>
+    </PropertyGroup>
+    <PropertyGroup Condition="('$(Platform)'=='Win32' and '$(Cfg_1)'=='true') or '$(Cfg_1_Win32)'!=''">
+        <Cfg_1_Win32>true</Cfg_1_Win32>
+        <CfgParent>Cfg_1</CfgParent>
+        <Cfg_1>true</Cfg_1>
+        <Base>true</Base>
+    </PropertyGroup>
+    <PropertyGroup Condition="'$(Config)'=='Release' or '$(Cfg_2)'!=''">
+        <Cfg_2>true</Cfg_2>
+        <CfgParent>Base</CfgParent>
+        <Base>true</Base>
+    </PropertyGroup>
+    <PropertyGroup Condition="('$(Platform)'=='Win32' and '$(Cfg_2)'=='true') or '$(Cfg_2_Win32)'!=''">
+        <Cfg_2_Win32>true</Cfg_2_Win32>
+        <CfgParent>Cfg_2</CfgParent>
+        <Cfg_2>true</Cfg_2>
+        <Base>true</Base>
+    </PropertyGroup>
+    <PropertyGroup Condition="'$(Config)'=='Application' or '$(Cfg_3)'!=''">
+        <Cfg_3>true</Cfg_3>
+        <CfgParent>Base</CfgParent>
+        <Base>true</Base>
+    </PropertyGroup>
+    <PropertyGroup Condition="('$(Platform)'=='Win32' and '$(Cfg_3)'=='true') or '$(Cfg_3_Win32)'!=''">
+        <Cfg_3_Win32>true</Cfg_3_Win32>
+        <CfgParent>Cfg_3</CfgParent>
+        <Cfg_3>true</Cfg_3>
+        <Base>true</Base>
+    </PropertyGroup>
+    <PropertyGroup Condition="'$(Base)'!=''">
+        <BRCC_CompilerToUse>rc</BRCC_CompilerToUse>
+        <DCC_Define>FullDebugModeInIDE;ClearLogFileOnStartup;LogErrorsToFile;LogMemoryLeakDetailToFile;EnableMemoryLeakReporting;NeverSleepOnThreadContention;UseSwitchToThread;$(DCC_Define)</DCC_Define>
+        <Manifest_File>None</Manifest_File>
+        <DCC_SYMBOL_PLATFORM>false</DCC_SYMBOL_PLATFORM>
+        <VerInfo_Locale>1049</VerInfo_Locale>
+        <DCC_UnitSearchPath>..\SharedSrc;..\ThirdParty\FastMM;..\ThirdParty\Zeos;..\ThirdParty\Zeos\component;..\ThirdParty\Zeos\core;..\ThirdParty\Zeos\dbc;..\ThirdParty\Zeos\parsesql;..\ThirdParty\Zeos\plain;..\ThirdParty\VT\Source;..\ThirdParty\DateComboBox;..\ThirdParty\VT\Resources;..\ThirdParty\VT;..\Server;..\ThirdParty\JEDI\jvcl\run;..\ThirdParty\JEDI\jvcl\common;..\ThirdParty\JEDI\jcl\source;..\ThirdParty\JEDI\jcl\source\Include;..\ThirdParty\JEDI\jcl\source\Common;..\ThirdParty\JEDI\jcl\source\Windows;..\ThirdParty\JEDI\jvcl\Resources;$(DCC_UnitSearchPath)</DCC_UnitSearchPath>
+        <DCC_UNIT_PLATFORM>false</DCC_UNIT_PLATFORM>
+        <VerInfo_Keys>CompanyName=;FileDescription=;FileVersion=1.0.0.0;InternalName=;LegalCopyright=;LegalTrademarks=;OriginalFilename=;ProductName=;ProductVersion=1.0.0.0;Comments=</VerInfo_Keys>
+        <Icns_MainIcns>$(BDS)\bin\delphi_PROJECTICNS.icns</Icns_MainIcns>
+        <DCC_Namespace>Datasnap.Win;Soap.Win;Xml.Win;Bde;Vcl;Vcl.Imaging;Vcl.Touch;Vcl.Samples;Vcl.Shell;System;Xml;Data;Datasnap;Web;Soap;Winapi;Web.Win;System.Win;Data.Win;$(DCC_Namespace)</DCC_Namespace>
+        <DCC_DcuOutput>dcu</DCC_DcuOutput>
+        <DCC_E>false</DCC_E>
+        <DCC_N>false</DCC_N>
+        <DCC_S>false</DCC_S>
+        <DCC_F>false</DCC_F>
+        <DCC_K>false</DCC_K>
+    </PropertyGroup>
+    <PropertyGroup Condition="'$(Base_Win32)'!=''">
+        <VerInfo_Locale>1033</VerInfo_Locale>
+        <DCC_UsePackage>office2K;bindcompfmx;DBXSqliteDriver;frxDB18;vcldbx;fmx;rtl;dbrtl;DbxClientDriver;IndySystem;TeeDB;bindcomp;frx18;inetdbbde;vclib;DBXInterBaseDriver;Tee;DataSnapCommon;DIE;xmlrtl;svnui;ibxpress;DbxCommonDriver;vclimg;IndyProtocols;dbxcds;DBXMySQLDriver;frxe18;MetropolisUILiveTile;vclshlctrls;vclactnband;bindengine;vcldb;soaprtl;bindcompdbx;vcldsnap;bindcompvcl;FMXTee;TeeUI;vclSvComV7D18;vclie;DIECustomVisualizers;vcltouch;CustomIPTransport;vclribbon;VclSmp;dsnap;IndyIPServer;Intraweb;fmxase;vcl;IndyCore;IndyIPCommon;CloudService;CodeSiteExpressPkg;dsnapcon;FmxTeeUI;inet;fmxobj;vclx;inetdbxpress;webdsnap;svn;fmxdae;bdertl;VirtualTreesR;dbexpress;adortl;IndyIPClient;$(DCC_UsePackage)</DCC_UsePackage>
+        <VerInfo_IncludeVerInfo>true</VerInfo_IncludeVerInfo>
+        <VerInfo_Keys>CompanyName=;FileDescription=;FileVersion=1.0.0.0;InternalName=;LegalCopyright=;LegalTrademarks=;OriginalFilename=;ProductName=;ProductVersion=1.0.0.0;Comments=</VerInfo_Keys>
+        <Manifest_File>$(BDS)\bin\default_app.manifest</Manifest_File>
+    </PropertyGroup>
+    <PropertyGroup Condition="'$(Base_Win64)'!=''">
+        <DCC_UsePackage>office2K;bindcompfmx;DBXSqliteDriver;fmx;rtl;dbrtl;DbxClientDriver;IndySystem;TeeDB;bindcomp;vclib;DBXInterBaseDriver;Tee;DataSnapCommon;xmlrtl;ibxpress;DbxCommonDriver;vclimg;IndyProtocols;dbxcds;DBXMySQLDriver;MetropolisUILiveTile;vclshlctrls;vclactnband;bindengine;vcldb;soaprtl;bindcompdbx;vcldsnap;bindcompvcl;FMXTee;TeeUI;vclie;vcltouch;CustomIPTransport;vclribbon;VclSmp;dsnap;IndyIPServer;Intraweb;fmxase;vcl;IndyCore;IndyIPCommon;CloudService;dsnapcon;FmxTeeUI;inet;fmxobj;vclx;inetdbxpress;webdsnap;fmxdae;VirtualTreesR;dbexpress;adortl;IndyIPClient;$(DCC_UsePackage)</DCC_UsePackage>
+    </PropertyGroup>
+    <PropertyGroup Condition="'$(Cfg_1)'!=''">
+        <DCC_Define>DEBUG;$(DCC_Define)</DCC_Define>
+        <DCC_DebugDCUs>true</DCC_DebugDCUs>
+        <DCC_Optimize>false</DCC_Optimize>
+        <DCC_GenerateStackFrames>true</DCC_GenerateStackFrames>
+        <DCC_DebugInfoInExe>true</DCC_DebugInfoInExe>
+        <DCC_RemoteDebug>true</DCC_RemoteDebug>
+    </PropertyGroup>
+    <PropertyGroup Condition="'$(Cfg_1_Win32)'!=''">
+        <Manifest_File>uac.manifest</Manifest_File>
+        <PreBuildEventCancelOnError>false</PreBuildEventCancelOnError>
+        <PreBuildEvent><![CDATA[net stop GMIOPService
+$(PreBuildEvent)]]></PreBuildEvent>
+        <Debugger_RunParams>/start</Debugger_RunParams>
+        <VerInfo_IncludeVerInfo>true</VerInfo_IncludeVerInfo>
+        <VerInfo_Locale>1033</VerInfo_Locale>
+        <DCC_RemoteDebug>false</DCC_RemoteDebug>
+    </PropertyGroup>
+    <PropertyGroup Condition="'$(Cfg_2)'!=''">
+        <DCC_CVT_WCHAR_TO_ACHAR>error</DCC_CVT_WCHAR_TO_ACHAR>
+        <DCC_CASE_LABEL_RANGE>error</DCC_CASE_LABEL_RANGE>
+        <DCC_CVT_NARROWING_STRING_LOST>error</DCC_CVT_NARROWING_STRING_LOST>
+        <DCC_GARBAGE>error</DCC_GARBAGE>
+        <DCC_CONSTRUCTING_ABSTRACT>error</DCC_CONSTRUCTING_ABSTRACT>
+        <DCC_FILE_OPEN>error</DCC_FILE_OPEN>
+        <DCC_UNIT_LIBRARY>error</DCC_UNIT_LIBRARY>
+        <DCC_BOUNDS_ERROR>error</DCC_BOUNDS_ERROR>
+        <DCC_ZERO_NIL_COMPAT>error</DCC_ZERO_NIL_COMPAT>
+        <DCC_CVT_ACHAR_TO_WCHAR>error</DCC_CVT_ACHAR_TO_WCHAR>
+        <DCC_HIDDEN_VIRTUAL>error</DCC_HIDDEN_VIRTUAL>
+        <DCC_USE_BEFORE_DEF>error</DCC_USE_BEFORE_DEF>
+        <DCC_UNICODE_TO_LOCALE>error</DCC_UNICODE_TO_LOCALE>
+        <DCC_HRESULT_COMPAT>error</DCC_HRESULT_COMPAT>
+        <DCC_FOR_LOOP_VAR_VARPAR>error</DCC_FOR_LOOP_VAR_VARPAR>
+        <DCC_SUSPICIOUS_TYPECAST>error</DCC_SUSPICIOUS_TYPECAST>
+        <DCC_TYPED_CONST_VARPAR>error</DCC_TYPED_CONST_VARPAR>
+        <DCC_IMPLICIT_IMPORT>error</DCC_IMPLICIT_IMPORT>
+        <DCC_PACKAGED_THREADVAR>error</DCC_PACKAGED_THREADVAR>
+        <DCC_CVT_WIDENING_STRING_LOST>error</DCC_CVT_WIDENING_STRING_LOST>
+        <DCC_SYMBOL_EXPERIMENTAL>error</DCC_SYMBOL_EXPERIMENTAL>
+        <DCC_SYMBOL_LIBRARY>error</DCC_SYMBOL_LIBRARY>
+        <DCC_COMPARISON_TRUE>error</DCC_COMPARISON_TRUE>
+        <DCC_HIDING_MEMBER>error</DCC_HIDING_MEMBER>
+        <DCC_COMPARISON_FALSE>error</DCC_COMPARISON_FALSE>
+        <DCC_UNIT_EXPERIMENTAL>error</DCC_UNIT_EXPERIMENTAL>
+        <DCC_LOCALE_TO_UNICODE>error</DCC_LOCALE_TO_UNICODE>
+        <DCC_FILE_OPEN_UNITSRC>error</DCC_FILE_OPEN_UNITSRC>
+        <DCC_WIDECHAR_REDUCED>error</DCC_WIDECHAR_REDUCED>
+        <DCC_IMPLICIT_VARIANTS>error</DCC_IMPLICIT_VARIANTS>
+        <DCC_NO_CFG_FILE_FOUND>error</DCC_NO_CFG_FILE_FOUND>
+        <DCC_UNIT_INIT_SEQ>error</DCC_UNIT_INIT_SEQ>
+        <DCC_INVALID_DIRECTIVE>error</DCC_INVALID_DIRECTIVE>
+        <DCC_UNSUPPORTED_CONSTRUCT>error</DCC_UNSUPPORTED_CONSTRUCT>
+        <DCC_UNIT_NAME_MISMATCH>error</DCC_UNIT_NAME_MISMATCH>
+        <DCC_COMBINING_SIGNED_UNSIGNED>error</DCC_COMBINING_SIGNED_UNSIGNED>
+        <DCC_IMPLICIT_STRING_CAST_LOSS>error</DCC_IMPLICIT_STRING_CAST_LOSS>
+        <DCC_COMPARING_SIGNED_UNSIGNED>error</DCC_COMPARING_SIGNED_UNSIGNED>
+        <DCC_STRING_CONST_TRUNCED>error</DCC_STRING_CONST_TRUNCED>
+        <DCC_OPTION_TRUNCATED>error</DCC_OPTION_TRUNCATED>
+        <DCC_FOR_VARIABLE>error</DCC_FOR_VARIABLE>
+        <DCC_NO_RETVAL>error</DCC_NO_RETVAL>
+        <DCC_MESSAGE_DIRECTIVE>error</DCC_MESSAGE_DIRECTIVE>
+        <DCC_FOR_LOOP_VAR_UNDEF>error</DCC_FOR_LOOP_VAR_UNDEF>
+        <DCC_IMPLICIT_STRING_CAST>error</DCC_IMPLICIT_STRING_CAST>
+        <DCC_MapFile>3</DCC_MapFile>
+        <DCC_LocalDebugSymbols>false</DCC_LocalDebugSymbols>
+        <DCC_Define>RELEASE;$(DCC_Define)</DCC_Define>
+        <DCC_SymbolReferenceInfo>0</DCC_SymbolReferenceInfo>
+        <DCC_DebugInformation>false</DCC_DebugInformation>
+    </PropertyGroup>
+    <PropertyGroup Condition="'$(Cfg_2_Win32)'!=''">
+        <VerInfo_IncludeVerInfo>true</VerInfo_IncludeVerInfo>
+        <Manifest_File>$(BDS)\bin\default_app.manifest</Manifest_File>
+        <VerInfo_Locale>1033</VerInfo_Locale>
+    </PropertyGroup>
+    <PropertyGroup Condition="'$(Cfg_3)'!=''">
+        <DCC_DebugDCUs>true</DCC_DebugDCUs>
+        <DCC_DebugInfoInExe>true</DCC_DebugInfoInExe>
+        <DCC_ConsoleTarget>true</DCC_ConsoleTarget>
+        <DCC_Define>Application;DEBUG;$(DCC_Define)</DCC_Define>
+        <DCC_Optimize>false</DCC_Optimize>
+    </PropertyGroup>
+    <PropertyGroup Condition="'$(Cfg_3_Win32)'!=''">
+        <Manifest_File>$(BDS)\bin\default_app.manifest</Manifest_File>
+        <VerInfo_IncludeVerInfo>true</VerInfo_IncludeVerInfo>
+        <VerInfo_Locale>1033</VerInfo_Locale>
+    </PropertyGroup>
+    <ItemGroup>
+        <DelphiCompile Include="$(MainSource)">
+            <MainSource>MainSource</MainSource>
+        </DelphiCompile>
+        <RcCompile Include="GMIOPSvc.rc">
+            <Form>GMIOPSvc.res</Form>
+        </RcCompile>
+        <DCCReference Include="SvcMain.pas">
+            <Form>GMIOPService</Form>
+            <FormType>dfm</FormType>
+            <DesignClass>TService</DesignClass>
+        </DCCReference>
+        <DCCReference Include="Threads.AncomGPRS.pas"/>
+        <DCCReference Include="ClientResponce.pas"/>
+        <DCCReference Include="GeomerLastValue.pas"/>
+        <DCCReference Include="GM485.pas"/>
+        <DCCReference Include="GMBlockValues.pas"/>
+        <DCCReference Include="Threads.GMCOM.pas"/>
+        <DCCReference Include="Threads.GMK104.pas"/>
+        <DCCReference Include="Threads.GMSocket.pas"/>
+        <DCCReference Include="Threads.K105.pas"/>
+        <DCCReference Include="RecordsForRmSrv.pas"/>
+        <DCCReference Include="Threads.ReqSpecDevTemplate.pas"/>
+        <DCCReference Include="UDPBindingStorage.pas"/>
+        <DCCReference Include="..\SharedSrc\GMSqlQuery.pas"/>
+        <DCCReference Include="..\SharedSrc\UsefulQueries.pas"/>
+        <DCCReference Include="..\SharedSrc\ProgramLogFile.pas"/>
+        <DCCReference Include="SvcLogFile.pas"/>
+        <DCCReference Include="..\SharedSrc\GMGlobals.pas"/>
+        <DCCReference Include="..\SharedSrc\AppConfigFile.pas"/>
+        <DCCReference Include="..\SharedSrc\StdRequest.pas"/>
+        <DCCReference Include="..\SharedSrc\StdResponce.pas"/>
+        <DCCReference Include="Threads.ObjectOnline.pas"/>
+        <DCCReference Include="..\SharedSrc\GMConst.pas"/>
+        <DCCReference Include="..\SharedSrc\Threads.Base.pas"/>
+        <DCCReference Include="..\SharedSrc\IEC_2061107.pas"/>
+        <DCCReference Include="Devices.Ancom.pas"/>
+        <DCCReference Include="Devices.Owen.pas"/>
+        <DCCReference Include="Devices.Tecon.pas"/>
+        <DCCReference Include="Devices.UBZ.pas"/>
+        <DCCReference Include="Devices.Vzlet.pas"/>
+        <DCCReference Include="Devices.Mercury.pas"/>
+        <DCCReference Include="Devices.Vacon.pas"/>
+        <DCCReference Include="Devices.Termotronic.pas"/>
+        <DCCReference Include="Devices.ReqCreatorBase.pas"/>
+        <DCCReference Include="Devices.ICP.pas"/>
+        <DCCReference Include="Devices.Simag.pas"/>
+        <DCCReference Include="GMSocket.pas"/>
+        <DCCReference Include="Devices.TR101.pas"/>
+        <DCCReference Include="Devices.Isco4250.pas"/>
+        <DCCReference Include="RequestList.pas"/>
+        <DCCReference Include="..\SharedSrc\Devices.ModbusBase.pas"/>
+        <DCCReference Include="Devices.Altistart22.pas"/>
+        <DCCReference Include="Devices.Geostream.pas"/>
+        <DCCReference Include="..\SharedSrc\Connection.Base.pas"/>
+        <DCCReference Include="..\SharedSrc\Connection.TCP.pas"/>
+        <DCCReference Include="Connection.COM.pas"/>
+        <DCCReference Include="..\SharedSrc\Connection.UDP.pas"/>
+        <DCCReference Include="Threads.TCP.pas"/>
+        <DCCReference Include="Devices.AllenBradley.Micro8xx.pas"/>
+        <DCCReference Include="Threads.ResponceParser.pas"/>
+        <DCCReference Include="Threads.SQLExecuter.pas"/>
+        <DCCReference Include="Threads.NIUpdater.pas"/>
+        <DCCReference Include="Threads.RemoteSrv.pas"/>
+        <DCCReference Include="..\SharedSrc\Devices.Tecon.Common.pas"/>
+        <DCCReference Include="RequestThreadsContainer.pas"/>
+        <DCCReference Include="Threads.RegularControl.pas"/>
+        <DCCReference Include="Threads.MainSrvDataPicker.pas"/>
+        <DCCReference Include="Devices.MainSrv.pas"/>
+        <DCCReference Include="Devices.Logica.Base.pas"/>
+        <DCCReference Include="Devices.Logica.SPT961.pas"/>
+        <DCCReference Include="Devices.Logica.SPT941.pas"/>
+        <DCCReference Include="Devices.Logica.SPT943.pas"/>
+        <DCCReference Include="Threads.Pool.pas"/>
+        <DCCReference Include="Devices.Modbus.ReqCreatorBase.pas"/>
+        <DCCReference Include="Devices.DRK.pas"/>
+        <DCCReference Include="Devices.ADCPChannelMaster.pas"/>
+        <DCCReference Include="Devices.Geomer.pas"/>
+        <BuildConfiguration Include="Release">
+            <Key>Cfg_2</Key>
+            <CfgParent>Base</CfgParent>
+        </BuildConfiguration>
+        <BuildConfiguration Include="Application">
+            <Key>Cfg_3</Key>
+            <CfgParent>Base</CfgParent>
+        </BuildConfiguration>
+        <BuildConfiguration Include="Base">
+            <Key>Base</Key>
+        </BuildConfiguration>
+        <BuildConfiguration Include="Debug">
+            <Key>Cfg_1</Key>
+            <CfgParent>Base</CfgParent>
+        </BuildConfiguration>
+    </ItemGroup>
+    <ProjectExtensions>
+        <Borland.Personality>Delphi.Personality.12</Borland.Personality>
+        <Borland.ProjectType/>
+        <BorlandProject>
+            <Delphi.Personality>
+                <VersionInfo>
+                    <VersionInfo Name="IncludeVerInfo">False</VersionInfo>
+                    <VersionInfo Name="AutoIncBuild">False</VersionInfo>
+                    <VersionInfo Name="MajorVer">1</VersionInfo>
+                    <VersionInfo Name="MinorVer">0</VersionInfo>
+                    <VersionInfo Name="Release">0</VersionInfo>
+                    <VersionInfo Name="Build">0</VersionInfo>
+                    <VersionInfo Name="Debug">False</VersionInfo>
+                    <VersionInfo Name="PreRelease">False</VersionInfo>
+                    <VersionInfo Name="Special">False</VersionInfo>
+                    <VersionInfo Name="Private">False</VersionInfo>
+                    <VersionInfo Name="DLL">False</VersionInfo>
+                    <VersionInfo Name="Locale">1049</VersionInfo>
+                    <VersionInfo Name="CodePage">1251</VersionInfo>
+                </VersionInfo>
+                <VersionInfoKeys>
+                    <VersionInfoKeys Name="CompanyName"/>
+                    <VersionInfoKeys Name="FileDescription"/>
+                    <VersionInfoKeys Name="FileVersion">1.0.0.0</VersionInfoKeys>
+                    <VersionInfoKeys Name="InternalName"/>
+                    <VersionInfoKeys Name="LegalCopyright"/>
+                    <VersionInfoKeys Name="LegalTrademarks"/>
+                    <VersionInfoKeys Name="OriginalFilename"/>
+                    <VersionInfoKeys Name="ProductName"/>
+                    <VersionInfoKeys Name="ProductVersion">1.0.0.0</VersionInfoKeys>
+                    <VersionInfoKeys Name="Comments"/>
+                    <VersionInfoKeys Name="CFBundleName"/>
+                    <VersionInfoKeys Name="CFBundleDisplayName"/>
+                    <VersionInfoKeys Name="UIDeviceFamily"/>
+                    <VersionInfoKeys Name="CFBundleIdentifier"/>
+                    <VersionInfoKeys Name="CFBundleVersion"/>
+                    <VersionInfoKeys Name="CFBundlePackageType"/>
+                    <VersionInfoKeys Name="CFBundleSignature"/>
+                    <VersionInfoKeys Name="CFBundleAllowMixedLocalizations"/>
+                    <VersionInfoKeys Name="UISupportedInterfaceOrientations"/>
+                    <VersionInfoKeys Name="CFBundleExecutable"/>
+                    <VersionInfoKeys Name="CFBundleResourceSpecification"/>
+                    <VersionInfoKeys Name="LSRequiresIPhoneOS"/>
+                    <VersionInfoKeys Name="CFBundleInfoDictionaryVersion"/>
+                    <VersionInfoKeys Name="CFBundleDevelopmentRegion"/>
+                </VersionInfoKeys>
+                <Source>
+                    <Source Name="MainSource">GMIOPSvc.dpr</Source>
+                </Source>
+                <Excluded_Packages>
+                    <Excluded_Packages Name="C:\Users\Public\Documents\RAD Studio\11.0\Bpl\DclRxCtl180.bpl">RX Library Controls and Tools</Excluded_Packages>
+                    <Excluded_Packages Name="$(BDSBIN)\dcloffice2k180.bpl">Microsoft Office 2000 Sample Automation Server Wrapper Components</Excluded_Packages>
+                    <Excluded_Packages Name="$(BDSBIN)\dclofficexp180.bpl">Microsoft Office XP Sample Automation Server Wrapper Components</Excluded_Packages>
+                </Excluded_Packages>
+            </Delphi.Personality>
+            <Deployment/>
+            <Platforms>
+                <Platform value="Win32">True</Platform>
+                <Platform value="Win64">False</Platform>
+            </Platforms>
+        </BorlandProject>
+        <ProjectFileVersion>12</ProjectFileVersion>
+    </ProjectExtensions>
+    <Import Project="$(BDS)\Bin\CodeGear.Delphi.Targets" Condition="Exists('$(BDS)\Bin\CodeGear.Delphi.Targets')"/>
+    <Import Project="$(APPDATA)\Embarcadero\$(BDSAPPDATABASEDIR)\$(PRODUCTVERSION)\UserTools.proj" Condition="Exists('$(APPDATA)\Embarcadero\$(BDSAPPDATABASEDIR)\$(PRODUCTVERSION)\UserTools.proj')"/>
+    <PropertyGroup Condition="'$(Config)'=='Debug' And '$(Platform)'=='Win32'">
+        <PreBuildEvent>net stop GMIOPService</PreBuildEvent>
+        <PreBuildEventIgnoreExitCode>True</PreBuildEventIgnoreExitCode>
+        <PreLinkEvent/>
+        <PreLinkEventIgnoreExitCode>False</PreLinkEventIgnoreExitCode>
+        <PostBuildEvent/>
+        <PostBuildEventIgnoreExitCode>False</PostBuildEventIgnoreExitCode>
+    </PropertyGroup>
+</Project>

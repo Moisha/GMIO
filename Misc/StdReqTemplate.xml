@@ -1,0 +1,16 @@
+<GMIORequest>
+	<Auth Login="AAA" Password="AAA" />
+	<!-- запрос структуры БД -->
+	<Structure>1</Structure>
+	<!-- запрос данных -->
+	<Data>
+		<Sources>
+			<Source Id="1" ValSrcType="1" ValType="1" AggrType="1" UTime1="1" UTime2="1" />
+			<Source />
+		</Sources>
+		<!-- значения каналов для OPC -->
+		<OPC>1</OPC>
+		<!-- для обратной совместимости, потом уберем -->
+		<SQL>select * from Devices</SQL>		
+	</Data>
+</GMIORequest>

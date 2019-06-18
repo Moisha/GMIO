@@ -1,0 +1,32 @@
+Считывается значение примерно 520	
+21796	0.00059868	TickersEmulator	IRP_MJ_WRITE	Serial2	SUCCESS	Length 8: 01 03 08 3D 00 01 17 A6 	
+21799	0.00001034	TickersEmulator	IRP_MJ_READ	Serial2	SUCCESS	Length 1: 01 	
+21802	0.00000643	TickersEmulator	IRP_MJ_READ	Serial2	SUCCESS	Length 1: 03 	
+21805	0.00000391	TickersEmulator	IRP_MJ_READ	Serial2	SUCCESS	Length 1: 02 	
+21808	0.00000307	TickersEmulator	IRP_MJ_READ	Serial2	SUCCESS	Length 1: 02 	
+21811	0.00000363	TickersEmulator	IRP_MJ_READ	Serial2	SUCCESS	Length 1: 07 	
+21814	0.00000279	TickersEmulator	IRP_MJ_READ	Serial2	SUCCESS	Length 1: F8 	
+21817	0.00000335	TickersEmulator	IRP_MJ_READ	Serial2	SUCCESS	Length 1: E6 	
+
+Стоп двигателя
+0.00094621	TickersEmulator	IRP_MJ_WRITE	Serial2	SUCCESS	Length 8: 01 06 07 D0 00 00 89 47 	
+0.00000475	TickersEmulator	IRP_MJ_READ	Serial2	SUCCESS	Length 1: 01 	
+0.00000279	TickersEmulator	IRP_MJ_READ	Serial2	SUCCESS	Length 1: 06 	
+0.00000279	TickersEmulator	IRP_MJ_READ	Serial2	SUCCESS	Length 1: 07 	
+0.00000307	TickersEmulator	IRP_MJ_READ	Serial2	SUCCESS	Length 1: D0 	
+0.00000307	TickersEmulator	IRP_MJ_READ	Serial2	SUCCESS	Length 1: 00 	
+0.00000307	TickersEmulator	IRP_MJ_READ	Serial2	SUCCESS	Length 1: 00 	
+0.00000335	TickersEmulator	IRP_MJ_READ	Serial2	SUCCESS	Length 1: 89 	
+0.00000279	TickersEmulator	IRP_MJ_READ	Serial2	SUCCESS	Length 1: 47 	
+
+Установить частоту 100
+
+0.00121133	TickersEmulator	IRP_MJ_WRITE	Serial2	SUCCESS	Length 8: 01 06 07 D2 00 64 29 6C 	
+0.00000559	TickersEmulator	IRP_MJ_READ	Serial2	SUCCESS	Length 1: 01 	
+0.00000307	TickersEmulator	IRP_MJ_READ	Serial2	SUCCESS	Length 1: 06 	
+0.00000307	TickersEmulator	IRP_MJ_READ	Serial2	SUCCESS	Length 1: 07 	
+0.00000307	TickersEmulator	IRP_MJ_READ	Serial2	SUCCESS	Length 1: D2 	
+0.00000307	TickersEmulator	IRP_MJ_READ	Serial2	SUCCESS	Length 1: 00 	
+0.00000279	TickersEmulator	IRP_MJ_READ	Serial2	SUCCESS	Length 1: 64 	
+0.00000335	TickersEmulator	IRP_MJ_READ	Serial2	SUCCESS	Length 1: 29 	
+0.00000419	TickersEmulator	IRP_MJ_READ	Serial2	SUCCESS	Length 1: 6C 	

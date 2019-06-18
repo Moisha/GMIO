@@ -1,0 +1,618 @@
+﻿<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+    <PropertyGroup>
+        <ProjectGuid>{D5F51C52-452C-48AA-B635-A40E63CD9EDA}</ProjectGuid>
+        <MainSource>GMPClient.dpr</MainSource>
+        <Base>True</Base>
+        <Config Condition="'$(Config)'==''">Debug</Config>
+        <TargetedPlatforms>1</TargetedPlatforms>
+        <AppType>Application</AppType>
+        <FrameworkType>VCL</FrameworkType>
+        <ProjectVersion>14.6</ProjectVersion>
+        <Platform Condition="'$(Platform)'==''">Win32</Platform>
+    </PropertyGroup>
+    <PropertyGroup Condition="'$(Config)'=='Base' or '$(Base)'!=''">
+        <Base>true</Base>
+    </PropertyGroup>
+    <PropertyGroup Condition="('$(Platform)'=='Win32' and '$(Base)'=='true') or '$(Base_Win32)'!=''">
+        <Base_Win32>true</Base_Win32>
+        <CfgParent>Base</CfgParent>
+        <Base>true</Base>
+    </PropertyGroup>
+    <PropertyGroup Condition="('$(Platform)'=='Win64' and '$(Base)'=='true') or '$(Base_Win64)'!=''">
+        <Base_Win64>true</Base_Win64>
+        <CfgParent>Base</CfgParent>
+        <Base>true</Base>
+    </PropertyGroup>
+    <PropertyGroup Condition="'$(Config)'=='Release' or '$(Cfg_1)'!=''">
+        <Cfg_1>true</Cfg_1>
+        <CfgParent>Base</CfgParent>
+        <Base>true</Base>
+    </PropertyGroup>
+    <PropertyGroup Condition="'$(Config)'=='Debug' or '$(Cfg_2)'!=''">
+        <Cfg_2>true</Cfg_2>
+        <CfgParent>Base</CfgParent>
+        <Base>true</Base>
+    </PropertyGroup>
+    <PropertyGroup Condition="('$(Platform)'=='Win32' and '$(Cfg_2)'=='true') or '$(Cfg_2_Win32)'!=''">
+        <Cfg_2_Win32>true</Cfg_2_Win32>
+        <CfgParent>Cfg_2</CfgParent>
+        <Cfg_2>true</Cfg_2>
+        <Base>true</Base>
+    </PropertyGroup>
+    <PropertyGroup Condition="'$(Base)'!=''">
+        <DCC_DcuOutput>DCU</DCC_DcuOutput>
+        <BRCC_CompilerToUse>rc</BRCC_CompilerToUse>
+        <DCC_UNIT_PLATFORM>false</DCC_UNIT_PLATFORM>
+        <DCC_FOR_LOOP_VAR_VARPAR>error</DCC_FOR_LOOP_VAR_VARPAR>
+        <DCC_FOR_VARIABLE>error</DCC_FOR_VARIABLE>
+        <Icon_MainIcon>GMPClient.ico</Icon_MainIcon>
+        <Manifest_File>None</Manifest_File>
+        <DCC_UsePackage>vcl;rtl;vclx;indy;inet;xmlrtl;vclie;inetdbbde;inetdbxpress;dbrtl;dsnap;dsnapcon;vcldb;soaprtl;VclSmp;dbexpress;dbxcds;inetdb;bdertl;vcldbx;webdsnap;websnap;adortl;ibxpress;teeui;teedb;tee;dss;visualclx;visualdbclx;vclactnband;vclshlctrls;IntrawebDB_50_70;Intraweb_50_70;Rave50CLX;Rave50VCL;dclOffice2k;DIE;RxBde7;RxDB7;RxCtl7;vclSvComV7D7;VirtualTreesD7;vclSvComV7D7;vclSvComV7D7;$(DCC_UsePackage)</DCC_UsePackage>
+        <VerInfo_IncludeVerInfo>true</VerInfo_IncludeVerInfo>
+        <DCC_Define>FullDebugModeInIDE;ClearLogFileOnStartup;LogErrorsToFile;LogMemoryLeakDetailToFile;EnableMemoryLeakReporting;$(DCC_Define)</DCC_Define>
+        <VerInfo_MinorVer>2</VerInfo_MinorVer>
+        <DCC_N>true</DCC_N>
+        <DCC_S>false</DCC_S>
+        <DCC_SymbolReferenceInfo>1</DCC_SymbolReferenceInfo>
+        <VerInfo_Build>327</VerInfo_Build>
+        <DCC_F>false</DCC_F>
+        <DCC_UnitSearchPath>..\ThirdParty\FastMM;..\SharedSrc;..\ThirdParty\VT\Source;..\ThirdParty\DateComboBox;..\ThirdParty\VT\Resources;..\ThirdParty\SynEdit\Source;..\ThirdParty\JEDI\jvcl\run;..\ThirdParty\JEDI\jvcl\common;..\ThirdParty\JEDI\jcl\source;..\ThirdParty\JEDI\jcl\source\Include;..\ThirdParty\JEDI\jcl\source\Common;..\ThirdParty\JEDI\jcl\source\Windows;..\ThirdParty\JEDI\jvcl\Resources;..\ThirdParty\Flex\Src;FlexEdit;..\ThirdParty\RX;FlexEdit\Components;..\ThirdParty\ToolBar2000\Source;..\ThirdParty\ExtControls;..\SharedSrc\MP3;$(DCC_UnitSearchPath)</DCC_UnitSearchPath>
+        <VerInfo_Release>1</VerInfo_Release>
+        <DCC_Optimize>false</DCC_Optimize>
+        <DCC_Namespace>Vcl;Vcl.Imaging;Vcl.Touch;Vcl.Samples;Vcl.Shell;System;Xml;Data;Datasnap;Web;Soap;Winapi;Web.Win;System.Win;$(DCC_Namespace)</DCC_Namespace>
+        <DCC_K>false</DCC_K>
+        <DCC_E>false</DCC_E>
+        <VerInfo_Locale>1049</VerInfo_Locale>
+        <DCC_SYMBOL_PLATFORM>false</DCC_SYMBOL_PLATFORM>
+        <VerInfo_Keys>CompanyName=ООО «Сириус АТМ», Екатеринбург;FileDescription=Клиент Инженерные сети онлайн;FileVersion=1.2.1.327;InternalName=;LegalCopyright=© Sirius ATM;LegalTrademarks=;OriginalFilename=GMPClient.exe;ProductName=Клиент Инженерные сети онлайн;ProductVersion=1.2;Comments=www.siriusatm.ru;Build Date=19.02.2014 19:58:06</VerInfo_Keys>
+        <DCC_RangeChecking>true</DCC_RangeChecking>
+        <DCC_IntegerOverflowCheck>true</DCC_IntegerOverflowCheck>
+        <DCC_MapFile>3</DCC_MapFile>
+        <DCC_ImageBase>00400000</DCC_ImageBase>
+    </PropertyGroup>
+    <PropertyGroup Condition="'$(Base_Win32)'!=''">
+        <DCC_UsePackage>office2K;vclimg;RtmRxCtl180;$(DCC_UsePackage)</DCC_UsePackage>
+        <Manifest_File>$(BDS)\bin\default_app.manifest</Manifest_File>
+        <VerInfo_IncludeVerInfo>true</VerInfo_IncludeVerInfo>
+        <VerInfo_Locale>1033</VerInfo_Locale>
+        <DCC_Namespace>Data.Win;Datasnap.Win;Soap.Win;Xml.Win;Bde;$(DCC_Namespace)</DCC_Namespace>
+        <VerInfo_Keys>CompanyName=;FileDescription=;FileVersion=1.0.0.0;InternalName=;LegalCopyright=;LegalTrademarks=;OriginalFilename=;ProductName=;ProductVersion=1.0.0.0;Comments=</VerInfo_Keys>
+    </PropertyGroup>
+    <PropertyGroup Condition="'$(Base_Win64)'!=''">
+        <DCC_UsePackage>office2K;vclimg;$(DCC_UsePackage)</DCC_UsePackage>
+    </PropertyGroup>
+    <PropertyGroup Condition="'$(Cfg_1)'!=''">
+        <DCC_LocalDebugSymbols>false</DCC_LocalDebugSymbols>
+        <DCC_SymbolReferenceInfo>0</DCC_SymbolReferenceInfo>
+        <DCC_DebugInformation>false</DCC_DebugInformation>
+        <DCC_Define>RELEASE;$(DCC_Define)</DCC_Define>
+    </PropertyGroup>
+    <PropertyGroup Condition="'$(Cfg_2)'!=''">
+        <DCC_GenerateStackFrames>true</DCC_GenerateStackFrames>
+        <DCC_Define>DEBUG;$(DCC_Define)</DCC_Define>
+    </PropertyGroup>
+    <PropertyGroup Condition="'$(Cfg_2_Win32)'!=''">
+        <DCC_DebugDCUs>true</DCC_DebugDCUs>
+        <Manifest_File>$(BDS)\bin\default_app.manifest</Manifest_File>
+        <VerInfo_Build>0</VerInfo_Build>
+        <VerInfo_MinorVer>0</VerInfo_MinorVer>
+        <VerInfo_Release>0</VerInfo_Release>
+        <VerInfo_Keys>CompanyName=;FileDescription=;FileVersion=1.0.0.0;InternalName=;LegalCopyright=;LegalTrademarks=;OriginalFilename=;ProductName=;ProductVersion=1.0.0.0;Comments=</VerInfo_Keys>
+        <VerInfo_Locale>1033</VerInfo_Locale>
+    </PropertyGroup>
+    <ItemGroup>
+        <DelphiCompile Include="$(MainSource)">
+            <MainSource>MainSource</MainSource>
+        </DelphiCompile>
+        <DCCReference Include="GMClMain.pas">
+            <Form>GMClMainFrm</Form>
+        </DCCReference>
+        <DCCReference Include="..\SharedSrc\GMGlobals.pas"/>
+        <DCCReference Include="Frame.ClientObject.pas">
+            <Form>FrmObject</Form>
+            <FormType>dfm</FormType>
+            <DesignClass>TFrame</DesignClass>
+        </DCCReference>
+        <DCCReference Include="Threads.GMClient.pas"/>
+        <DCCReference Include="GMClXL.pas">
+            <Form>FrmXL</Form>
+        </DCCReference>
+        <DCCReference Include="AlarmRep.pas">
+            <Form>AlarmRepDlg</Form>
+        </DCCReference>
+        <DCCReference Include="Frame.ObjectTree.pas">
+            <Form>ObjTreeFrame</Form>
+            <FormType>dfm</FormType>
+            <DesignClass>TFrame</DesignClass>
+        </DCCReference>
+        <DCCReference Include="EditINIWithDevices.pas">
+            <Form>EditINIWithDevicesDlg</Form>
+        </DCCReference>
+        <DCCReference Include="Frame.EditPrm.pas">
+            <Form>EditPrmWithDevicesFrm</Form>
+            <FormType>dfm</FormType>
+            <DesignClass>TFrame</DesignClass>
+        </DCCReference>
+        <DCCReference Include="Frame.ControlOneAggregate.pas">
+            <Form>ControlOneAggregateFrame</Form>
+            <FormType>dfm</FormType>
+            <DesignClass>TFrame</DesignClass>
+        </DCCReference>
+        <DCCReference Include="ControlFrame.pas">
+            <Form>ControlFrm</Form>
+            <FormType>dfm</FormType>
+            <DesignClass>TFrame</DesignClass>
+        </DCCReference>
+        <DCCReference Include="..\SharedSrc\Opts.pas">
+            <Form>OptsDlg</Form>
+        </DCCReference>
+        <DCCReference Include="GMLogin.pas">
+            <Form>LoginDlg</Form>
+        </DCCReference>
+        <DCCReference Include="Frame.DiagramAndTable.pas">
+            <Form>FrmDiagramAndTable</Form>
+            <FormType>dfm</FormType>
+            <DesignClass>TFrame</DesignClass>
+        </DCCReference>
+        <DCCReference Include="ParamsForDiagram.pas"/>
+        <DCCReference Include="DiagramImage.pas"/>
+        <DCCReference Include="..\SharedSrc\GMDBClasses.pas"/>
+        <DCCReference Include="..\SharedSrc\Devices.Vacon.Common.pas"/>
+        <DCCReference Include="Frame.ReportBlank.pas">
+            <Form>FrmReportBlank</Form>
+            <FormType>dfm</FormType>
+            <DesignClass>TFrame</DesignClass>
+        </DCCReference>
+        <DCCReference Include="HydroGeoRep.pas">
+            <Form>HydroGeoRepDlg</Form>
+        </DCCReference>
+        <DCCReference Include="..\SharedSrc\GMConst.pas"/>
+        <DCCReference Include="ClientReadObjects.pas"/>
+        <DCCReference Include="..\SharedSrc\Devices.UBZ.Common.pas"/>
+        <DCCReference Include="..\SharedSrc\ConfigXml.pas"/>
+        <DCCReference Include="TemplatedRep.pas">
+            <Form>TemplatedRepDlg</Form>
+        </DCCReference>
+        <DCCReference Include="SoundCfg.pas">
+            <Form>SoundCfgDlg</Form>
+        </DCCReference>
+        <DCCReference Include="..\SharedSrc\AppConfigFile.pas"/>
+        <DCCReference Include="..\SharedSrc\StdRequest.pas"/>
+        <DCCReference Include="..\SharedSrc\StdResponce.pas"/>
+        <DCCReference Include="..\SharedSrc\Frame.NodeTree.pas">
+            <Form>frmNodeTree</Form>
+            <FormType>dfm</FormType>
+            <DesignClass>TFrame</DesignClass>
+        </DCCReference>
+        <DCCReference Include="ArrayNodeReader.pas"/>
+        <DCCReference Include="..\SharedSrc\Frame.TimeInterval.pas">
+            <Form>frmSelArchTime</Form>
+            <FormType>dfm</FormType>
+            <DesignClass>TFrame</DesignClass>
+        </DCCReference>
+        <DCCReference Include="Frame.BigWindow.pas">
+            <Form>BigWindowFrame</Form>
+            <FormType>dfm</FormType>
+            <DesignClass>TFrame</DesignClass>
+        </DCCReference>
+        <DCCReference Include="BigWindowData.pas"/>
+        <DCCReference Include="..\SharedSrc\Connection.Base.pas"/>
+        <DCCReference Include="..\SharedSrc\Connection.TCP.pas"/>
+        <DCCReference Include="PasScript.pas">
+            <Form>PascalDlg</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
+        <DCCReference Include="h_GMClient.pas"/>
+        <DCCReference Include="FlexEdit\fChannelsProps.pas">
+            <Form>ChannelsPropForm</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
+        <DCCReference Include="FlexEdit\fChild.pas">
+            <Form>FlexChildFrame</Form>
+            <FormType>dfm</FormType>
+            <DesignClass>T</DesignClass>
+        </DCCReference>
+        <DCCReference Include="FlexEdit\fDocProps.pas">
+            <Form>fmDocProps</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
+        <DCCReference Include="FlexEdit\fInspector.pas">
+            <Form>fmInspector</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
+        <DCCReference Include="FlexEdit\fLayers.pas">
+            <Form>fmLayers</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
+        <DCCReference Include="FlexEdit\FlexEdit.Main.pas">
+            <Form>EditMainForm</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
+        <DCCReference Include="FlexEdit\fLibItemProps.pas">
+            <Form>fmLibItemProps</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
+        <DCCReference Include="FlexEdit\fLibProps.pas">
+            <Form>fmLibProps</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
+        <DCCReference Include="FlexEdit\fLibrary.pas">
+            <Form>fmLibrary</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
+        <DCCReference Include="FlexEdit\fOptions.pas">
+            <Form>fmOptions</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
+        <DCCReference Include="FlexEdit\fPreview.pas">
+            <Form>fmPreview</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
+        <DCCReference Include="FlexEdit\fUserData.pas">
+            <Form>fmUserData</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
+        <DCCReference Include="FlexEdit\ToolMngr.pas">
+            <Form>ToolContainer</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
+        <DCCReference Include="FlexEdit\PropForms\BackgroundFrm.pas">
+            <Form>BackgroundOptionsForm</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
+        <DCCReference Include="FlexEdit\PropForms\BrushFrm.pas">
+            <Form>BrushPropForm</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
+        <DCCReference Include="FlexEdit\PropForms\LineCapFrm.pas">
+            <Form>LineCapPropForm</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
+        <DCCReference Include="FlexEdit\PropForms\PenFrm.pas">
+            <Form>PenPropForm</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
+        <DCCReference Include="FlexEdit\PropForms\PictureFrm.pas">
+            <Form>PicturePropForm</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
+        <DCCReference Include="FlexEdit\PropForms\StrListFrm.pas">
+            <Form>StrListPropForm</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
+        <DCCReference Include="FlexEdit\PropForms\UserDataFrm.pas">
+            <Form>UserDataForm</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
+        <DCCReference Include="ScriptRunner.pas"/>
+        <DCCReference Include="..\ThirdParty\Flex\Src\FlexActions.pas"/>
+        <DCCReference Include="..\ThirdParty\Flex\Src\FlexAlpha.pas"/>
+        <DCCReference Include="..\ThirdParty\Flex\Src\FlexBase.pas"/>
+        <DCCReference Include="..\ThirdParty\Flex\Src\FlexControls.pas"/>
+        <DCCReference Include="..\ThirdParty\Flex\Src\FlexFileFormats.pas"/>
+        <DCCReference Include="..\ThirdParty\Flex\Src\FlexHistory.pas"/>
+        <DCCReference Include="..\ThirdParty\Flex\Src\FlexLibs.pas"/>
+        <DCCReference Include="..\ThirdParty\Flex\Src\FlexPath.pas"/>
+        <DCCReference Include="..\ThirdParty\Flex\Src\FlexProps.pas"/>
+        <DCCReference Include="..\ThirdParty\Flex\Src\FlexReg.pas"/>
+        <DCCReference Include="..\ThirdParty\Flex\Src\FlexUtils.pas"/>
+        <DCCReference Include="FlexEdit\PropForms\PropForm.ControlObject.pas">
+            <Form>ControlObjectPropForm</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
+        <DCCReference Include="..\SharedSrc\VT_Utils.pas"/>
+        <DCCReference Include="Frame.CurrentsDiagramBase.pas">
+            <Form>CurrentsDiagramBaseFrame</Form>
+            <FormType>dfm</FormType>
+            <DesignClass>TFrame</DesignClass>
+        </DCCReference>
+        <DCCReference Include="..\SharedSrc\dxStandardControlsSkinHelper.pas"/>
+        <DCCReference Include="GMDock.pas"/>
+        <DCCReference Include="ScadaForm.pas">
+            <Form>ScadaFormForDocking</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
+        <DCCReference Include="BigWindowForm.pas">
+            <Form>BigWindowFormForDocking</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
+        <DCCReference Include="Frames.ScriptEditor.pas">
+            <Form>ScriptEditorFrame</Form>
+            <FormType>dfm</FormType>
+            <DesignClass>TFrame</DesignClass>
+        </DCCReference>
+        <DCCReference Include="Threads.Sound.pas"/>
+        <RcCompile Include="GMPClient.rc">
+            <Form>GMPClient.res</Form>
+        </RcCompile>
+        <BuildConfiguration Include="Debug">
+            <Key>Cfg_2</Key>
+            <CfgParent>Base</CfgParent>
+        </BuildConfiguration>
+        <BuildConfiguration Include="Base">
+            <Key>Base</Key>
+        </BuildConfiguration>
+        <BuildConfiguration Include="Release">
+            <Key>Cfg_1</Key>
+            <CfgParent>Base</CfgParent>
+        </BuildConfiguration>
+    </ItemGroup>
+    <ProjectExtensions>
+        <Borland.Personality>Delphi.Personality.12</Borland.Personality>
+        <Borland.ProjectType/>
+        <BorlandProject>
+            <Delphi.Personality>
+                <Source>
+                    <Source Name="MainSource">GMPClient.dpr</Source>
+                </Source>
+                <VersionInfo>
+                    <VersionInfo Name="IncludeVerInfo">True</VersionInfo>
+                    <VersionInfo Name="AutoIncBuild">False</VersionInfo>
+                    <VersionInfo Name="MajorVer">1</VersionInfo>
+                    <VersionInfo Name="MinorVer">2</VersionInfo>
+                    <VersionInfo Name="Release">1</VersionInfo>
+                    <VersionInfo Name="Build">327</VersionInfo>
+                    <VersionInfo Name="Debug">False</VersionInfo>
+                    <VersionInfo Name="PreRelease">False</VersionInfo>
+                    <VersionInfo Name="Special">False</VersionInfo>
+                    <VersionInfo Name="Private">False</VersionInfo>
+                    <VersionInfo Name="DLL">False</VersionInfo>
+                    <VersionInfo Name="Locale">1049</VersionInfo>
+                    <VersionInfo Name="CodePage">1251</VersionInfo>
+                </VersionInfo>
+                <VersionInfoKeys>
+                    <VersionInfoKeys Name="CompanyName">ООО «Сириус АТМ», Екатеринбург</VersionInfoKeys>
+                    <VersionInfoKeys Name="FileDescription">Клиент Инженерные сети онлайн</VersionInfoKeys>
+                    <VersionInfoKeys Name="FileVersion">1.2.1.327</VersionInfoKeys>
+                    <VersionInfoKeys Name="InternalName"/>
+                    <VersionInfoKeys Name="LegalCopyright">© Sirius ATM</VersionInfoKeys>
+                    <VersionInfoKeys Name="LegalTrademarks"/>
+                    <VersionInfoKeys Name="OriginalFilename">GMPClient.exe</VersionInfoKeys>
+                    <VersionInfoKeys Name="ProductName">Клиент Инженерные сети онлайн</VersionInfoKeys>
+                    <VersionInfoKeys Name="ProductVersion">Инженерные сети онлайн 1.2</VersionInfoKeys>
+                    <VersionInfoKeys Name="Comments">www.siriusatm.ru</VersionInfoKeys>
+                    <VersionInfoKeys Name="Build Date">19.02.2014 19:58:06</VersionInfoKeys>
+                </VersionInfoKeys>
+                <Excluded_Packages>
+                    <Excluded_Packages Name="C:\Users\Public\Documents\RAD Studio\11.0\Bpl\DclRxCtl180.bpl">RX Library Controls and Tools</Excluded_Packages>
+                    <Excluded_Packages Name="$(BDSBIN)\dcloffice2k180.bpl">Microsoft Office 2000 Sample Automation Server Wrapper Components</Excluded_Packages>
+                    <Excluded_Packages Name="$(BDSBIN)\dclofficexp180.bpl">Microsoft Office XP Sample Automation Server Wrapper Components</Excluded_Packages>
+                </Excluded_Packages>
+            </Delphi.Personality>
+            <Platforms>
+                <Platform value="Win32">True</Platform>
+                <Platform value="Win64">False</Platform>
+            </Platforms>
+            <Deployment>
+                <DeployFile LocalName="GMPClient.exe" Configuration="Debug" Class="ProjectOutput">
+                    <Platform Name="Win32"/>
+                </DeployFile>
+                <DeployFile LocalName="GMPClient.rsm" Configuration="Debug" Class="DebugSymbols">
+                    <Platform Name="Win32">
+                        <RemoteName>GMPClient.rsm</RemoteName>
+                    </Platform>
+                </DeployFile>
+                <DeployClass Required="true" Name="DependencyPackage">
+                    <Platform Name="iOSDevice">
+                        <Operation>1</Operation>
+                        <Extensions>.dylib</Extensions>
+                    </Platform>
+                    <Platform Name="Win32">
+                        <Operation>0</Operation>
+                        <Extensions>.bpl</Extensions>
+                    </Platform>
+                    <Platform Name="OSX32">
+                        <RemoteDir>Contents\MacOS</RemoteDir>
+                        <Operation>1</Operation>
+                        <Extensions>.dylib</Extensions>
+                    </Platform>
+                    <Platform Name="iOSSimulator">
+                        <Operation>1</Operation>
+                        <Extensions>.dylib</Extensions>
+                    </Platform>
+                </DeployClass>
+                <DeployClass Name="DependencyModule">
+                    <Platform Name="iOSDevice">
+                        <Operation>1</Operation>
+                        <Extensions>.dylib</Extensions>
+                    </Platform>
+                    <Platform Name="Win32">
+                        <Operation>0</Operation>
+                        <Extensions>.dll;.bpl</Extensions>
+                    </Platform>
+                    <Platform Name="OSX32">
+                        <RemoteDir>Contents\MacOS</RemoteDir>
+                        <Operation>1</Operation>
+                        <Extensions>.dylib</Extensions>
+                    </Platform>
+                    <Platform Name="iOSSimulator">
+                        <Operation>1</Operation>
+                        <Extensions>.dylib</Extensions>
+                    </Platform>
+                </DeployClass>
+                <DeployClass Name="iPad_Launch2048">
+                    <Platform Name="iOSDevice">
+                        <Operation>1</Operation>
+                    </Platform>
+                    <Platform Name="iOSSimulator">
+                        <Operation>1</Operation>
+                    </Platform>
+                </DeployClass>
+                <DeployClass Name="ProjectOSXInfoPList">
+                    <Platform Name="OSX32">
+                        <RemoteDir>Contents</RemoteDir>
+                        <Operation>1</Operation>
+                    </Platform>
+                </DeployClass>
+                <DeployClass Name="ProjectiOSDeviceInfoPList">
+                    <Platform Name="iOSDevice">
+                        <Operation>1</Operation>
+                    </Platform>
+                </DeployClass>
+                <DeployClass Name="ProjectiOSDeviceDebug">
+                    <Platform Name="iOSDevice">
+                        <RemoteDir>..\$(PROJECTNAME).app.dSYM\Contents\Resources\DWARF</RemoteDir>
+                        <Operation>1</Operation>
+                    </Platform>
+                </DeployClass>
+                <DeployClass Name="iPad_Launch1024">
+                    <Platform Name="iOSDevice">
+                        <Operation>1</Operation>
+                    </Platform>
+                    <Platform Name="iOSSimulator">
+                        <Operation>1</Operation>
+                    </Platform>
+                </DeployClass>
+                <DeployClass Name="ProjectiOSResource">
+                    <Platform Name="iOSDevice">
+                        <Operation>1</Operation>
+                    </Platform>
+                    <Platform Name="iOSSimulator">
+                        <Operation>1</Operation>
+                    </Platform>
+                </DeployClass>
+                <DeployClass Name="ProjectiOSSimulatorInfoPList">
+                    <Platform Name="iOSSimulator">
+                        <Operation>1</Operation>
+                    </Platform>
+                </DeployClass>
+                <DeployClass Name="ProjectOSXEntitlements">
+                    <Platform Name="OSX32">
+                        <RemoteDir>Contents</RemoteDir>
+                        <Operation>1</Operation>
+                    </Platform>
+                </DeployClass>
+                <DeployClass Name="iPhone_Launch640">
+                    <Platform Name="iOSDevice">
+                        <Operation>1</Operation>
+                    </Platform>
+                    <Platform Name="iOSSimulator">
+                        <Operation>1</Operation>
+                    </Platform>
+                </DeployClass>
+                <DeployClass Name="ProjectOSXResource">
+                    <Platform Name="OSX32">
+                        <RemoteDir>Contents\Resources</RemoteDir>
+                        <Operation>1</Operation>
+                    </Platform>
+                </DeployClass>
+                <DeployClass Name="iPhone_Launch320">
+                    <Platform Name="iOSDevice">
+                        <Operation>1</Operation>
+                    </Platform>
+                    <Platform Name="iOSSimulator">
+                        <Operation>1</Operation>
+                    </Platform>
+                </DeployClass>
+                <DeployClass Name="iPad_Launch768">
+                    <Platform Name="iOSDevice">
+                        <Operation>1</Operation>
+                    </Platform>
+                    <Platform Name="iOSSimulator">
+                        <Operation>1</Operation>
+                    </Platform>
+                </DeployClass>
+                <DeployClass Required="true" Name="ProjectOutput">
+                    <Platform Name="iOSDevice">
+                        <Operation>1</Operation>
+                    </Platform>
+                    <Platform Name="Win32">
+                        <Operation>0</Operation>
+                    </Platform>
+                    <Platform Name="OSX32">
+                        <RemoteDir>Contents\MacOS</RemoteDir>
+                        <Operation>1</Operation>
+                    </Platform>
+                    <Platform Name="iOSSimulator">
+                        <Operation>1</Operation>
+                    </Platform>
+                </DeployClass>
+                <DeployClass Name="ProjectiOSDeviceResourceRules">
+                    <Platform Name="iOSDevice">
+                        <Operation>1</Operation>
+                    </Platform>
+                </DeployClass>
+                <DeployClass Name="File">
+                    <Platform Name="iOSDevice">
+                        <Operation>0</Operation>
+                    </Platform>
+                    <Platform Name="Win32">
+                        <Operation>0</Operation>
+                    </Platform>
+                    <Platform Name="OSX32">
+                        <RemoteDir>Contents\MacOS</RemoteDir>
+                        <Operation>0</Operation>
+                    </Platform>
+                    <Platform Name="iOSSimulator">
+                        <Operation>0</Operation>
+                    </Platform>
+                </DeployClass>
+                <DeployClass Name="DebugSymbols">
+                    <Platform Name="OSX32">
+                        <RemoteDir>Contents\MacOS</RemoteDir>
+                        <Operation>1</Operation>
+                    </Platform>
+                    <Platform Name="iOSSimulator">
+                        <Operation>1</Operation>
+                    </Platform>
+                    <Platform Name="Win32">
+                        <Operation>0</Operation>
+                    </Platform>
+                </DeployClass>
+                <DeployClass Name="DependencyFramework">
+                    <Platform Name="OSX32">
+                        <RemoteDir>Contents\MacOS</RemoteDir>
+                        <Operation>1</Operation>
+                        <Extensions>.framework</Extensions>
+                    </Platform>
+                    <Platform Name="Win32">
+                        <Operation>0</Operation>
+                    </Platform>
+                </DeployClass>
+                <DeployClass Name="iPhone_Launch640x1136">
+                    <Platform Name="iOSDevice">
+                        <Operation>1</Operation>
+                    </Platform>
+                    <Platform Name="iOSSimulator">
+                        <Operation>1</Operation>
+                    </Platform>
+                </DeployClass>
+                <DeployClass Name="ProjectiOSEntitlements">
+                    <Platform Name="iOSDevice">
+                        <Operation>1</Operation>
+                    </Platform>
+                </DeployClass>
+                <DeployClass Name="iPad_Launch1536">
+                    <Platform Name="iOSDevice">
+                        <Operation>1</Operation>
+                    </Platform>
+                    <Platform Name="iOSSimulator">
+                        <Operation>1</Operation>
+                    </Platform>
+                </DeployClass>
+                <DeployClass Name="AdditionalDebugSymbols">
+                    <Platform Name="OSX32">
+                        <RemoteDir>Contents\MacOS</RemoteDir>
+                        <Operation>1</Operation>
+                    </Platform>
+                    <Platform Name="iOSSimulator">
+                        <Operation>1</Operation>
+                    </Platform>
+                    <Platform Name="Win32">
+                        <RemoteDir>Contents\MacOS</RemoteDir>
+                        <Operation>0</Operation>
+                    </Platform>
+                </DeployClass>
+                <ProjectRoot Platform="iOSDevice" Name="$(PROJECTNAME).app"/>
+                <ProjectRoot Platform="Win32" Name="$(PROJECTNAME)"/>
+                <ProjectRoot Platform="OSX32" Name="$(PROJECTNAME).app"/>
+                <ProjectRoot Platform="iOSSimulator" Name="$(PROJECTNAME).app"/>
+                <ProjectRoot Platform="Win64" Name="$(PROJECTNAME)"/>
+            </Deployment>
+        </BorlandProject>
+        <ProjectFileVersion>12</ProjectFileVersion>
+    </ProjectExtensions>
+    <Import Project="$(BDS)\Bin\CodeGear.Delphi.Targets" Condition="Exists('$(BDS)\Bin\CodeGear.Delphi.Targets')"/>
+    <Import Project="$(APPDATA)\Embarcadero\$(BDSAPPDATABASEDIR)\$(PRODUCTVERSION)\UserTools.proj" Condition="Exists('$(APPDATA)\Embarcadero\$(BDSAPPDATABASEDIR)\$(PRODUCTVERSION)\UserTools.proj')"/>
+    <Import Project="$(MSBuildProjectName).deployproj" Condition="Exists('$(MSBuildProjectName).deployproj')"/>
+</Project>

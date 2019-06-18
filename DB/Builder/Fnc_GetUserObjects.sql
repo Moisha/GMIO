@@ -1,0 +1,4 @@
+﻿pg_gm_db_template_from_file Template_GetUserObjects
+pg_gm_db_template_str_replace #Object# Object
+pg_gm_db_template_str_replace #KeyField# ID_Obj
+pg_gm_db_template_str_replace #AdminCondition#

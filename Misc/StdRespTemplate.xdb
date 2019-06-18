@@ -1,0 +1,193 @@
+<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xdb="http://www.borland.com/schemas/delphi/10.0/XMLDataBinding">
+	<element xmlns="http://www.w3.org/2001/XMLSchema" name="GMIOResponce" type="GMIOResponceType"/>
+	<complexType xmlns="http://www.w3.org/2001/XMLSchema" name="GMIOResponceType"><annotation>
+			<appinfo xdb:docElement="GMIOResponce"/>
+		</annotation>
+		<sequence>
+			<element name="Auth" type="AuthType"/>
+			<element name="Objects" type="ObjectsType"/>
+			<element name="Nodes" type="NodesType"/>
+			<element name="ParamTypes" type="ParamTypesType"/>
+			<element name="MeaUnits" type="MeaUnitsType"/>
+			<element name="Data" type="DataType"/>
+			<element name="SQL" type="SQLType"/>
+		</sequence>
+	</complexType>
+	<complexType xmlns="http://www.w3.org/2001/XMLSchema" name="AuthType">
+		<attribute name="OK" type="xs:integer"/>
+	</complexType>
+	<complexType xmlns="http://www.w3.org/2001/XMLSchema" name="ObjectsType">
+		<sequence>
+			<element name="Object" type="ObjectType" maxOccurs="unbounded"/>
+		</sequence>
+	</complexType>
+	<complexType xmlns="http://www.w3.org/2001/XMLSchema" name="ObjectType">
+		<sequence>
+			<element name="Devices" type="DevicesType"/>
+			<element name="Aggregates" type="AggregatesType"/>
+		</sequence>
+		<attribute name="Id" type="xs:integer"/>
+		<attribute name="Name" type="xs:integer"/>
+		<attribute name="Ncar" type="xs:integer"/>
+	</complexType>
+	<complexType xmlns="http://www.w3.org/2001/XMLSchema" name="DevicesType">
+		<sequence>
+			<element name="Device" type="DeviceType" maxOccurs="unbounded"/>
+		</sequence>
+	</complexType>
+	<complexType xmlns="http://www.w3.org/2001/XMLSchema" name="DeviceType">
+		<sequence>
+			<element name="Channels" type="ChannelsType"/>
+		</sequence>
+		<attribute name="Id" type="xs:integer"/>
+		<attribute name="Number" type="xs:integer"/>
+		<attribute name="Name" type="xs:integer"/>
+		<attribute name="ID_DevType" type="xs:integer"/>
+		<attribute name="DevType" type="xs:integer"/>
+	</complexType>
+	<complexType xmlns="http://www.w3.org/2001/XMLSchema" name="ChannelsType">
+		<sequence>
+			<element name="Channel" type="ChannelType" maxOccurs="unbounded"/>
+		</sequence>
+	</complexType>
+	<complexType xmlns="http://www.w3.org/2001/XMLSchema" name="ChannelType">
+		<attribute name="Id" type="xs:integer"/>
+		<attribute name="Name" type="xs:integer"/>
+		<attribute name="ID_PT" type="xs:integer"/>
+		<attribute name="ID_Src" type="xs:integer"/>
+		<attribute name="Nsrc" type="xs:integer"/>
+		<attribute name="AlarmSignal" type="xs:integer"/>
+		<attribute name="AlarmThreshold" type="xs:integer"/>
+		<attribute name="BaseChn" type="xs:integer"/>
+	</complexType>
+	<complexType xmlns="http://www.w3.org/2001/XMLSchema" name="DeviceType2"/>
+	<complexType xmlns="http://www.w3.org/2001/XMLSchema" name="AggregatesType">
+		<sequence>
+			<element name="Aggregate" type="AggregateType" maxOccurs="unbounded"/>
+		</sequence>
+	</complexType>
+	<complexType xmlns="http://www.w3.org/2001/XMLSchema" name="AggregateType">
+		<sequence>
+			<element name="AggregateParams" type="AggregateParamsType"/>
+		</sequence>
+		<attribute name="Id" type="xs:integer"/>
+		<attribute name="ID_AggrType" type="xs:integer"/>
+		<attribute name="Name" type="xs:integer"/>
+	</complexType>
+	<complexType xmlns="http://www.w3.org/2001/XMLSchema" name="AggregateParamsType">
+		<sequence>
+			<element name="AggregateParam" type="AggregateParamType" maxOccurs="unbounded"/>
+		</sequence>
+	</complexType>
+	<complexType xmlns="http://www.w3.org/2001/XMLSchema" name="AggregateParamType">
+		<attribute name="ID_Prm" type="xs:integer"/>
+		<attribute name="PrmKind" type="xs:integer"/>
+		<attribute name="Caption" type="xs:integer"/>
+	</complexType>
+	<complexType xmlns="http://www.w3.org/2001/XMLSchema" name="AggregateType2"/>
+	<complexType xmlns="http://www.w3.org/2001/XMLSchema" name="ObjectType2"/>
+	<complexType xmlns="http://www.w3.org/2001/XMLSchema" name="NodesType">
+		<sequence>
+			<element name="Node" type="NodeType" maxOccurs="unbounded"/>
+		</sequence>
+	</complexType>
+	<complexType xmlns="http://www.w3.org/2001/XMLSchema" name="NodeType">
+		<sequence>
+			<element name="Node" type="NodeType2" maxOccurs="unbounded"/>
+			<element name="NodeChannels" type="NodeChannelsType"/>
+		</sequence>
+		<attribute name="Id" type="xs:integer"/>
+		<attribute name="Name" type="xs:integer"><annotation>
+				<appinfo xdb:dataType="string"/>
+			</annotation>
+		</attribute>
+		<attribute name="NodeType" type="xs:integer"/>
+	</complexType>
+	<complexType xmlns="http://www.w3.org/2001/XMLSchema" name="NodeType2"><annotation>
+			<appinfo xdb:repeated="True"/>
+		</annotation>
+		<attribute name="Id" type="xs:integer"/>
+		<attribute name="Name" type="xs:integer"/>
+		<attribute name="NodeType" type="xs:integer"/>
+	</complexType>
+	<complexType xmlns="http://www.w3.org/2001/XMLSchema" name="NodeChannelsType">
+		<sequence>
+			<element name="NodeChannel" type="NodeChannelType" maxOccurs="unbounded"/>
+		</sequence>
+	</complexType>
+	<complexType xmlns="http://www.w3.org/2001/XMLSchema" name="NodeChannelType">
+		<attribute name="Id" type="xs:integer"/>
+		<attribute name="ID_PT" type="xs:integer"/>
+		<attribute name="Name" type="xs:integer"><annotation>
+				<appinfo xdb:dataType="string"/>
+			</annotation>
+		</attribute>
+		<attribute name="BaseChn" type="xs:integer"/>
+		<attribute name="ID_MeaUnit" type="xs:integer"/>
+	</complexType>
+	<complexType xmlns="http://www.w3.org/2001/XMLSchema" name="ParamTypesType">
+		<sequence>
+			<element name="ParamType" type="ParamType" maxOccurs="unbounded"/>
+		</sequence>
+	</complexType>
+	<complexType xmlns="http://www.w3.org/2001/XMLSchema" name="ParamType">
+		<attribute name="ID_PT" type="xs:integer"/>
+		<attribute name="PSign" type="xs:integer"/>
+		<attribute name="PName" type="xs:integer"/>
+		<attribute name="IsAlarm" type="xs:integer"/>
+	</complexType>
+	<complexType xmlns="http://www.w3.org/2001/XMLSchema" name="MeaUnitsType">
+		<sequence>
+			<element name="MeaUnit" type="MeaUnitType" maxOccurs="unbounded"/>
+		</sequence>
+	</complexType>
+	<complexType xmlns="http://www.w3.org/2001/XMLSchema" name="MeaUnitType">
+		<attribute name="ID_MeaUnit" type="xs:integer"/>
+		<attribute name="Name" type="xs:integer"/>
+		<attribute name="LongName" type="xs:integer"/>
+	</complexType>
+	<complexType xmlns="http://www.w3.org/2001/XMLSchema" name="DataType">
+		<sequence>
+			<element name="Source" type="SourceType" maxOccurs="unbounded"/>
+		</sequence>
+	</complexType>
+	<complexType xmlns="http://www.w3.org/2001/XMLSchema" name="SourceType">
+		<sequence>
+			<element name="Value" type="ValueType" maxOccurs="unbounded"/>
+		</sequence>
+		<attribute name="Id" type="xs:integer"/>
+		<attribute name="ValSrcType" type="xs:integer"/>
+		<attribute name="ValType" type="xs:integer"/>
+		<attribute name="Name" type="xs:integer"/>
+	</complexType>
+	<complexType xmlns="http://www.w3.org/2001/XMLSchema" name="ValueType">
+		<attribute name="utime" type="xs:integer"/>
+		<attribute name="val" type="xs:integer"/>
+	</complexType>
+	<complexType xmlns="http://www.w3.org/2001/XMLSchema" name="SourceType2"/>
+	<complexType xmlns="http://www.w3.org/2001/XMLSchema" name="SQLType">
+		<sequence>
+			<element name="Rows" type="RowsType"/>
+		</sequence>
+	</complexType>
+	<complexType xmlns="http://www.w3.org/2001/XMLSchema" name="RowsType">
+		<sequence>
+			<element name="Row" type="RowType" maxOccurs="unbounded"/>
+		</sequence>
+	</complexType>
+	<complexType xmlns="http://www.w3.org/2001/XMLSchema" name="RowType">
+		<sequence>
+			<element name="Fields" type="FieldsType"/>
+		</sequence>
+	</complexType>
+	<complexType xmlns="http://www.w3.org/2001/XMLSchema" name="FieldsType">
+		<sequence>
+			<element name="Field" type="FieldType" maxOccurs="unbounded"/>
+		</sequence>
+	</complexType>
+	<complexType xmlns="http://www.w3.org/2001/XMLSchema" name="FieldType">
+		<attribute name="Value" type="xs:integer"/>
+	</complexType>
+	<complexType xmlns="http://www.w3.org/2001/XMLSchema" name="RowType2"/>
+</xs:schema>

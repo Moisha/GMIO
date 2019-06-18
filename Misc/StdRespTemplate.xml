@@ -1,0 +1,69 @@
+<GMIOResponce>
+	<Auth OK="1" />
+	<Objects>
+		<Object Id="1" Name="AAA" Ncar="1">
+			<Devices>
+				<Device Id="1" Number="1" Name="AAA" ID_DevType="1" DevType="AAA">
+					<Channels>
+						<Channel Id="1" Name="AAA" ID_PT="1" ID_Src="1" Nsrc="1" AlarmSignal="1" AlarmThreshold="1.1" BaseChn="1" />
+						<Channel/>
+					</Channels>
+				</Device>
+				<Device/>
+			</Devices>
+			<Aggregates>
+				<Aggregate Id = "1" ID_AggrType="1" Name="AAA">
+					<AggregateParams>
+						<AggregateParam ID_Prm="1" PrmKind="1" Caption="AAA" />
+						<AggregateParam/>
+					</AggregateParams>
+				</Aggregate>
+				<Aggregate/>
+			</Aggregates>
+		</Object>
+		<Object/>
+	</Objects>
+	
+	<Nodes>
+		<Node Id="1" Name="name" NodeType="1" Parent="1">
+			<Node />
+			<Node />
+			<NodeChannels>
+				<NodeChannel Id="1" ID_PT="1" Name="NodeChannel" BaseChn="1" ID_MeaUnit="1" />
+				<NodeChannel/>
+			</NodeChannels>
+		</Node>
+		<Node/>
+	</Nodes>
+	
+	<ParamTypes>
+		<ParamType ID_PT="1" PSign="AAA" PName="AAA" IsAlarm="1" />
+		<ParamType/>
+	</ParamTypes>
+	
+	<MeaUnits>
+		<MeaUnit ID_MeaUnit="1" Name="AAA" LongName="AAA" />
+		<MeaUnit/>
+	</MeaUnits>
+	
+	<Data>
+		<Source Id="1" ValSrcType="1" ValType="1" Name="AAA" >
+			<Value utime="1" val="1.1" />
+			<Value />
+		</Source>
+		<Source/>
+	</Data>
+	
+	<SQL>
+		<Rows>
+			<Row>
+				<Fields>
+					<Field Value="AAA" />
+					<Field/>
+				</Fields>
+			</Row>
+			<Row/>
+		</Rows>
+	</SQL>
+	
+</GMIOResponce>

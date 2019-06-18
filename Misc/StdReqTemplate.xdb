@@ -1,0 +1,45 @@
+<?xml version="1.0"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xdb="http://www.borland.com/schemas/delphi/10.0/XMLDataBinding">
+	<element xmlns="http://www.w3.org/2001/XMLSchema" name="GMIORequest" type="GMIORequestType"/>
+	<complexType xmlns="http://www.w3.org/2001/XMLSchema" name="GMIORequestType"><annotation>
+			<appinfo xdb:docElement="GMIORequest"/>
+		</annotation>
+		<sequence>
+			<element name="Auth" type="AuthType"/>
+			<element name="Structure" type="xs:integer"/>
+			<element name="Data" type="DataType"/>
+		</sequence>
+	</complexType>
+	<complexType xmlns="http://www.w3.org/2001/XMLSchema" name="AuthType">
+		<attribute name="Login" type="xs:string">
+		</attribute>
+		<attribute name="Password" type="xs:string">
+		</attribute>
+	</complexType>
+	<complexType xmlns="http://www.w3.org/2001/XMLSchema" name="DataType">
+		<sequence>
+			<element name="Sources" type="SourcesType"/>
+			<element name="SQL" type="xs:string"/>
+			<element name="OPC" type="xs:integer"/>
+		</sequence>
+	</complexType>
+	<complexType xmlns="http://www.w3.org/2001/XMLSchema" name="SourcesType">
+		<sequence>
+			<element name="Source" type="SourceType" maxOccurs="unbounded"/>
+		</sequence>
+	</complexType>
+	<complexType xmlns="http://www.w3.org/2001/XMLSchema" name="SourceType">
+		<attribute name="Id" type="xs:integer"/>
+		<attribute name="ValSrcType" type="xs:integer"/>
+		<attribute name="ValType" type="xs:integer"/>
+		<attribute name="AggrType" type="xs:integer"/>
+		<attribute name="UTime1" type="xs:integer"><annotation>
+				<appinfo xdb:dataType="Cardinal"/>
+			</annotation>
+		</attribute>
+		<attribute name="UTime2" type="xs:integer"><annotation>
+				<appinfo xdb:dataType="Cardinal"/>
+			</annotation>
+		</attribute>
+	</complexType>
+</xs:schema>
