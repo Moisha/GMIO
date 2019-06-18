@@ -12,9 +12,27 @@ implementation
 var
   slTemplateFrom, slTemplateTo: TSTringList;
 
+procedure NormalizeConsoleOutput(const consoleOutput: string; slOutput: TStrings);
+var
+  s: string;
+  i: int;
+begin
+  s := consoleOutput;
+  for i := 1 to Length(s) do // радикально быстрее StringReplace
+    if s[i] = #10 then
+      s[i] := #13;
+
+  slOutput.Text := s;
+  for i := slOutput.Count - 1 downto 0 do
+    if Trim(slOutput[i]) = '' then
+      slOutput.Delete(i)
+    else
+      break;
+end;
+
 procedure CaptureConsoleOutput(const AParameters: String; slOutput: TStrings);
  const
-   CReadBuffer = 240000;
+   CReadBuffer = 2400;
    ACommand = 'git';
  var
    builder: TStringBuilder;
@@ -26,7 +44,6 @@ procedure CaptureConsoleOutput(const AParameters: String; slOutput: TStrings);
    pBuffer: array[0..CReadBuffer] of AnsiChar;
    dRead: DWord;
    dRunning: DWord;
-   s: string;
  begin
    slOutput.Clear();
    builder := TStringBuilder.Create();
@@ -46,36 +63,28 @@ procedure CaptureConsoleOutput(const AParameters: String; slOutput: TStrings);
        suiStartup.dwFlags := STARTF_USESTDHANDLES;
        suiStartup.wShowWindow := SW_HIDE;
 
-       if CreateProcess(nil, PChar(ACommand + ' ' + AParameters), @saSecurity,
-         @saSecurity, True, NORMAL_PRIORITY_CLASS, nil, nil, suiStartup, piProcess)
-         then
+       if CreateProcess(nil, PChar(ACommand + ' ' + AParameters), @saSecurity, @saSecurity, True, NORMAL_PRIORITY_CLASS, nil, nil, suiStartup, piProcess)  then
        begin
-         while true do
-         begin
+         CloseHandle(hWrite); // иначе зависает на считывании последне порции
+         repeat
            dRunning  := WaitForSingleObject(piProcess.hProcess, 100);
-           if dRunning <> WAIT_TIMEOUT then
-             break;
-
-           //repeat
+           repeat
              dRead := 0;
              ReadFile(hRead, pBuffer[0], CReadBuffer, dRead, nil);
              pBuffer[dRead] := #0;
 
              OemToAnsi(pBuffer, pBuffer);
              builder.Append(String(pBuffer));
-           //until dRead = 0;
-         end;
+           until (dRead < CReadBuffer);
+         until (dRunning <> WAIT_TIMEOUT);
          CloseHandle(piProcess.hProcess);
          CloseHandle(piProcess.hThread);
        end;
 
        CloseHandle(hRead);
-       CloseHandle(hWrite);
      end;
 
-     s := Builder.ToString();
-     s := StringReplace(s, #10, #13, [rfReplaceAll]);
-     slOutput.Text := s;
+     NormalizeConsoleOutput(Builder.ToString(), slOutput);
    finally
      builder.Free();
    end;
@@ -91,12 +100,12 @@ begin
   try
     CaptureConsoleOutput('rev-list head --count', sl);
     if sl.Count <> 1 then
-      raise Exception.Create('Не удалось получить количество коммитов. Ответ git: ' + sl.Text);
+      raise Exception.Create('rev-list head --count failed. git: ' + sl.Text);
 
     s := sl[0].Trim([' ', #13, #10]);
     Result := StrToIntDef(s, -1);
     if Result <= 0 then
-      raise Exception.Create('Не удалось получить количество коммитов. Ответ git: ' + sl.Text);
+      raise Exception.Create('rev-list head --count failed. git: ' + sl.Text);
   finally
     sl.Free();
   end;
@@ -110,11 +119,11 @@ begin
   try
     CaptureConsoleOutput('rev-list head --max-count=1 -- ' + path, sl);
     if sl.Count <> 1 then
-      raise Exception.Create('Не удалось получить ревизии ' + path + '. Ответ git: ' + sl.Text);
+      raise Exception.Create('rev-list "' + path + '" faled. git: ' + sl.Text);
 
     Result := sl[0].Trim([' ', #13, #10]);
     if Length(Result) <> 40 then
-      raise Exception.Create('Не удалось получить ревизии ' + path + '. Ответ git: ' + sl.Text);
+      raise Exception.Create('rev-list "' + path + '" faled. git: ' + sl.Text);
   finally
     sl.Free();
   end;
@@ -129,7 +138,7 @@ begin
   try
     CaptureConsoleOutput('rev-list head', sl);
     if sl.Count = 0 then
-      raise Exception.Create('Не удалось получить ревизии корня');
+      raise Exception.Create('rev-list head failed');
 
     Result := sl.IndexOf(sha);
   finally
