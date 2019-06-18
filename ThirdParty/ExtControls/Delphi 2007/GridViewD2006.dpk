@@ -1,0 +1,53 @@
+package GridViewD2006;
+
+{$R *.res}
+{$R '..\Ex_RegGrid.dcr'}
+{$IFDEF IMPLICITBUILDING This IFDEF should not be used by users}
+{$ALIGN 8}
+{$ASSERTIONS ON}
+{$BOOLEVAL OFF}
+{$DEBUGINFO ON}
+{$EXTENDEDSYNTAX ON}
+{$IMPORTEDDATA ON}
+{$IOCHECKS ON}
+{$LOCALSYMBOLS ON}
+{$LONGSTRINGS ON}
+{$OPENSTRINGS ON}
+{$OPTIMIZATION ON}
+{$OVERFLOWCHECKS OFF}
+{$RANGECHECKS OFF}
+{$REFERENCEINFO ON}
+{$SAFEDIVIDE OFF}
+{$STACKFRAMES OFF}
+{$TYPEDADDRESS OFF}
+{$VARSTRINGCHECKS ON}
+{$WRITEABLECONST OFF}
+{$MINENUMSIZE 1}
+{$IMAGEBASE $400000}
+{$ENDIF IMPLICITBUILDING}
+{$DESCRIPTION 'GridView components'}
+{$IMPLICITBUILD OFF}
+
+requires
+  rtl,
+  vcl,
+  designide,
+  vclactnband,
+  vclx,
+  dbrtl,
+  bdertl,
+  vcldb;
+
+contains
+  Ex_RegGrid in '..\Ex_RegGrid.pas',
+  Ex_DBGrid in '..\Ex_DBGrid.pas',
+  Ex_Grid in '..\Ex_Grid.pas',
+  Ex_GridC in '..\Ex_GridC.pas' {ColumnsEditorForm},
+  Ex_GridH in '..\Ex_GridH.pas' {HeaderEditorForm},
+  Ex_Inspector in '..\Ex_Inspector.pas',
+  ExtSysUtils in '..\ExtSysUtils.pas',
+  ExtGraphics in '..\ExtGraphics.pas',
+  ExtStrUtils in '..\ExtStrUtils.pas',
+  ExtSystem in '..\ExtSystem.pas';
+
+end.

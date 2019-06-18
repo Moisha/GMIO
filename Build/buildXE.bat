@@ -13,6 +13,7 @@ if exist "C:\Program Files (x86)\Embarcadero\RAD Studio\11.0\bin\dcc32.exe" set 
 if exist "C:\Program Files\Embarcadero\RAD Studio\11.0\bin\dcc32.exe" set DELPHIBIN=C:\Program Files\Embarcadero\RAD Studio\11.0\bin
 call "%DELPHIBIN%\rsvars.bat"
 
+echo on
 echo %DELPHIBIN% >> %LOGFILE%
 
 call :checkdir %RELEASEDIR%

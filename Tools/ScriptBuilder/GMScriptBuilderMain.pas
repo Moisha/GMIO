@@ -3,8 +3,7 @@ unit GMScriptBuilderMain;
 interface
 
 uses
-  Windows, SysUtils, Variants, Classes, IniFiles,
-  GMGlobals, StrUtils, ZDataset, ZConnection, DB;
+  Windows, SysUtils, Variants, Classes, IniFiles, GMGlobals, StrUtils;
 
   function ProcessCmdLineParameters(): int;
 
@@ -13,34 +12,155 @@ implementation
 var
   slTemplateFrom, slTemplateTo: TSTringList;
 
-function ReadHeadRevision(directory: string): int;
-var conn: TZConnection;
-    q: TZReadOnlyQuery;
+procedure CaptureConsoleOutput(const AParameters: String; slOutput: TStrings);
+ const
+   CReadBuffer = 240000;
+   ACommand = 'git';
+ var
+   builder: TStringBuilder;
+   saSecurity: TSecurityAttributes;
+   hRead: THandle;
+   hWrite: THandle;
+   suiStartup: TStartupInfo;
+   piProcess: TProcessInformation;
+   pBuffer: array[0..CReadBuffer] of AnsiChar;
+   dRead: DWord;
+   dRunning: DWord;
+   s: string;
+ begin
+   slOutput.Clear();
+   builder := TStringBuilder.Create();
+   try
+     ZeroMemory(@saSecurity, SizeOf(TSecurityAttributes));
+     saSecurity.nLength := SizeOf(TSecurityAttributes);
+     saSecurity.bInheritHandle := True;
+     saSecurity.lpSecurityDescriptor := nil;
+
+     if CreatePipe(hRead, hWrite, @saSecurity, 0) then
+     begin
+       FillChar(suiStartup, SizeOf(TStartupInfo), #0);
+       suiStartup.cb := SizeOf(TStartupInfo);
+       suiStartup.hStdInput := hRead;
+       suiStartup.hStdOutput := hWrite;
+       suiStartup.hStdError := hWrite;
+       suiStartup.dwFlags := STARTF_USESTDHANDLES;
+       suiStartup.wShowWindow := SW_HIDE;
+
+       if CreateProcess(nil, PChar(ACommand + ' ' + AParameters), @saSecurity,
+         @saSecurity, True, NORMAL_PRIORITY_CLASS, nil, nil, suiStartup, piProcess)
+         then
+       begin
+         while true do
+         begin
+           dRunning  := WaitForSingleObject(piProcess.hProcess, 100);
+           if dRunning <> WAIT_TIMEOUT then
+             break;
+
+           //repeat
+             dRead := 0;
+             ReadFile(hRead, pBuffer[0], CReadBuffer, dRead, nil);
+             pBuffer[dRead] := #0;
+
+             OemToAnsi(pBuffer, pBuffer);
+             builder.Append(String(pBuffer));
+           //until dRead = 0;
+         end;
+         CloseHandle(piProcess.hProcess);
+         CloseHandle(piProcess.hThread);
+       end;
+
+       CloseHandle(hRead);
+       CloseHandle(hWrite);
+     end;
+
+     s := Builder.ToString();
+     s := StringReplace(s, #10, #13, [rfReplaceAll]);
+     slOutput.Text := s;
+   finally
+     builder.Free();
+   end;
+end;
+
+function RevisionCount(): int;
+var
+  sl: TSTringList;
+  s: string;
 begin
   Result := 0;
-  conn := TZConnection.Create(nil);
-  q := TZReadOnlyQuery.Create(nil);
-
+  sl := TSTringList.Create();
   try
-    q.Connection := conn;
+    CaptureConsoleOutput('rev-list head --count', sl);
+    if sl.Count <> 1 then
+      raise Exception.Create('Не удалось получить количество коммитов. Ответ git: ' + sl.Text);
 
-    conn.HostName := '';
-    conn.Database := '..\..\.svn\wc.db';
-    conn.LoginPrompt := False;
-    conn.Protocol := 'sqlite-3';
-    conn.Connect();
-
-    q.SQL.Text := 'SELECT max(changed_revision) FROM NODES_BASE';
-    if Trim(directory) <> '' then q.SQL.Text := q.SQL.Text + ' where parent_relpath = ' + QuotedStr(directory);
-
-    q.Open();
-
-    if not q.Eof and not q.Fields[0].IsNull then
-      Result := q.Fields[0].AsInteger;
+    s := sl[0].Trim([' ', #13, #10]);
+    Result := StrToIntDef(s, -1);
+    if Result <= 0 then
+      raise Exception.Create('Не удалось получить количество коммитов. Ответ git: ' + sl.Text);
   finally
-    q.Free();
-    conn.Free();
+    sl.Free();
   end;
+end;
+
+function DirectoryRevisionSha(const path: string): string;
+var
+  sl: TSTringList;
+begin
+  sl := TSTringList.Create();
+  try
+    CaptureConsoleOutput('rev-list head --max-count=1 -- ' + path, sl);
+    if sl.Count <> 1 then
+      raise Exception.Create('Не удалось получить ревизии ' + path + '. Ответ git: ' + sl.Text);
+
+    Result := sl[0].Trim([' ', #13, #10]);
+    if Length(Result) <> 40 then
+      raise Exception.Create('Не удалось получить ревизии ' + path + '. Ответ git: ' + sl.Text);
+  finally
+    sl.Free();
+  end;
+end;
+
+function FindRevision(const sha: string): int;
+var
+  sl: TSTringList;
+begin
+  Result := 0;
+  sl := TSTringList.Create();
+  try
+    CaptureConsoleOutput('rev-list head', sl);
+    if sl.Count = 0 then
+      raise Exception.Create('Не удалось получить ревизии корня');
+
+    Result := sl.IndexOf(sha);
+  finally
+    sl.Free();
+  end;
+end;
+
+function ReadHeadRevision(const directory: string): int;
+var
+  root, path, sha: string;
+  cnt, n: int;
+begin
+  // SHA последнего коммита для указанной папки: git rev-list head --max-count=1 -- D:\Programs\Delphi\Geomer\GMIO_git\DB\Builder
+  // список SHA для всех коммитов в репозиторий: git rev-list head
+  // общее к-во коммитов в репозиторий: git rev-list head --count
+
+  // Т.о. алгоритм следующий
+  // 1. Получаем SHA для последнего коммита в directory
+  // 2. Получаем к-во коммитов в корень (CNT)
+  // 3. Получаем список коммитов в корень
+  // 4. Находим наш последний коммит в общем списке (N)
+  // 5. Получаем номер как CNT - N + 912, где 912 - это номер последней ревизии в SVN
+
+  root := ExpandFileName(ExcludeTrailingPathDelimiter(ExtractFileDir(ParamStr(0)))+ '\..\..\');
+  path := root + directory;
+
+  cnt := RevisionCount();
+  sha := DirectoryRevisionSha(path);
+  n := FindRevision(sha);
+
+  Result := cnt - n + 912;
 end;
 
 function CheckFileTemplate(sl: TStringList; var fnTemplate: string): bool;
@@ -304,9 +424,10 @@ end;
 procedure InsertVersion();
 var resFileName: string;
     baseVersions: TIniFile;
-    major, minor, subminor, revision, scriprRevision: int;
+    major, minor, subminor, revision, scriptRevision: int;
     sl: TStringList;
     i: int;
+    sha: string;
 begin
   if ParamCount() < 2 then
     raise Exception.Create('Not enough parameters!');
@@ -323,13 +444,15 @@ begin
   end;
 
   revision := ReadHeadRevision('');
-  scriprRevision := ReadHeadRevision('DB/Builder');
+  scriptRevision := ReadHeadRevision('DB/Builder');
 
   if (major < 1) or (minor < 0) or (subminor < 0) then
     raise Exception.Create('Wrong version file contents!');
 
   if (revision < 1) then
     raise Exception.Create('Wrong revision!');
+
+  sha := DirectoryRevisionSha('');
 
   sl := TStringList.Create();
   try
@@ -340,8 +463,9 @@ begin
       sl[i] := StringReplace(sl[i], '$MINOR$', IntToStr(minor), [rfReplaceAll]);
       sl[i] := StringReplace(sl[i], '$SUBMINOR$', IntToStr(subminor), [rfReplaceAll]);
       sl[i] := StringReplace(sl[i], '$WCREV$', IntToStr(revision), [rfReplaceAll]);
-      sl[i] := StringReplace(sl[i], '$SCRIPTREV$', IntToStr(scriprRevision), [rfReplaceAll]);
+      sl[i] := StringReplace(sl[i], '$SCRIPTREV$', IntToStr(scriptRevision), [rfReplaceAll]);
       sl[i] := StringReplace(sl[i], '$DATETIME$', FormatDateTime('dd.mm.yyyy hh:nn:ss', Now()), [rfReplaceAll]);
+      sl[i] := StringReplace(sl[i], '$GITSHA$', sha, [rfReplaceAll]);
     end;
 
     sl.SaveToFile(resFileName);
@@ -354,15 +478,14 @@ type
   TCheckAllFilesUnderSVN = class
   private
     FMissingFiles, FExternals: TStringList;
-    conn: TZConnection;
-    q: TZReadOnlyQuery;
+    FRepoFiles: THashedStringList;
 
     procedure ProcessDirectory(const dir: string);
     procedure CheckSVN;
     constructor Create();
     destructor Destroy(); override;
     procedure CheckFile(const fn: string);
-    procedure PrepareConnection;
+    procedure ReadRepoFilesList;
     procedure CreateExternalsList;
   end;
 
@@ -371,31 +494,25 @@ begin
   inherited;
   FMissingFiles := TStringList.Create();
   FExternals := TStringList.Create();
-
-  conn := TZConnection.Create(nil);
-  q := TZReadOnlyQuery.Create(nil);
+  FRepoFiles := THashedStringList.Create();
 end;
 
 destructor TCheckAllFilesUnderSVN.Destroy();
 begin
   FMissingFiles.Free();
   FExternals.Free();
-  q.Free();
-  conn.Free();
+  FRepoFiles.Free();
   inherited;
 end;
 
 procedure TCheckAllFilesUnderSVN.CheckFile(const fn: string);
-var ext: string;
+var
+  ext: string;
 begin
   ext := ExtractFileExt(fn).ToLower();
   if (ext <> '.sql') and (ext <> '.pas') and (ext <> '.dfm') then Exit;
 
-  q.Close();
-  q.SQL.Text := 'select * from NODES_BASE where local_relpath like ' + QuotedStr('%/' + ExtractFileName(fn));
-  q.Open();
-
-  if q.Eof then
+  if FRepoFiles.IndexOf(AnsiLowerCase(fn)) < 0 then
     FMissingFiles.Add(fn);
 end;
 
@@ -431,37 +548,25 @@ begin
   FindClose(rec);
 end;
 
-procedure TCheckAllFilesUnderSVN.PrepareConnection();
+procedure TCheckAllFilesUnderSVN.ReadRepoFilesList();
+var
+  i: int;
+  path: string;
 begin
-  q.Connection := conn;
-
-  conn.HostName := '';
-  conn.Database := '..\..\.svn\wc.db';
-  conn.LoginPrompt := False;
-  conn.Protocol := 'sqlite-3';
-  conn.Connect();
+  CaptureConsoleOutput('ls-tree --full-tree -r --name-only HEAD', FRepoFiles);
+  path := ExpandFileName('..\..\');
+  for i := 0 to FRepoFiles.Count - 1 do
+    FRepoFiles[i] := AnsiLowerCase(path + StringReplace(FRepoFiles[i], '/', '\', [rfReplaceAll]));
 end;
 
 procedure TCheckAllFilesUnderSVN.CreateExternalsList();
-var dir: string;
 begin
-  q.Close();
-  q.SQL.Text := 'select * from Externals';
-  q.Open();
-
-  while not q.Eof do
-  begin
-    dir := Stringreplace(q.FieldByName('local_relpath').AsString, '/', '\', [rfReplaceAll]);
-    FExternals.Add(UpperCase(ExpandFileName('..\..\' + dir)));
-
-    q.Next();
-  end;
 end;
 
 procedure TCheckAllFilesUnderSVN.CheckSVN();
 var i: int;
 begin
-  PrepareConnection();
+  ReadRepoFilesList();
   CreateExternalsList();
 
   for i := 2 to ParamCount do

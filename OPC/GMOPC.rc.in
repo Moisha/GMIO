@@ -26,6 +26,7 @@ BEGIN
             VALUE "FileDescription",  "OPC-сервер Инженерные сети онлайн\000"
             VALUE "OriginalFilename", "GMOPC.exe\000"
             VALUE "Build Date", "$DATETIME$\000"
+			VALUE "GitSHA", "$GITSHA$\000"
         END
     END
     BLOCK "VarFileInfo"

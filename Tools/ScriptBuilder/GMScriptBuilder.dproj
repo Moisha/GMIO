@@ -46,6 +46,7 @@
         <Base>true</Base>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Base)'!=''">
+        <DCC_DcuOutput>DCU</DCC_DcuOutput>
         <DCC_UNIT_PLATFORM>false</DCC_UNIT_PLATFORM>
         <DCC_SYMBOL_PLATFORM>false</DCC_SYMBOL_PLATFORM>
         <DCC_K>false</DCC_K>
@@ -87,7 +88,7 @@
         <DCC_Optimize>false</DCC_Optimize>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Cfg_2_Win32)'!=''">
-        <Debugger_RunParams>checksvn db\Builder SharedSrc</Debugger_RunParams>
+        <Debugger_RunParams>checksvn &quot;Client&quot; &quot;DB\Builder&quot; &quot;Misc&quot; &quot;OPC&quot; &quot;Server&quot; &quot;Service&quot; &quot;SharedSrc&quot; &quot;Test&quot; &quot;ThirdParty&quot; &quot;Tools&quot; &quot;WatchDog&quot;</Debugger_RunParams>
         <VerInfo_Locale>1033</VerInfo_Locale>
     </PropertyGroup>
     <ItemGroup>
