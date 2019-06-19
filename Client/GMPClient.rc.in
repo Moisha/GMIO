@@ -23,7 +23,7 @@ BEGIN
             VALUE "ProductVersion", "Инженерные сети онлайн $MAJOR$.$MINOR$\000"
             VALUE "FileVersion", "$MAJOR$.$MINOR$.$SUBMINOR$.$WCREV$\000"
             VALUE "ProductName",      "Клиент Инженерные сети онлайн\000"
-            VALUE "FileDescription",  "Клиент Инженерные сети онлайн\000"
+            VALUE "FileDescription",  "$GITSHA$\000"
             VALUE "OriginalFilename", "GMPClient.exe\000"
             VALUE "Build Date", "$DATETIME$\000"
         END

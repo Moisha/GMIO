@@ -12,6 +12,14 @@ implementation
 var
   slTemplateFrom, slTemplateTo: TSTringList;
 
+function PrepareRelativePath(const relPath: string): string;
+var
+  root: string;
+begin
+  root := ExpandFileName(ExcludeTrailingPathDelimiter(ExtractFileDir(ParamStr(0)))+ '\..\..\');
+  Result := root + relPath;
+end;
+
 procedure NormalizeConsoleOutput(const consoleOutput: string; slOutput: TStrings);
 var
   s: string;
@@ -111,10 +119,12 @@ begin
   end;
 end;
 
-function DirectoryRevisionSha(const path: string): string;
+function DirectoryRevisionSha(const relPath: string): string;
 var
+  path: string;
   sl: TSTringList;
 begin
+  path := PrepareRelativePath(relPath);
   sl := TSTringList.Create();
   try
     CaptureConsoleOutput('rev-list head --max-count=1 -- ' + path, sl);
@@ -146,9 +156,9 @@ begin
   end;
 end;
 
-function ReadHeadRevision(const directory: string): int;
+function ReadHeadRevision(const relPath: string): int;
 var
-  root, path, sha: string;
+  sha: string;
   cnt, n: int;
 begin
   // SHA последнего коммита для указанной папки: git rev-list head --max-count=1 -- D:\Programs\Delphi\Geomer\GMIO_git\DB\Builder
@@ -162,11 +172,8 @@ begin
   // 4. Находим наш последний коммит в общем списке (N)
   // 5. Получаем номер как CNT - N + 912, где 912 - это номер последней ревизии в SVN
 
-  root := ExpandFileName(ExcludeTrailingPathDelimiter(ExtractFileDir(ParamStr(0)))+ '\..\..\');
-  path := root + directory;
-
   cnt := RevisionCount();
-  sha := DirectoryRevisionSha(path);
+  sha := DirectoryRevisionSha(relPath);
   n := FindRevision(sha);
 
   Result := cnt - n + 912;
@@ -305,7 +312,7 @@ begin
 end;
 
 function ApplyTemplates(const s: string): string;
-var i, n: int;
+var i: int;
     sTo: string;
 begin
   Result := s;
@@ -313,13 +320,10 @@ begin
   begin
     sTo := slTemplateTo[i];
     if sTo = '$HEAD_REVISION$' then
-    begin
-      n := ReadHeadRevision('DB/Builder');
-      if n <= 0 then
-        raise Exception.Create('Не удалось найти головную ревизию!');
-
-      sTo := IntToStr(n);
-    end;
+      sTo := IntToStr(ReadHeadRevision('DB/Builder'))
+    else
+    if sTo = '$HEAD_REVISION_SHA$' then
+      sTo := DirectoryRevisionSha('DB/Builder');
 
     Result := StringReplace(Result, slTemplateFrom[i], sTo, [rfIgnoreCase, rfReplaceAll]);
   end;

@@ -5,6 +5,7 @@
 
 -- Полностью остановить скрипт невозможно, поэтому в служебной базе или при наличии более новой версии подвесим выполнение
 -- pg_gm_db_template_str_replace #HEAD_REVISION# $HEAD_REVISION$
+-- pg_gm_db_template_str_replace #HEAD_REVISION_SHA# $HEAD_REVISION_SHA$
 
 do $$
 declare _version int;
