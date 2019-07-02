@@ -196,24 +196,28 @@ end;
 
 class procedure TRequestSpecDevices.LoadCommands(ID_Obj, ID_Device, ID_Prm: int; AAddRequestToSendBuf: TGMAddRequestToSendBufProc);
 begin
-  ReadFromQuery(
-    SqlText_LoadCommands(ID_Obj, ID_Device, ID_Prm),
-    procedure(q: TGMSqlQuery)
-    var
-      channelIds: TChannelIds;
-      reqCreator: ISmartPointer<T485RequestCreator>;
-    begin
-      channelIds := ChannelIdsFromQ(q);
-      reqCreator := TSmartPointer<T485RequestCreator>.Create(T485RequestCreator.Create(AAddRequestToSendBuf));
-      reqCreator.ReqDetails.InitFromQuery(q);
-      reqCreator.ReqDetails.Priority := rqprCommand;
-      reqCreator.ReqDetails.rqtp := rqtCommand;
+  try
+    ReadFromQuery(
+      SqlText_LoadCommands(ID_Obj, ID_Device, ID_Prm),
+      procedure(q: TGMSqlQuery)
+      var
+        channelIds: TChannelIds;
+        reqCreator: ISmartPointer<T485RequestCreator>;
+      begin
+        channelIds := ChannelIdsFromQ(q);
+        reqCreator := TSmartPointer<T485RequestCreator>.Create(T485RequestCreator.Create(AAddRequestToSendBuf));
+        reqCreator.ReqDetails.InitFromQuery(q);
+        reqCreator.ReqDetails.Priority := rqprCommand;
+        reqCreator.ReqDetails.rqtp := rqtCommand;
 
-      if not reqCreator.SetChannelValue(channelIds, q.FieldByName('Value').AsFloat, q.FieldByName('TimeHold').AsInteger) then
-        SQLReq_SetCmdState(q.FieldByName('ID_Cmd').AsInteger, COMMAND_STATE_ERROR)
-      else
-        SQLReq_SetCmdState(q.FieldByName('ID_Cmd').AsInteger, COMMAND_STATE_EXECUTED)
-    end);
+        if not reqCreator.SetChannelValue(channelIds, q.FieldByName('Value').AsFloat, q.FieldByName('TimeHold').AsInteger) then
+          SQLReq_SetCmdState(q.FieldByName('ID_Cmd').AsInteger, COMMAND_STATE_ERROR)
+        else
+          SQLReq_SetCmdState(q.FieldByName('ID_Cmd').AsInteger, COMMAND_STATE_EXECUTED)
+      end);
+  except
+    ProgramLog.AddException(ClassName() + '.LoadCommands');
+  end;
 end;
 
 procedure TRequestSpecDevices.BackGroungProc;
