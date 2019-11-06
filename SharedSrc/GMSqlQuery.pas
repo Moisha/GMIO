@@ -13,11 +13,15 @@ type
   private
     q: TZReadOnlyQuery;
     FConnectionParams: TZConnectionParams;
+    FOwnsConnection: bool;
     function GetSQL: TStrings;
     function GetFields: TFields;
     function GetEof: bool;
     function GetState: TDataSetState;
     procedure Connect();
+    procedure Connect_Own;
+    procedure Connect_Thread;
+    procedure UpdateConnectionParams(conn: TZConnection; params: TZConnectionParams);
   public
     constructor Create(); overload;
     constructor Create(Params: TZConnectionParams); overload;
@@ -224,38 +228,59 @@ begin
   q.Close();
 end;
 
-procedure TGMSqlQuery.Connect;
+procedure TGMSqlQuery.UpdateConnectionParams(conn: TZConnection; params: TZConnectionParams);
+begin
+  conn.HostName := params.Host;
+  conn.Port := params.Port;
+  conn.User := params.Login;
+  conn.Password := params.Password;
+  conn.Database := params.Database;
+  conn.Protocol := 'postgresql-9';
+  conn.ClientCodepage := 'WIN1251';
+  if params.LibraryLocation <> '' then
+    conn.LibraryLocation := params.LibraryLocation;
+end;
+
+procedure TGMSqlQuery.Connect_Own();
+begin
+  if q.Connection = nil then
+    q.Connection := TZConnection.Create(nil);
+
+  if not q.Connection.Connected then
+  begin
+    UpdateConnectionParams(TZConnection(q.Connection), FConnectionParams);
+    q.Connection.Connect();
+  end;
+end;
+
+procedure TGMSqlQuery.Connect_Thread();
 var
   conn: TZConnection;
   thrId: cardinal;
 begin
-  if (q.Connection <> nil) and q.Connection.Connected then
-    Exit;
-
   thrId := GetCurrentThreadId();
   if not ThreadConnections.TryGetValue(thrId, conn) then
     conn := TZConnection.Create(nil);
 
   if not conn.Connected then
   begin
-    if FConnectionParams.Host = '' then
-      FConnectionParams := GlobalSQLConnectionParams();
-
-    conn.HostName := FConnectionParams.Host;
-    conn.Port := FConnectionParams.Port;
-    conn.User := FConnectionParams.Login;
-    conn.Password := FConnectionParams.Password;
-    conn.Database := FConnectionParams.Database;
-    conn.Protocol := 'postgresql-9';
-    conn.ClientCodepage := 'WIN1251';
-    if FConnectionParams.LibraryLocation <> '' then
-      conn.LibraryLocation := FConnectionParams.LibraryLocation;
-
+    UpdateConnectionParams(conn, GlobalSQLConnectionParams());
     conn.Connect();
   end;
 
   ThreadConnections.AddOrSetValue(thrId, conn);
   q.Connection := conn;
+end;
+
+procedure TGMSqlQuery.Connect;
+begin
+  if (q.Connection <> nil) and q.Connection.Connected then
+    Exit;
+
+  if FOwnsConnection then
+    Connect_Own()
+  else
+    Connect_Thread();
 end;
 
 constructor TGMSqlQuery.Create;
@@ -264,17 +289,23 @@ begin
   FConnectionParams := GlobalSQLConnectionParams();
   q := TZReadOnlyQuery.Create(nil);
   q.ParamCheck := false;
+  FOwnsConnection := false;
 end;
 
 constructor TGMSqlQuery.Create(Params: TZConnectionParams);
 begin
   Create();
   FConnectionParams := Params;
+  FOwnsConnection := true;
 end;
 
 destructor TGMSqlQuery.Destroy;
 begin
+  if FOwnsConnection then
+    q.Connection.Free();
+
   q.Free();
+
   inherited;
 end;
 
