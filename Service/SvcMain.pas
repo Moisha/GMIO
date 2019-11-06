@@ -142,8 +142,7 @@ begin
   Result := false;
 
   CoInitialize(nil);
-  q := TGMSqlQuery.Create();
-  q.ConnectionParams := params;
+  q := TGMSqlQuery.Create(params);
 
   try
     try
