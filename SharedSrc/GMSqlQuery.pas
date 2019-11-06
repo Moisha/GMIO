@@ -229,16 +229,18 @@ var
   conn: TZConnection;
   thrId: cardinal;
 begin
-  if q.Connection <> nil then
+  if (q.Connection <> nil) and q.Connection.Connected then
     Exit;
 
   thrId := GetCurrentThreadId();
   if not ThreadConnections.TryGetValue(thrId, conn) then
+    conn := TZConnection.Create(nil);
+
+  if not conn.Connected then
   begin
     if FConnectionParams.Host = '' then
       FConnectionParams := GlobalSQLConnectionParams();
 
-    conn := TZConnection.Create(nil);
     conn.HostName := FConnectionParams.Host;
     conn.Port := FConnectionParams.Port;
     conn.User := FConnectionParams.Login;
@@ -249,10 +251,10 @@ begin
     if FConnectionParams.LibraryLocation <> '' then
       conn.LibraryLocation := FConnectionParams.LibraryLocation;
 
-    ThreadConnections.AddOrSetValue(thrId, conn);
+    conn.Connect();
   end;
 
-  conn.Connect();
+  ThreadConnections.AddOrSetValue(thrId, conn);
   q.Connection := conn;
 end;
 
