@@ -18,6 +18,7 @@ type
     function GetFields: TFields;
     function GetEof: bool;
     function GetState: TDataSetState;
+    procedure Connect();
   public
     constructor Create(); overload;
     constructor Create(Params: TZConnectionParams); overload;
@@ -34,8 +35,6 @@ type
     procedure Next();
     procedure Close();
 
-    procedure Connect();
-    procedure Disconnect();
     property Eof: bool read GetEof;
 
     property ConnectionParams: TZConnectionParams read FConnectionParams write FConnectionParams;
@@ -58,6 +57,12 @@ type
   function QueryResultArray_FirstColumn(const sql: string): ArrayOfString;
 
 implementation
+
+uses
+  System.Generics.Collections;
+
+var
+ ThreadConnections: TDictionary<Cardinal, TZConnection>;
 
 procedure ReadFromQuery(const sql: string; proc: TReadGMQueryProc; obj: pointer = nil);
 var
@@ -223,32 +228,41 @@ begin
 end;
 
 procedure TGMSqlQuery.Connect;
+var
+  thrId: cardinal;
 begin
-  if conn.Connected then Exit;
+  if (conn <> nil) and conn.Connected then
+    Exit;
 
   if FConnectionParams.Host = '' then
     FConnectionParams := GlobalSQLConnectionParams();
 
-  conn.HostName := FConnectionParams.Host;
-  conn.Port := FConnectionParams.Port;
-  conn.User := FConnectionParams.Login;
-  conn.Password := FConnectionParams.Password;
-  conn.Database := FConnectionParams.Database;
-  conn.Protocol := 'postgresql-9';
-  if FConnectionParams.LibraryLocation <> '' then
-    conn.LibraryLocation := FConnectionParams.LibraryLocation;
+  thrId := GetCurrentThreadId();
+  if not ThreadConnections.TryGetValue(thrId, conn) then
+  begin
+    conn := TZConnection.Create(nil);
+    conn.HostName := FConnectionParams.Host;
+    conn.Port := FConnectionParams.Port;
+    conn.User := FConnectionParams.Login;
+    conn.Password := FConnectionParams.Password;
+    conn.Database := FConnectionParams.Database;
+    conn.Protocol := 'postgresql-9';
+    conn.ClientCodepage := 'WIN1251';
+    if FConnectionParams.LibraryLocation <> '' then
+      conn.LibraryLocation := FConnectionParams.LibraryLocation;
 
-  conn.Connect();
+    conn.Connect();
+    ThreadConnections.AddOrSetValue(thrId, conn);
+
+    q.Connection := conn;
+  end;
 end;
 
 constructor TGMSqlQuery.Create;
 begin
   inherited;
-  conn := TZConnection.Create(nil);
-  conn.ClientCodepage := 'WIN1251';
   FConnectionParams := GlobalSQLConnectionParams();
   q := TZReadOnlyQuery.Create(nil);
-  q.Connection := conn;
   q.ParamCheck := false;
 end;
 
@@ -261,13 +275,7 @@ end;
 destructor TGMSqlQuery.Destroy;
 begin
   q.Free();
-  conn.Free();
   inherited;
-end;
-
-procedure TGMSqlQuery.Disconnect;
-begin
-  conn.Disconnect();
 end;
 
 procedure TGMSqlQuery.ExecSQL;
@@ -276,7 +284,7 @@ begin
   try
     q.ExecSQL();
   except
-    Disconnect();
+    conn.Disconnect();
     Connect();
     q.ExecSQL();
   end;
@@ -288,7 +296,7 @@ begin
   try
     conn.ExecuteDirect(s);
   except
-    Disconnect();
+    conn.Disconnect();
     Connect();
     conn.ExecuteDirect(s);
   end;
@@ -340,4 +348,18 @@ begin
   end;
 end;
 
+procedure FreeThreadConnections();
+var
+  conn: TZConnection;
+begin
+  for conn in ThreadConnections.Values do
+    conn.Free();
+
+  ThreadConnections.Free();
+end;
+
+initialization
+  ThreadConnections := TDictionary<Cardinal, TZConnection>.Create();
+finalization
+  FreeThreadConnections();
 end.
