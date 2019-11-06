@@ -66,8 +66,7 @@ var q: TGMSqlQuery;
     action, ver: string;
 begin
   CoInitialize(nil);
-  q := TGMSqlQuery.Create();
-  q.ConnectionParams := FConnParams;
+  q := TGMSqlQuery.Create(FConnParams);
 
   repeat
     try

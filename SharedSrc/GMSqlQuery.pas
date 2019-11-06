@@ -11,7 +11,6 @@ uses Windows, Classes, ZDataset, ZConnection, GMGlobals, DB, ConnParamsStorage, 
 type
   TGMSqlQuery = class
   private
-    conn: TZConnection;
     q: TZReadOnlyQuery;
     FConnectionParams: TZConnectionParams;
     function GetSQL: TStrings;
@@ -36,8 +35,6 @@ type
     procedure Close();
 
     property Eof: bool read GetEof;
-
-    property ConnectionParams: TZConnectionParams read FConnectionParams write FConnectionParams;
   end;
 
   TReadGMQueryProc = procedure(q: TGMSqlQuery; obj: pointer) of object;
@@ -229,17 +226,18 @@ end;
 
 procedure TGMSqlQuery.Connect;
 var
+  conn: TZConnection;
   thrId: cardinal;
 begin
-  if (conn <> nil) and conn.Connected then
+  if q.Connection <> nil then
     Exit;
-
-  if FConnectionParams.Host = '' then
-    FConnectionParams := GlobalSQLConnectionParams();
 
   thrId := GetCurrentThreadId();
   if not ThreadConnections.TryGetValue(thrId, conn) then
   begin
+    if FConnectionParams.Host = '' then
+      FConnectionParams := GlobalSQLConnectionParams();
+
     conn := TZConnection.Create(nil);
     conn.HostName := FConnectionParams.Host;
     conn.Port := FConnectionParams.Port;
@@ -251,11 +249,11 @@ begin
     if FConnectionParams.LibraryLocation <> '' then
       conn.LibraryLocation := FConnectionParams.LibraryLocation;
 
-    conn.Connect();
     ThreadConnections.AddOrSetValue(thrId, conn);
-
-    q.Connection := conn;
   end;
+
+  conn.Connect();
+  q.Connection := conn;
 end;
 
 constructor TGMSqlQuery.Create;
@@ -284,7 +282,7 @@ begin
   try
     q.ExecSQL();
   except
-    conn.Disconnect();
+    q.Connection.Disconnect();
     Connect();
     q.ExecSQL();
   end;
@@ -294,11 +292,11 @@ procedure TGMSqlQuery.Execute(const s: string);
 begin
   Connect();
   try
-    conn.ExecuteDirect(s);
+    q.Connection.ExecuteDirect(s);
   except
-    conn.Disconnect();
+    q.Connection.Disconnect();
     Connect();
-    conn.ExecuteDirect(s);
+    q.Connection.ExecuteDirect(s);
   end;
 end;
 
@@ -342,8 +340,8 @@ begin
   try
     q.Open();
   except
-    conn.Disconnect();
-    conn.Connect();
+    q.Connection.Disconnect();
+    Connect();
     q.Open();
   end;
 end;
