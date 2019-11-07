@@ -29,6 +29,7 @@ type
     lState: TLabel;
     Label2: TLabel;
     procedure FormDestroy(Sender: TObject);
+    procedure FormClose(Sender: TObject; var Action: TCloseAction);
   private
     { Private declarations }
     thr: TCheckConnStrThread;
@@ -122,6 +123,11 @@ begin
     lState.Caption := sc.s;
     sc.Free();
   end;
+end;
+
+procedure TCheckConnStrDlg.FormClose(Sender: TObject; var Action: TCloseAction);
+begin
+  Action := caFree;
 end;
 
 procedure TCheckConnStrDlg.FormDestroy(Sender: TObject);

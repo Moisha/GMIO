@@ -43,6 +43,7 @@ type
 
   TReadGMQueryProc = procedure(q: TGMSqlQuery; obj: pointer) of object;
   TReadGMQueryProcRef = reference to procedure(q: TGMSqlQuery);
+
   procedure ReadFromQuery(const sql: string; proc: TReadGMQueryProc; obj: pointer = nil); overload;
   procedure ReadFromQuery(const sql: string; proc: TReadGMQueryProcRef); overload;
   procedure ReadFromQueryFmt(const sql: string; args: array of const; proc: TReadGMQueryProcRef);
@@ -56,6 +57,7 @@ type
   function QueryResultArray_FirstRow(const sql: string): ArrayOfString;
   function QueryResultArray_FirstRowFmt(const sql: string; args: array of const): ArrayOfString;
   function QueryResultArray_FirstColumn(const sql: string): ArrayOfString;
+  procedure DropThreadConnection(thrId: int);
 
 implementation
 
@@ -386,7 +388,18 @@ begin
   for conn in ThreadConnections.Values do
     conn.Free();
 
-  ThreadConnections.Free();
+  FreeAndNil(ThreadConnections);
+end;
+
+procedure DropThreadConnection(thrId: int);
+var
+  conn: TZConnection;
+begin
+  if (ThreadConnections = nil) or not ThreadConnections.TryGetValue(thrId, conn) then
+    Exit;
+
+  conn.Free();
+  ThreadConnections.Remove(thrId);
 end;
 
 initialization

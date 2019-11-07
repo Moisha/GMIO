@@ -13,6 +13,7 @@ object CheckConnStrDlg: TCheckConnStrDlg
   Font.Style = []
   OldCreateOrder = False
   Position = poScreenCenter
+  OnClose = FormClose
   OnDestroy = FormDestroy
   PixelsPerInch = 96
   TextHeight = 13

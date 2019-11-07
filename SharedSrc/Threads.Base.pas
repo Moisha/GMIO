@@ -19,6 +19,7 @@ type
     property Done: bool read FDone;
     procedure AfterConstruction; override;
     function WaitForTimeout(TimeOut: int; KillUnterminated: bool = true): int; virtual;
+    destructor Destroy; override;
   end;
 
   TGMThreadPool<T: TGMThread> = class
@@ -35,7 +36,7 @@ type
 
 implementation
 
-uses ProgramLogFile, GMConst;
+uses ProgramLogFile, GMConst, GMSqlQuery;
 
 { TGMThread }
 
@@ -43,6 +44,12 @@ procedure TGMThread.AfterConstruction;
 begin
   FDone := false;
   inherited;
+end;
+
+destructor TGMThread.Destroy;
+begin
+  inherited;
+  DropThreadConnection(ThreadID);
 end;
 
 procedure TGMThread.Execute;
