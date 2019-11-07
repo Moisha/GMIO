@@ -8,6 +8,10 @@ interface
 
 uses Windows, Classes, ZDataset, ZConnection, GMGlobals, DB, ConnParamsStorage, SysUtils;
 
+{$ifndef SQL_APP}
+  message Для использования модуля define SQL_APP
+{$endif}
+
 type
   TGMSqlQuery = class
   private

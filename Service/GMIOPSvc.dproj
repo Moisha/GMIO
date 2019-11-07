@@ -58,7 +58,7 @@
     </PropertyGroup>
     <PropertyGroup Condition="'$(Base)'!=''">
         <BRCC_CompilerToUse>rc</BRCC_CompilerToUse>
-        <DCC_Define>FullDebugModeInIDE;ClearLogFileOnStartup;LogErrorsToFile;LogMemoryLeakDetailToFile;EnableMemoryLeakReporting;NeverSleepOnThreadContention;UseSwitchToThread;$(DCC_Define)</DCC_Define>
+        <DCC_Define>FullDebugModeInIDE;ClearLogFileOnStartup;LogErrorsToFile;LogMemoryLeakDetailToFile;EnableMemoryLeakReporting;NeverSleepOnThreadContention;UseSwitchToThread;SQL_APP;$(DCC_Define)</DCC_Define>
         <Manifest_File>None</Manifest_File>
         <DCC_SYMBOL_PLATFORM>false</DCC_SYMBOL_PLATFORM>
         <VerInfo_Locale>1049</VerInfo_Locale>

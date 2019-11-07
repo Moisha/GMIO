@@ -36,7 +36,7 @@ type
 
 implementation
 
-uses ProgramLogFile, GMConst, GMSqlQuery;
+uses ProgramLogFile, GMConst{$ifdef SQL_APP}, GMSqlQuery{$endif};
 
 { TGMThread }
 
@@ -49,7 +49,9 @@ end;
 destructor TGMThread.Destroy;
 begin
   inherited;
+{$ifdef SQL_APP}
   DropThreadConnection(ThreadID);
+{$endif}
 end;
 
 procedure TGMThread.Execute;
