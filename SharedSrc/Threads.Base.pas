@@ -14,7 +14,9 @@ type
     procedure SafeExecute(); virtual; abstract;
     procedure Execute(); override;
     function GetTerminated: bool;
+    function GetDescription: string; virtual;
   public
+    property Description: string read GetDescription;
     property Tag: NativeInt read FTag write FTag;
     property Done: bool read FDone;
     procedure AfterConstruction; override;
@@ -68,6 +70,11 @@ begin
     end;
   end;
   FDone := true;
+end;
+
+function TGMThread.GetDescription: string;
+begin
+  Result := ClassName();
 end;
 
 function TGMThread.GetTerminated: bool;

@@ -26,6 +26,8 @@ type
     procedure Connect_Own;
     procedure Connect_Thread;
     procedure UpdateConnectionParams(conn: TZConnection; params: TZConnectionParams);
+    function GetThreadDescription: string;
+    function CommentQueryText(const sql: string): string;
   public
     constructor Create(); overload;
     constructor Create(Params: TZConnectionParams); overload;
@@ -66,7 +68,7 @@ type
 implementation
 
 uses
-  System.Generics.Collections;
+  System.Generics.Collections, Threads.Base;
 
 var
  ThreadConnections: TDictionary<Cardinal, TZConnection>;
@@ -318,6 +320,7 @@ end;
 procedure TGMSqlQuery.ExecSQL;
 begin
   Connect();
+  q.SQL.Text := CommentQueryText(q.SQL.Text);
   try
     q.ExecSQL();
   except
@@ -327,15 +330,44 @@ begin
   end;
 end;
 
+function TGMSqlQuery.GetThreadDescription(): string;
+var
+  thr: TThread;
+begin
+  Result := '';
+  thr := TThread.CurrentThread;
+  if thr = nil then
+    Exit;
+
+  if thr is TGMThread then
+    Result := TGMThread(thr).Description;
+
+  if Trim(Result) = '' then
+    Result := thr.ClassName();
+
+  Result := '/* ' + Result + ' */ ';
+end;
+
+function TGMSqlQuery.CommentQueryText(const sql: string): string;
+var
+  desc: string;
+begin
+  desc := GetThreadDescription();
+  if (desc = '') or (Pos(AnsiUpperCase(desc), AnsiUpperCase(sql)) > 0) then
+    Exit(sql);
+
+  Result := desc + sql;
+end;
+
 procedure TGMSqlQuery.Execute(const s: string);
 begin
   Connect();
   try
-    q.Connection.ExecuteDirect(s);
+    q.Connection.ExecuteDirect(CommentQueryText(s));
   except
     q.Connection.Disconnect();
     Connect();
-    q.Connection.ExecuteDirect(s);
+    q.Connection.ExecuteDirect(CommentQueryText(s));
   end;
 end;
 
@@ -375,7 +407,8 @@ begin
 
   if not q.ControlsDisabled then
     q.DisableControls();
-    
+
+  q.SQL.Text := CommentQueryText(q.SQL.Text);
   try
     q.Open();
   except
