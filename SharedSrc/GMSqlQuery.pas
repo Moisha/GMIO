@@ -28,6 +28,7 @@ type
     procedure UpdateConnectionParams(conn: TZConnection; params: TZConnectionParams);
     function GetThreadDescription: string;
     function CommentQueryText(const sql: string): string;
+    procedure SetAppNameForConnection;
   public
     constructor Create(); overload;
     constructor Create(Params: TZConnectionParams); overload;
@@ -249,6 +250,12 @@ begin
     conn.LibraryLocation := params.LibraryLocation;
 end;
 
+procedure TGMSqlQuery.SetAppNameForConnection;
+begin
+  if (q.Connection <> nil) and q.Connection.Connected then
+    q.Connection.ExecuteDirect('set application_name to ' + AnsiQuotedStr(Paramstr(0), '"'));
+end;
+
 procedure TGMSqlQuery.Connect_Own();
 begin
   if q.Connection = nil then
@@ -258,6 +265,7 @@ begin
   begin
     UpdateConnectionParams(TZConnection(q.Connection), FConnectionParams);
     q.Connection.Connect();
+    SetAppNameForConnection();
   end;
 end;
 
@@ -278,6 +286,7 @@ begin
 
   ThreadConnections.AddOrSetValue(thrId, conn);
   q.Connection := conn;
+  SetAppNameForConnection();
 end;
 
 procedure TGMSqlQuery.Connect;
