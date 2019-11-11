@@ -7,7 +7,7 @@ interface
 
 uses
   Windows, Messages, SysUtils, Variants, Classes, Graphics, Controls, Forms,
-  Dialogs, StdCtrls, GMGlobals, IniFiles, Sockets, Frame.BigWindow,
+  Dialogs, StdCtrls, GMGlobals, IniFiles, Winapi.Networking.Sockets, Frame.BigWindow,
   Frame.ClientObject, ComCtrls, ImgList, ExtCtrls, Threads.GMClient, AppEvnts, Menus,
   MPlayer, ShellAPI, ControlFrame, GMDBClasses, GMConst, GMDock,
   ClientReadObjects, ConfigXml, Generics.Collections, FlexBase, dxStandardControlsSkinHelper,

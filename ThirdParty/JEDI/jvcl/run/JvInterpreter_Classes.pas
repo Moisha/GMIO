@@ -876,7 +876,7 @@ end;
 
 procedure TStringStream_Create(var Value: Variant; Args: TJvInterpreterArgs);
 begin
-  Value := O2V(TStringStream.Create(Args.Values[0]));
+  Value := O2V(TStringStream.Create(string(Args.Values[0])));
 end;
 
 { function Read(var Buffer; Count: Longint): Longint; }

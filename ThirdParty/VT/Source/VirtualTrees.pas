@@ -74,7 +74,7 @@ interface
 {$HPPEMIT '#include <ShlObj.hpp>'}
 
 uses
-  Windows,
+  Windows, Generics.Collections,
   {$if CompilerVersion >= 18}
     oleacc,   // MSAA support in Delphi 2006 or higher
   {$ifend}

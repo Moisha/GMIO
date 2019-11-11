@@ -1937,7 +1937,8 @@ end;
 
 procedure TDataSet_BookmarkValid(var Value: Variant; Args: TJvInterpreterArgs);
 begin
-  Value := TDataSet(Args.Obj).BookmarkValid(V2P(Args.Values[0]));
+  // Value := TDataSet(Args.Obj).BookmarkValid(V2P(Args.Values[0]));
+  Value := false;
 end;
 
 { procedure Cancel; }
@@ -1979,7 +1980,8 @@ end;
 
 procedure TDataSet_CompareBookmarks(var Value: Variant; Args: TJvInterpreterArgs);
 begin
-  Value := TDataSet(Args.Obj).CompareBookmarks(V2P(Args.Values[0]), V2P(Args.Values[1]));
+  //Value := TDataSet(Args.Obj).CompareBookmarks(V2P(Args.Values[0]), V2P(Args.Values[1]));
+  Value := 0;
 end;
 
 { function CreateBlobStream(Field: TField; Mode: TBlobStreamMode): TStream; }
@@ -2077,7 +2079,7 @@ end;
 
 procedure TDataSet_FreeBookmark(var Value: Variant; Args: TJvInterpreterArgs);
 begin
-  TDataSet(Args.Obj).FreeBookmark(V2P(Args.Values[0]));
+  // TDataSet(Args.Obj).FreeBookmark(V2P(Args.Values[0]));
 end;
 
 { function GetBookmark: TBookmark; }
@@ -2118,7 +2120,7 @@ end;
 
 procedure TDataSet_GotoBookmark(var Value: Variant; Args: TJvInterpreterArgs);
 begin
-  TDataSet(Args.Obj).GotoBookmark(V2P(Args.Values[0]));
+  // TDataSet(Args.Obj).GotoBookmark(V2P(Args.Values[0]));
 end;
 
 { procedure Insert; }

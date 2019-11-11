@@ -952,6 +952,10 @@
       {$UNDEF UNKNOWN_COMPILER_VERSION}
     {$ENDIF VER290}
 
+    {$IFDEF VER330} // RAD Studio 10.3
+      {$DEFINE VER300}
+    {$ENDIF}
+
     {$IFDEF VER300} // RAD Studio 10
       {$DEFINE BDS}
       {$DEFINE BDS17}
@@ -965,7 +969,7 @@
       {$ENDIF BCB}
       {$DEFINE RTL300_UP}
       {$UNDEF UNKNOWN_COMPILER_VERSION}
-    {$ENDIF VER290}
+    {$ENDIF VER300}
 
     {$IFDEF UNKNOWN_COMPILER_VERSION} // adjust for newer version (always use latest version)
       {$DEFINE BDS}

@@ -4462,27 +4462,27 @@ begin
    // Windows GDI TextOut
    if NeedRotate then begin
     Angle := (FAngleProp.Value * Pi) / 180;
-    with RotOrg do begin
+
      if (FAngleProp.Value >= 0) and (FAngleProp.Value <= 90) then begin
-      x := r.Left;
-      y := r.Top + Round((r.Bottom - r.Top) * sin(angle));
+      RotOrg.x := r.Left;
+      RotOrg.y := r.Top + Round((r.Bottom - r.Top) * sin(angle));
      end else
      if (FAngleProp.Value > 90) and (FAngleProp.Value <= 180) then begin
-      x := r.Left + Round((r.Right - r.Left) * Abs(cos(angle)));
-      y := r.Bottom;
+      RotOrg.x := r.Left + Round((r.Right - r.Left) * Abs(cos(angle)));
+      RotOrg.y := r.Bottom;
      end else
      if (FAngleProp.Value > 180) and (FAngleProp.Value <= 270) then begin
-      x := r.Right;
-      y := r.Bottom + Round((r.Bottom - r.Top) * sin(angle));
+      RotOrg.x := r.Right;
+      RotOrg.y := r.Bottom + Round((r.Bottom - r.Top) * sin(angle));
      end else
      if (FAngleProp.Value > 270) and (FAngleProp.Value < 360) then begin
-      x := r.Right - Round((r.Right - r.Left) * Abs(cos(angle)));
-      y := r.Top;
+      RotOrg.x := r.Right - Round((r.Right - r.Left) * Abs(cos(angle)));
+      RotOrg.y := r.Top;
      end else begin
-      x := r.Left;
-      y := r.Top;
+      RotOrg.x := r.Left;
+      RotOrg.y := r.Top;
      end;
-    end;
+
     if CalcOnly then
      SetRectEmpty(R)
     else begin
