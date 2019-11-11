@@ -56,22 +56,27 @@ interface
 
 {$I ZPlain.inc}
 
-uses Classes, ZCompatibility, ZPlainDriver, ZPlainDbLibConstants;
+{$IFNDEF ZEOS_DISABLE_DBLIB}
+
+uses Classes, ZCompatibility, ZPlainDriver, ZPlainDbLibConstants,
+  {$IFDEF FPC}syncobjs{$ELSE}SyncObjs{$ENDIF}
+  {$IFDEF TLIST_IS_DEPRECATED},ZSysUtils{$ENDIF};
 
 const
   NTWDBLIB_DLL_LOCATION ='ntwdblib.dll';
   LIBSYBDB_WINDOWS_DLL_LOCATION = 'libsybdb.dll';
   LIBSYBDB_LINUX_DLL_LOCATION = 'libsybdb.so';
-  FREETDS_MSSQL_WINDOWS_DLL_LOCATION = 'msdblibr.dll';
+  FREETDS_MSSQL_WINDOWS_DLL_LOCATION = 'sybdb.dll';
   FREETDS_LINUX_DLL_LOCATION = 'dblib.so';
   FREETDS_OSX_DLL_LOCATION = 'dblib.dylib';
-  FREETDS_SYBASE_WINDOWS_DLL_LOCATION = 'sybdblibd.dll';
+  FREETDS_SYBASE_WINDOWS_DLL_LOCATION = 'sybdb.dll';
 type
   {** Represents a generic interface to DBLIB native API. }
   IZDBLibPlainDriver = interface (IZPlainDriver)
     ['{7731C3B4-0608-4B6B-B089-240AC43A3463}']
 
-    procedure CheckError(dbProc: PDBPROCESS);
+    procedure CheckError(dbProc: PDBPROCESS); deprecated;
+    function GetErrorString(dbProc: PDBPROCESS): String;
 
     function dbDead(dbProc: PDBPROCESS): Boolean;
     function dbLogin: PLOGINREC;
@@ -88,7 +93,7 @@ type
     function dbSetMaxprocs(MaxProcs: SmallInt): RETCODE;
     function dbOpen(Login: PLOGINREC; Host: PAnsiChar): PDBPROCESS;
     function dbCancel(dbProc: PDBPROCESS): RETCODE;
-    function dbCmd(dbProc: PDBPROCESS; Cmd: PAnsiChar): RETCODE;
+    function dbCmd(const dbProc: PDBPROCESS; const Cmd: PAnsiChar): RETCODE;
     function dbSqlExec(dbProc: PDBPROCESS; Async: Boolean=False): RETCODE;
     function dbSqlExecSync(dbProc: PDBPROCESS): RETCODE;
     function dbSqlExecAsync(dbProc: PDBPROCESS): RETCODE;
@@ -103,8 +108,12 @@ type
     function dbCmdRow(dbProc: PDBPROCESS): RETCODE;
     function dbNumCols(dbProc: PDBPROCESS): DBINT;
     function dbColName(dbProc: PDBPROCESS; Column: DBINT): PAnsiChar;
+    function dbColSource(dbProc: PDBPROCESS; Column: DBINT): PAnsiChar;
     function dbColType(dbProc: PDBPROCESS; Column: DBINT): DBINT;
+    function dbcoltypeinfo(Proc: PDBPROCESS; Column: Integer): PDBTYPEINFO;
     function dbColLen(dbProc: PDBPROCESS; Column: DBINT): DBInt;
+    function dbcolinfo(pdbhandle :PDBHANDLE; _Type: Integer; Column: DBINT;
+      ComputeId: DBINT; lpdbcol: PDBCOL): RETCODE;
     function dbData(dbProc: PDBPROCESS; Column: DBINT): PByte;
     function dbDatLen(dbProc: PDBPROCESS; Column: DBINT): DBINT;
     function dbConvert(dbProc: PDBPROCESS; SrcType: DBINT; Src: PByte;
@@ -112,6 +121,7 @@ type
     function dbNextRow(dbProc: PDBPROCESS): STATUS;
     function dbGetRow(dbProc: PDBPROCESS; Row: DBINT): STATUS;
     function dbCount(dbProc: PDBPROCESS): DBINT;
+    function dbbind(Proc: PDBPROCESS; Column, VarType, VarLen: Integer; VarAddr: PByte): RETCODE;
 
     function dbRpcInit(dbProc: PDBPROCESS; RpcName: PAnsiChar; Options: SmallInt): RETCODE;
     function dbRpcParam(dbProc: PDBPROCESS; ParamName: PAnsiChar; Status: Byte;
@@ -126,6 +136,26 @@ type
     function dbRetType(dbProc: PDBPROCESS; RetNum: DBINT): DBINT;
     function dbdataready(Proc: PDBPROCESS): LongBool;
     function GetVariables: TDBVariables;
+    { BCP functions }
+    function bcp_batch(const Proc: PDBPROCESS): DBINT;
+    function bcp_bind(Proc: PDBPROCESS; VarAddr: PByte; PrefixLen: Integer;
+      VarLen: DBINT; Terminator: PByte; TermLen, Typ, TableColumn: Integer): RETCODE;
+    function bcp_colfmt(Proc: PDBPROCESS; FileColumn: Integer; FileType: Byte;
+      FilePrefixLen: Integer; FileColLen: DBINT; FileTerm: PByte; FileTermLen,
+      TableColumn: Integer): RETCODE;
+    function bcp_collen(Proc: PDBPROCESS; VarLen: DBINT; TableColumn: Integer): RETCODE;
+    function bcp_colptr(Proc: PDBPROCESS; ColPtr: PByte; TableColumn: Integer): RETCODE;
+    function bcp_columns(Proc: PDBPROCESS; FileColCount: Integer): RETCODE;
+    function bcp_control(Proc: PDBPROCESS; Field: Integer; Value: DBINT): RETCODE;
+    function bcp_done(Proc: PDBPROCESS): DBINT;
+    function bcp_exec(Proc: PDBPROCESS; RowsCopied: PDBINT): RETCODE;
+    function bcp_init(Proc: PDBPROCESS; TableName, hFile, ErrFile: PAnsiChar;
+      Direction: Integer): RETCODE;
+    function bcp_moretext(Proc: PDBPROCESS; Size: DBINT; Text: PByte): RETCODE;
+    function bcp_readfmt(Proc: PDBPROCESS; FileName: PAnsiChar): RETCODE;
+    function bcp_sendrow(Proc: PDBPROCESS): RETCODE;
+    function bcp_setl(Login: PLOGINREC; Enable: LongBool): RETCODE;
+    function bcp_writefmt(Proc: PDBPROCESS; FileName: PAnsiChar): RETCODE;
   end;
 
   TZDBLibAbstractPlainDriver = class(TZAbstractPlainDriver, IZPlainDriver)
@@ -136,6 +166,7 @@ type
     procedure dbLoginFree(Login: PLOGINREC); virtual; abstract;
     constructor Create; virtual;
     procedure CheckError(dbProc: PDBPROCESS);
+    function GetErrorString(dbProc: PDBPROCESS): String;
     function GetVariables: TDBVariables;
   end;
 
@@ -158,7 +189,7 @@ type
     function dbSetMaxprocs(MaxProcs: SmallInt): RETCODE; virtual; abstract;
     function dbOpen(Login: PLOGINREC; Host: PAnsiChar): PDBPROCESS; virtual;
     function dbCancel(dbProc: PDBPROCESS): RETCODE;
-    function dbCmd(dbProc: PDBPROCESS; Cmd: PAnsiChar): RETCODE;
+    function dbCmd(const dbProc: PDBPROCESS; const Cmd: PAnsiChar): RETCODE;
     function dbSqlExec(dbProc: PDBPROCESS; Async: Boolean=False): RETCODE;
     function dbSqlExecSync(dbProc: PDBPROCESS): RETCODE;
     function dbSqlExecAsync(dbProc: PDBPROCESS): RETCODE;
@@ -172,10 +203,15 @@ type
     function dbCmdRow(dbProc: PDBPROCESS): RETCODE;
     function dbNumCols(dbProc: PDBPROCESS): DBINT;
     function dbcolbrowse(Proc: PDBPROCESS; Column: Integer): LongBool; virtual; abstract;
+    function dbbind(Proc: PDBPROCESS; Column, VarType, VarLen: Integer; VarAddr: PByte): RETCODE;
 
     function dbColName(dbProc: PDBPROCESS; Column: DBINT): PAnsiChar;
+    function dbColSource(dbProc: PDBPROCESS; Column: DBINT): PAnsiChar;
     function dbColType(dbProc: PDBPROCESS; Column: DBINT): DBINT;
+    function dbcoltypeinfo(dbProc: PDBPROCESS; Column: Integer): PDBTYPEINFO;
     function dbColLen(dbProc: PDBPROCESS; Column: DBINT): DBInt;
+    function dbColInfo(pdbhandle :PDBHANDLE; _Type: Integer; Column: DBINT;
+      ComputeId: DBINT; lpdbcol: PDBCOL): RETCODE;
     function dbData(dbProc: PDBPROCESS; Column: DBINT): PByte;
     function dbDatLen(dbProc: PDBPROCESS; Column: DBINT): DBINT; virtual; abstract;
     function dbConvert(dbProc: PDBPROCESS; SrcType: DBINT; Src: PByte;
@@ -197,6 +233,26 @@ type
     function dbRetType(dbProc: PDBPROCESS; RetNum: DBINT): DBINT;
     function dbdataready(Proc: PDBPROCESS): LongBool; virtual; abstract;
     function dbrbuf(Proc: PDBPROCESS): DBINT;
+    { BCP functions }
+    function bcp_batch(const Proc: PDBPROCESS): DBINT;
+    function bcp_bind(Proc: PDBPROCESS; VarAddr: PByte; PrefixLen: Integer;
+      VarLen: DBINT; Terminator: PByte; TermLen, Typ, TableColumn: Integer): RETCODE;
+    function bcp_colfmt(Proc: PDBPROCESS; FileColumn: Integer; FileType: Byte;
+      FilePrefixLen: Integer; FileColLen: DBINT; FileTerm: PByte; FileTermLen,
+      TableColumn: Integer): RETCODE;
+    function bcp_collen(Proc: PDBPROCESS; VarLen: DBINT; TableColumn: Integer): RETCODE;
+    function bcp_colptr(Proc: PDBPROCESS; ColPtr: PByte; TableColumn: Integer): RETCODE;
+    function bcp_columns(Proc: PDBPROCESS; FileColCount: Integer): RETCODE;
+    function bcp_control(Proc: PDBPROCESS; Field: Integer; Value: DBINT): RETCODE;
+    function bcp_done(Proc: PDBPROCESS): DBINT;
+    function bcp_exec(Proc: PDBPROCESS; RowsCopied: PDBINT): RETCODE;
+    function bcp_init(Proc: PDBPROCESS; TableName, hFile, ErrFile: PAnsiChar;
+      Direction: Integer): RETCODE;
+    function bcp_moretext(Proc: PDBPROCESS; Size: DBINT; Text: PByte): RETCODE;
+    function bcp_readfmt(Proc: PDBPROCESS; FileName: PAnsiChar): RETCODE;
+    function bcp_sendrow(Proc: PDBPROCESS): RETCODE;
+    function bcp_setl(Login: PLOGINREC; Enable: LongBool): RETCODE;
+    function bcp_writefmt(Proc: PDBPROCESS; FileName: PAnsiChar): RETCODE;
   end;
 
   {** Implements a dblib driver for Sybase ASE 12.5 }
@@ -226,11 +282,11 @@ type
     function dbSetLApp(Login: PLOGINREC; AppName: PAnsiChar): RETCODE;
     function dbSetLNatLang(Login: PLOGINREC; NatLangName: PAnsiChar): RETCODE;
     function dbSetLCharSet(Login: PLOGINREC; CharsetName: PAnsiChar): RETCODE;
-    function dbSetLSecure(Login: PLOGINREC): RETCODE;
+    function dbSetLSecure({%H-}Login: PLOGINREC): RETCODE;
     function dbSetMaxprocs(MaxProcs: SmallInt): RETCODE;
     function dbOpen(Login: PLOGINREC; Host: PAnsiChar): PDBPROCESS;
     function dbCancel(dbProc: PDBPROCESS): RETCODE;
-    function dbCmd(dbProc: PDBPROCESS; Cmd: PAnsiChar): RETCODE;
+    function dbCmd(const dbProc: PDBPROCESS; const Cmd: PAnsiChar): RETCODE;
     function dbSqlExec(dbProc: PDBPROCESS; Async: Boolean=False): RETCODE; virtual;
     function dbSqlExecSync(dbProc: PDBPROCESS): RETCODE;
     function dbSqlExecAsync(dbProc: PDBPROCESS): RETCODE;
@@ -244,10 +300,15 @@ type
     function dbCmdRow(dbProc: PDBPROCESS): RETCODE;
     function dbNumCols(dbProc: PDBPROCESS): DBINT;
     function dbcolbrowse(Proc: PDBPROCESS; Column: Integer): LongBool;
+    function dbbind(Proc: PDBPROCESS; Column, VarType, VarLen: Integer; VarAddr: PByte): RETCODE;
 
     function dbColName(dbProc: PDBPROCESS; Column: DBINT): PAnsiChar;
+    function dbColSource(dbProc: PDBPROCESS; Column: DBINT): PAnsiChar;
     function dbColType(dbProc: PDBPROCESS; Column: DBINT): DBINT;
+    function dbcoltypeinfo(dbProc: PDBPROCESS; Column: Integer): PDBTYPEINFO;
     function dbColLen(dbProc: PDBPROCESS; Column: DBINT): DBInt;
+    function dbColInfo(pdbhandle :PDBHANDLE; _Type: Integer; Column: DBINT;
+      ComputeId: DBINT; lpdbcol: PDBCOL): RETCODE;
     function dbData(dbProc: PDBPROCESS; Column: DBINT): PByte;
     function dbDatLen(dbProc: PDBPROCESS; Column: DBINT): DBINT;
     function dbConvert(dbProc: PDBPROCESS; SrcType: DBINT; Src: PByte;
@@ -267,8 +328,28 @@ type
     function dbRetData(dbProc: PDBPROCESS; RetNum: DBINT): Pointer;
     function dbRetLen(dbProc: PDBPROCESS; RetNum: DBINT): DBINT;
     function dbRetType(dbProc: PDBPROCESS; RetNum: DBINT): DBINT;
-    function dbrbuf(Proc: PDBPROCESS): DBINT;
+    function dbrbuf({%H-}Proc: PDBPROCESS): DBINT;
     function dbdataready(Proc: PDBPROCESS): LongBool;
+    { BCP functions }
+    function bcp_batch(const Proc: PDBPROCESS): DBINT;
+    function bcp_bind(Proc: PDBPROCESS; VarAddr: PByte; PrefixLen: Integer;
+      VarLen: DBINT; Terminator: PByte; TermLen, Typ, TableColumn: Integer): RETCODE;
+    function bcp_colfmt(Proc: PDBPROCESS; FileColumn: Integer; FileType: Byte;
+      FilePrefixLen: Integer; FileColLen: DBINT; FileTerm: PByte; FileTermLen,
+      TableColumn: Integer): RETCODE;
+    function bcp_collen(Proc: PDBPROCESS; VarLen: DBINT; TableColumn: Integer): RETCODE;
+    function bcp_colptr(Proc: PDBPROCESS; ColPtr: PByte; TableColumn: Integer): RETCODE;
+    function bcp_columns(Proc: PDBPROCESS; FileColCount: Integer): RETCODE;
+    function bcp_control(Proc: PDBPROCESS; Field: Integer; Value: DBINT): RETCODE;
+    function bcp_done(Proc: PDBPROCESS): DBINT;
+    function bcp_exec(Proc: PDBPROCESS; RowsCopied: PDBINT): RETCODE;
+    function bcp_init(Proc: PDBPROCESS; TableName, hFile, ErrFile: PAnsiChar;
+      Direction: Integer): RETCODE;
+    function bcp_moretext(Proc: PDBPROCESS; Size: DBINT; Text: PByte): RETCODE;
+    function bcp_readfmt(Proc: PDBPROCESS; FileName: PAnsiChar): RETCODE;
+    function bcp_sendrow(Proc: PDBPROCESS): RETCODE;
+    function bcp_setl(Login: PLOGINREC; Enable: LongBool): RETCODE;
+    function bcp_writefmt(Proc: PDBPROCESS; FileName: PAnsiChar): RETCODE;
   end;
 
   {** Implements a dblib driver for MSSql7 }
@@ -289,11 +370,11 @@ type
 
     function dbDead(dbProc: PDBPROCESS): Boolean; override;
     procedure dbLoginFree(Login: PLOGINREC); override;
-    function dbSetLCharSet(Login: PLOGINREC; CharsetName: PAnsiChar): RETCODE; override;
+    function dbSetLCharSet({%H-}Login: PLOGINREC; {%H-}CharsetName: PAnsiChar): RETCODE; override;
     function dbSetLSecure(Login: PLOGINREC): RETCODE; override;
     function dbSetMaxprocs(MaxProcs: SmallInt): RETCODE; override;
     function dbSqlExecAsync(dbProc: PDBPROCESS): RETCODE;
-    function dbSetOpt(dbProc: PDBPROCESS; Option: DBINT; Char_Param: PAnsiChar = nil; Int_Param: DBINT = -1): RETCODE; override;
+    function dbSetOpt(dbProc: PDBPROCESS; Option: DBINT; Char_Param: PAnsiChar = nil; {%H-}Int_Param: DBINT = -1): RETCODE; override;
     function dbClose(dbProc: PDBPROCESS): RETCODE; override;
     function dbcolbrowse(Proc: PDBPROCESS; Column: Integer): LongBool; override;
 
@@ -322,6 +403,7 @@ type
     FreeTDSAPI: TFreeTDSAPI;
   protected
     function Clone: IZPlainDriver; override; abstract;
+    procedure LoadCodePages; override;
   public
     constructor Create; override;
     destructor Destroy; override;
@@ -331,6 +413,7 @@ type
     function GetDescription: string; override;
 
     {API functions}
+    function dbOpen(Login: PLOGINREC; Host: PAnsiChar): PDBPROCESS; override;
     function dbsetlversion(Login: PLOGINREC): RETCODE; virtual;
     function dbsetversion: RETCODE; virtual;
 
@@ -346,7 +429,6 @@ type
     function dbSetOpt(dbProc: PDBPROCESS; Option: Integer;
       Char_Param: PAnsiChar = nil; Int_Param: Integer = -1): RETCODE; override;
     function dbClose(dbProc: PDBPROCESS): RETCODE; override;
-    function dbColInfo(dbProc: PDBPROCESS; Column: Integer; var ADBInfo: DBCOL): RETCODE;
     function dbDatLen(dbProc: PDBPROCESS; Column: Integer): Integer; override;
     function dbCount(dbProc: PDBPROCESS): Integer; override;
     function dbcolbrowse(Proc: PDBPROCESS; Column: Integer): LongBool; override;
@@ -377,30 +459,28 @@ type
   TZFreeTDS42SybasePlainDriver = class(TZFreeTDSBasePlainDriver)
   protected
     function Clone: IZPlainDriver; override;
-    procedure LoadCodePages; override;
   public
     constructor Create; override;
     function GetProtocol: string; override;
     function GetDescription: string; override;
-    function dbsetlversion(Login: PLOGINREC): RETCODE; override;
+    function dbsetlversion({%H-}Login: PLOGINREC): RETCODE; override;
     function dbsetversion: RETCODE; override;
   end;
 
   TZFreeTDS50PlainDriver = class(TZFreeTDS42SybasePlainDriver)
   protected
     function Clone: IZPlainDriver; override;
-    procedure LoadCodePages; override;
   public
     constructor Create; override;
     function GetProtocol: string; override;
     function GetDescription: string; override;
+    function dbsetlversion({%H-}Login: PLOGINREC): RETCODE; override;
     function dbsetversion: RETCODE; override;
   end;
 
   TZFreeTDS70PlainDriver = class(TZFreeTDS42MsSQLPlainDriver)
   protected
     function Clone: IZPlainDriver; override;
-    procedure LoadCodePages; override;
   public
     function GetProtocol: string; override;
     function GetDescription: string; override;
@@ -411,7 +491,6 @@ type
   TZFreeTDS71PlainDriver = class(TZFreeTDS70PlainDriver)
   protected
     function Clone: IZPlainDriver; override;
-    procedure LoadCodePages; override;
   public
     function GetProtocol: string; override;
     function GetDescription: string; override;
@@ -421,7 +500,6 @@ type
   TZFreeTDS72PlainDriver = class(TZFreeTDS70PlainDriver)
   protected
     function Clone: IZPlainDriver; override;
-    procedure LoadCodePages; override;
   public
     function GetProtocol: string; override;
     function GetDescription: string; override;
@@ -436,102 +514,124 @@ var
   OldSybaseMessageHandle: SYBDBMSGHANDLE_PROC = nil;
   OldMsSQLMessageHandle: DBMSGHANDLE_PROC = nil;
   OldMsSQLErrorHandle: DBERRHANDLE_PROC = nil;
-  SQLErrors: TList;
-  SQLMessages: TList;
+  ErrorCS: TCriticalSection;
+  SQLErrors: {$IFDEF TLIST_IS_DEPRECATED}TZSortedList{$ELSE}TList{$ENDIF};
+  SQLMessages: {$IFDEF TLIST_IS_DEPRECATED}TZSortedList{$ELSE}TList{$ENDIF};
+
+{$ENDIF ZEOS_DISABLE_DBLIB}
 
 implementation
 
-uses SysUtils, ZPlainLoader, ZEncoding, {$IFDEF FPC}DOS{$ELSE}Windows{$ENDIF};
+{$IFNDEF ZEOS_DISABLE_DBLIB}
+
+uses SysUtils, ZPlainLoader, ZEncoding, ZClasses, ZFastCode;
 
 procedure AddSybaseCodePages(PlainDriver: TZAbstractPlainDriver);
 begin
-  { MultiByte }
-  PlainDriver.AddCodePage('874THAIBIN', 1, ceAnsi, 874); {Windows Thailändisch, ISO8859-11, binäre Sortierung}
-  PlainDriver.AddCodePage('932JPN', 2, ceAnsi, 932); {Japanese Shift-JIS mit Microsoft-Erweiterungen}
-  PlainDriver.AddCodePage('936ZHO', 3, ceAnsi, 936); {Vereinfachtes Chinesisch, PRC GBK}
-  PlainDriver.AddCodePage('949KOR', 4, ceAnsi, 949); {Korean KS C 5601-1987-Codierung, Wansung}
-  PlainDriver.AddCodePage('950ZHO_HK', 5, ceAnsi, 950); {Traditionelles Chinesisch, Big 5-Kodierung mit HKSCS}
-  PlainDriver.AddCodePage('950ZHO_TW', 6, ceAnsi, 950); {Traditionelles Chinesisch, Big 5-Kodierung}
-  PlainDriver.AddCodePage('EUC_CHINA', 21, ceAnsi, zCP_GB2312); {GB2312-80 Simplified Chinese}
-  PlainDriver.AddCodePage('EUC_JAPAN', 22, ceAnsi, zCP_SHIFTJS); {Japanisch EUC JIS X 0208-1990 und JIS X 0212-1990-Zeichensatz}
-  PlainDriver.AddCodePage('EUC_KOREA', 23, ceAnsi, 1361); { Koreanisch KS C 5601-1992 8-Bit-Zeichensatz, Johab}
-  PlainDriver.AddCodePage('EUC_TAIWAN', 24, ceAnsi, 964); {EUC-TW-Kodierung}
-  PlainDriver.AddCodePage('UCA', 29, ceUTF16, zCP_UTF16, 'utf8'); {UCA	UCA-Standardkollatierung}
-  PlainDriver.AddCodePage('UTF8BIN', 30, ceUTF8, zCP_UTF8); {UTF-8, 8-Bit-Mehrbyte-Zeichensatz für Unicode, binäre Reihenfolge}
-
-  { SingleByte }
-  PlainDriver.AddCodePage('1250LATIN2', 7, ceAnsi, zCP_WIN1250); {Windows Latin 2, Mittel- und Osteuropa}
-  PlainDriver.AddCodePage('1250POL', 8, ceAnsi, zCP_WIN1251); {Windows Latin 2, Polnisch}
-  PlainDriver.AddCodePage('1251CYR', 9, ceAnsi, 1251); {Windows Kyrillisch}
-  PlainDriver.AddCodePage('1252LATIN1', 10, ceAnsi, 1252); { Windows Latin 1, Western}
-  PlainDriver.AddCodePage('1252LT1ACC', 11, ceAnsi, 1252); {Windows-Spezial Latin 1, Western, Zeichen mit Akzent nicht gleich}
-  PlainDriver.AddCodePage('1252NOR', 12, ceAnsi, 1252); {Windows Latin 1, Norwegisch}
-  PlainDriver.AddCodePage('1252SPA', 13, ceAnsi, 1252); {Windows Latin 1, Spanisch}
-  PlainDriver.AddCodePage('1252SWEFIN', 14, ceAnsi, 1252); {Windows Latin 1, Schwedisch/Finnisch}
-  PlainDriver.AddCodePage('1253ELL', 15, ceAnsi, 1253); {Windows Griechisch, ISO8859-7 mit Erweiterungen}
-  PlainDriver.AddCodePage('1254TRK', 16, ceAnsi, 1254); {Windows Türkisch, ISO8859-9 mit Erweiterungen}
-  PlainDriver.AddCodePage('1254TRKALT', 17, ceAnsi, 1254); {Windows Türkisch, ISO8859-9 mit Erweiterungen, I mit I-Punkt gleich I ohne I-Punkt}
-  PlainDriver.AddCodePage('1255HEB', 18, ceAnsi, 1255); {Windows Hebräisch, ISO8859-8 mit Erweiterungen}
-  PlainDriver.AddCodePage('1256ARA', 19, ceAnsi, 1256); {Windows Arabisch, ISO8859-6 mit Erweiterungen}
-  PlainDriver.AddCodePage('1257LIT', 20, ceAnsi, 1257); {Windows Baltische Staaten, Litauisch}
-  PlainDriver.AddCodePage('ISO1LATIN1', 25, ceAnsi, zCP_L1_ISO_8859_1); {ISO8859-1, ISO Latin 1, Western, Latin 1-Sortierreihenfolge}
-  PlainDriver.AddCodePage('ISO9LATIN1', 26, ceAnsi, zCP_L9_ISO_8859_15); {	ISO8859-15, ISO Latin 9, Western, Latin 1-Sortierreihenfolge}
-  PlainDriver.AddCodePage('ISO_1', 27, ceAnsi, zCP_L1_ISO_8859_1); {ISO8859-1, ISO Latin 1, Western}
-  PlainDriver.AddCodePage('ISO_BINENG', 28, ceAnsi, zCP_us_ascii); {Binäre Sortierreihenfolge, Englisch ISO/ASCII 7-Bit-Zuordnung nach Groß- und Kleinschreibung}
+// codepages as found in "SAP Adaptive Server Enterprise 16.0 > Configuration Guide for UNIX Adaptive Server Enterprise 16.0 > Localization Support"
+  PlainDriver.AddCodePage('ascii_8', 1, ceAnsi, zCP_us_ascii);
+  PlainDriver.AddCodePage('big5', 2, ceAnsi, zCP_Big5);
+  PlainDriver.AddCodePage('cp437', 3, ceAnsi, zCP_DOS437);
+  PlainDriver.AddCodePage('cp850', 4, ceAnsi, zCP_DOS850);
+  PlainDriver.AddCodePage('cp852', 5, ceAnsi, zCP_DOS852);
+  PlainDriver.AddCodePage('cp855', 6, ceAnsi, zCP_DOS855);
+  PlainDriver.AddCodePage('cp857', 7, ceAnsi, zCP_DOS857);
+  PlainDriver.AddCodePage('cp858', 8, ceAnsi, zCP_DOS858);
+  PlainDriver.AddCodePage('cp860', 9, ceAnsi, zCP_DOS860);
+  PlainDriver.AddCodePage('cp864', 10, ceAnsi, zCP_DOS864);
+  PlainDriver.AddCodePage('cp866', 11, ceAnsi, zCP_DOS866);
+  PlainDriver.AddCodePage('cp869', 12, ceAnsi, zCP_DOS869);
+  PlainDriver.AddCodePage('cp874', 13, ceAnsi, zCP_WIN874);
+  PlainDriver.AddCodePage('cp932', 14, ceAnsi, zCP_SHIFTJS);
+  PlainDriver.AddCodePage('cp936', 15, ceAnsi, zCP_GB2312);
+  PlainDriver.AddCodePage('cp950', 16, ceAnsi, zCP_Big5);
+  PlainDriver.AddCodePage('cp1250', 17, ceAnsi, zCP_WIN1250);
+  PlainDriver.AddCodePage('cp1251', 18, ceAnsi, zCP_WIN1251);
+  PlainDriver.AddCodePage('cp1252', 19, ceAnsi, zCP_WIN1252);
+  PlainDriver.AddCodePage('cp1253', 20, ceAnsi, zCP_WIN1253);
+  PlainDriver.AddCodePage('cp1254', 21, ceAnsi, zCP_WIN1254);
+  PlainDriver.AddCodePage('cp1255', 22, ceAnsi, zCP_WIN1255);
+  PlainDriver.AddCodePage('cp1256', 23, ceAnsi, zCP_WIN1256);
+  PlainDriver.AddCodePage('cp1257', 24, ceAnsi, zCP_WIN1257);
+  PlainDriver.AddCodePage('cp1258', 25, ceAnsi, zCP_WIN1258);
+  PlainDriver.AddCodePage('gb18030', 26, ceAnsi, zCP_GB18030);
+  PlainDriver.AddCodePage('iso_1', 27, ceAnsi, zCP_L1_ISO_8859_1);
+  PlainDriver.AddCodePage('iso88592', 28, ceAnsi, zCP_L2_ISO_8859_2);
+  PlainDriver.AddCodePage('iso88595', 29, ceAnsi, zCP_L5_ISO_8859_5);
+  PlainDriver.AddCodePage('iso88596', 30, ceAnsi, zCP_L6_ISO_8859_6);
+  PlainDriver.AddCodePage('iso88597', 31, ceAnsi, zCP_L7_ISO_8859_7);
+  PlainDriver.AddCodePage('iso88598', 32, ceAnsi, zCP_L8_ISO_8859_8);
+  PlainDriver.AddCodePage('iso88599', 33, ceAnsi, zCP_L5_ISO_8859_9);
+  PlainDriver.AddCodePage('iso15', 34, ceAnsi, zCP_L9_ISO_8859_15);
+  PlainDriver.AddCodePage('sjis', 35, ceAnsi, zCP_SHIFTJS);
+  PlainDriver.AddCodePage('utf8', 36, ceUTF8, zCP_UTF8);
 end;
 
 procedure AddmMSCodePages(PlainDriver: TZAbstractPlainDriver);
 begin
   { SingleByte }
-  PlainDriver.AddCodePage('WIN1250', 1, ceAnsi, zCP_WIN1250); {Microsoft Windows Codepage 1250 (East European)}
-  PlainDriver.AddCodePage('WIN1251', 2, ceAnsi, zCP_WIN1251); {Microsoft Windows Codepage 1251 (Cyrl)}
-  PlainDriver.AddCodePage('WIN1252', 3, ceAnsi, zCP_WIN1252); {Microsoft Windows Codepage 1252 (ANSI), USASCCI}
-  PlainDriver.AddCodePage('WIN1253', 4, ceAnsi, zCP_WIN1253); {Microsoft Windows Codepage 1253 (Greek)}
-  PlainDriver.AddCodePage('WIN1254', 5, ceAnsi, zCP_WIN1254); {Microsoft Windows Codepage 1254 (Turk)}
-  PlainDriver.AddCodePage('WIN1255', 6, ceAnsi, zCP_WIN1255); {Microsoft Windows Codepage 1255 (Hebrew)}
-  PlainDriver.AddCodePage('WIN1256', 7, ceAnsi, cCP_WIN1256); {Microsoft Windows Codepage 1256 (Arab)}
-  PlainDriver.AddCodePage('WIN1257', 8, ceAnsi, zCP_WIN1257); {Microsoft Windows Codepage 1257 (BaltRim)}
-  PlainDriver.AddCodePage('WIN1258', 9, ceAnsi, zCP_WIN1258); {Microsoft Windows Codepage 1258 (Viet), TCVN-5712}
+  PlainDriver.AddCodePage('WINDOWS-1250', 1, ceAnsi, zCP_WIN1250, '', 1, False); {Microsoft Windows Codepage 1250 (East European)}
+  PlainDriver.AddCodePage('WINDOWS-1251', 2, ceAnsi, zCP_WIN1251, '', 1, False); {Microsoft Windows Codepage 1251 (Cyrl)}
+  PlainDriver.AddCodePage('WINDOWS-1252', 3, ceAnsi, zCP_WIN1252, '', 1, False); {Microsoft Windows Codepage 1252 (ANSI), USASCCI}
+  PlainDriver.AddCodePage('WINDOWS-1253', 4, ceAnsi, zCP_WIN1253, '', 1, False); {Microsoft Windows Codepage 1253 (Greek)}
+  PlainDriver.AddCodePage('WINDOWS-1254', 5, ceAnsi, zCP_WIN1254, '', 1, False); {Microsoft Windows Codepage 1254 (Turk)}
+  PlainDriver.AddCodePage('WINDOWS-1255', 6, ceAnsi, zCP_WIN1255, '', 1, False); {Microsoft Windows Codepage 1255 (Hebrew)}
+  PlainDriver.AddCodePage('WINDOWS-1256', 7, ceAnsi, zCP_WIN1256, '', 1, False); {Microsoft Windows Codepage 1256 (Arab)}
+  PlainDriver.AddCodePage('WINDOWS-1257', 8, ceAnsi, zCP_WIN1257, '', 1, False); {Microsoft Windows Codepage 1257 (BaltRim)}
+  PlainDriver.AddCodePage('WINDOWS-1258', 9, ceAnsi, zCP_WIN1258, '', 1, False); {Microsoft Windows Codepage 1258 (Viet), TCVN-5712}
 end;
 
 { Handle sql server error messages }
 function SybaseErrorHandle(Proc: PDBPROCESS; Severity, DbErr, OsErr: Integer;
   DbErrStr, OsErrStr: PAnsiChar): Integer;
-{$IFNDEF UNIX} stdcall{$ELSE} cdecl{$ENDIF};
+{$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
 var
   SqlError: PDBLibError;
 begin
-  New(SqlError);
-  SqlError.dbProc := Proc;
-  SqlError.Severity := Severity;
-  SqlError.DbErr := DbErr;
-  SqlError.OsErr := OsErr;
-  SqlError.DbErrStr := DbErrStr;
-  SqlError.OsErrStr := OsErrStr;
-  SQLErrors.Add(SqlError);
-
-  Result := INT_CANCEL;
+  ErrorCS.Enter;
+  try
+    New(SqlError);
+    SqlError.dbProc := Proc;
+    SqlError.Severity := Severity;
+    SqlError.DbErr := DbErr;
+    SqlError.OsErr := OsErr;
+    if DbErrStr <> nil then
+      ZSetString(DbErrStr, StrLen(DbErrStr), SqlError.DbErrStr);
+    if OsErrStr <> nil then
+      ZSetString(OsErrStr, StrLen(OsErrStr), SqlError.OsErrStr);
+    SQLErrors.Add(SqlError);
+  finally
+    Result := INT_CANCEL;
+    ErrorCS.Leave;
+  end;
 end;
 
 { Handle sql server messages }
 function SybaseMessageHandle(Proc: PDBPROCESS; MsgNo: DBINT; MsgState,
     Severity: Integer; MsgText, SrvName, ProcName: PAnsiChar; Line: DBUSMALLINT):
-    Integer; {$IFNDEF UNIX} stdcall {$ELSE} cdecl {$ENDIF};
+    Integer; {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
 var
   SQLMessage: PDBLibMessage;
 begin
-  New(SQLMessage);
-  SQLMessage.dbProc := Proc;
-  SQLMessage.MsgNo := MsgNo;
-  SQLMessage.MsgState := MsgState;
-  SQLMessage.Severity := Severity;
-  SQLMessage.MsgText := MsgText;
-  SQLMessage.SrvName := SrvName;
-  SQLMessage.ProcName := ProcName;
-  SQLMessage.Line := Line;
-  SQLMessages.Add(SQLMessage);
-
-  Result := 0;
+  ErrorCS.Enter;
+  try
+    New(SQLMessage);
+    SQLMessage.dbProc := Proc;
+    SQLMessage.MsgNo := MsgNo;
+    SQLMessage.MsgState := MsgState;
+    SQLMessage.Severity := Severity;
+    if MsgText <> nil then
+      ZSetString(MsgText, StrLen(MsgText), SQLMessage.MsgText);
+    if SrvName <> nil then
+      ZSetString(SrvName, StrLen(SrvName), SQLMessage.SrvName);
+    if ProcName <> nil then
+      ZSetString(ProcName, StrLen(ProcName), SQLMessage.ProcName);
+    SQLMessage.Line := Line;
+    SQLMessages.Add(SQLMessage);
+  finally
+    Result := 0;
+    ErrorCS.Leave;
+  end;
 end;
 
 { Handle sql server error messages }
@@ -540,16 +640,22 @@ function DbLibErrorHandle(Proc: PDBPROCESS; Severity, DbErr, OsErr: Integer;
 var
   SqlError: PDBLibError;
 begin
-  New(SqlError);
-  SqlError.dbProc := Proc;
-  SqlError.Severity := Severity;
-  SqlError.DbErr := DbErr;
-  SqlError.OsErr := OsErr;
-  SqlError.DbErrStr := DbErrStr;
-  SqlError.OsErrStr := OsErrStr;
-  SQLErrors.Add(SqlError);
-
-  Result := INT_CANCEL;
+  ErrorCS.Enter;
+  try
+    New(SqlError);
+    SqlError.dbProc := Proc;
+    SqlError.Severity := Severity;
+    SqlError.DbErr := DbErr;
+    SqlError.OsErr := OsErr;
+    if DbErrStr <> nil then
+      ZSetString(DbErrStr, StrLen(DbErrStr),SqlError.DbErrStr);
+    if OsErrStr <> nil then
+      ZSetString(OsErrStr, StrLen(OsErrStr),SqlError.OsErrStr);
+    SQLErrors.Add(SqlError);
+  finally
+    Result := INT_CANCEL;
+    ErrorCS.Leave;
+  end;
 end;
 
 { Handle sql server messages }
@@ -558,18 +664,25 @@ function DbLibMessageHandle(Proc: PDBPROCESS; MsgNo: DBINT; MsgState, Severity: 
 var
   SQLMessage: PDBLibMessage;
 begin
-  New(SQLMessage);
-  SQLMessage.dbProc := Proc;
-  SQLMessage.MsgNo := MsgNo;
-  SQLMessage.MsgState := MsgState;
-  SQLMessage.Severity := Severity;
-  SQLMessage.MsgText := MsgText;
-  SQLMessage.SrvName := SrvName;
-  SQLMessage.ProcName := ProcName;
-  SQLMessage.Line := Line;
-  SQLMessages.Add(SQLMessage);
-
-  Result := 0;
+  ErrorCS.Enter;
+  try
+    New(SQLMessage);
+    SQLMessage.dbProc := Proc;
+    SQLMessage.MsgNo := MsgNo;
+    SQLMessage.MsgState := MsgState;
+    SQLMessage.Severity := Severity;
+    if MsgText <> nil then
+      ZSetString(MsgText, StrLen(MsgText), SQLMessage.MsgText);
+    if SrvName <> nil then
+      ZSetString(SrvName, StrLen(SrvName), SQLMessage.SrvName);
+    if ProcName <> nil then
+      ZSetString(ProcName, StrLen(ProcName), SQLMessage.ProcName);
+    SQLMessage.Line := Line;
+    SQLMessages.Add(SQLMessage);
+  finally
+    Result := 0;
+    ErrorCS.Leave;
+  end;
 end;
 
 constructor TZDBLibAbstractPlainDriver.Create;
@@ -579,50 +692,37 @@ begin
   FLoader := TZNativeLibraryLoader.Create([]);
   for i := 0 to high(DBVariables.DBoptions) do DBVariables.DBoptions[i] := -1;
   for i := 0 to high(DBVariables.DBSetLoginRec) do DBVariables.DBSetLoginRec[i] := -1;
-  DBVariables.datatypes[Z_SQLVOID]      := DBLIBSQLVOID;
-  DBVariables.datatypes[Z_SQLTEXT]      := DBLIBSQLTEXT;
-  DBVariables.datatypes[Z_SQLVARBINARY] := DBLIBSQLVARBINARY;
-  DBVariables.datatypes[Z_SQLINTN]      := DBLIBSQLINTN;
-  DBVariables.datatypes[Z_SQLVARCHAR]   := DBLIBSQLVARCHAR;
-  DBVariables.datatypes[Z_SQLBINARY]    := DBLIBSQLBINARY;
-  DBVariables.datatypes[Z_SQLIMAGE]     := DBLIBSQLIMAGE;
-  DBVariables.datatypes[Z_SQLCHAR]      := DBLIBSQLCHAR;
-  DBVariables.datatypes[Z_SQLINT1]      := DBLIBSQLINT1;
-  DBVariables.datatypes[Z_SQLBIT]       := DBLIBSQLBIT;
-  DBVariables.datatypes[Z_SQLINT2]      := DBLIBSQLINT2;
-  DBVariables.datatypes[Z_SQLINT4]      := DBLIBSQLINT4;
-  DBVariables.datatypes[Z_SQLMONEY]     := DBLIBSQLMONEY;
-  DBVariables.datatypes[Z_SQLDATETIME]  := DBLIBSQLDATETIME;
-  DBVariables.datatypes[Z_SQLFLT8]      := DBLIBSQLFLT8;
-  DBVariables.datatypes[Z_SQLFLTN]      := DBLIBSQLFLTN;
-  DBVariables.datatypes[Z_SQLMONEYN]    := DBLIBSQLMONEYN;
-  DBVariables.datatypes[Z_SQLDATETIMN]  := DBLIBSQLDATETIMN;
-  DBVariables.datatypes[Z_SQLFLT4]      := DBLIBSQLFLT4;
-  DBVariables.datatypes[Z_SQLMONEY4]    := DBLIBSQLMONEY4;
-  DBVariables.datatypes[Z_SQLDATETIM4]  := DBLIBSQLDATETIM4;
-  DBVariables.datatypes[Z_SQLDECIMAL]   := DBLIBSQLDECIMAL;
-  DBVariables.datatypes[Z_SQLNUMERIC]   := DBLIBSQLNUMERIC;
 end;
 
 procedure TZDBLibAbstractPlainDriver.CheckError(dbProc: Pointer);
+var S: String;
+begin
+  S := GetErrorString(dbProc);
+  if S <> '' then
+    raise EZSQLException.Create(S);
+end;
+
+function TZDBLibAbstractPlainDriver.GetErrorString(
+  dbProc: PDBPROCESS): String;
 var
   I: Integer;
-  S: String;
   lErrorEntry: PDBLibError;
   lMesageEntry: PDBLibMessage;
 
     procedure AddToErrorMsg(const AError: String);
     begin
-      if S > '' then
-        S := S + #13#10;
-      S := S + AError;
+      if Result <> EmptyRaw then
+        Result := Result + LineEnding;
+      Result := Result + AError;
     end;
 
 begin
+  ErrorCS.Enter;
+  Result := '';
+  try
   if ((SQLErrors = nil) or (SQLErrors.Count = 0)) and
      ((SQLMessages = nil) or (SQLMessages.Count = 0)) then
     Exit;
-  S := '';
   I := 0;
   while I < SQLErrors.Count do begin
     lErrorEntry := PDBLibError(SQLErrors[I]);
@@ -641,16 +741,19 @@ begin
   while I < SQLMessages.Count do begin
     lMesageEntry := PDBLibMessage(SQLMessages[I]);
     if (dbProc = nil) or (lMesageEntry^.dbProc = dbProc) or (lMesageEntry^.dbProc = nil) then begin
-      if lMesageEntry^.Severity > EXINFO then
-        AddToErrorMsg(String(lMesageEntry^.MsgText));
+      if lMesageEntry^.Severity > EXINFO then begin
+        if lMesageEntry^.MsgNo <> 5701
+        then AddToErrorMsg(String(lMesageEntry^.MsgText));
+      end;
       Dispose(lMesageEntry);
       SQLMessages.Delete(I);
     end
     else
       Inc(I);
   end;
-  if S <> '' then
-    raise Exception.Create(String(S));
+  finally
+    ErrorCS.Leave;
+  end;
 end;
 
 function TZDBLibAbstractPlainDriver.GetVariables: TDBVariables;
@@ -712,9 +815,11 @@ begin
     @DBLibAPI.dbcmd                 := GetAddress('dbcmd');
     @DBLibAPI.dbcmdrow              := GetAddress('dbcmdrow');
     @DBLibAPI.dbcollen              := GetAddress('dbcollen');
+    @DBLibAPI.dbcolinfo             := GetAddress('dbcolinfo');
     @DBLibAPI.dbcolname             := GetAddress('dbcolname');
     @DBLibAPI.dbcolsource           := GetAddress('dbcolsource');
     @DBLibAPI.dbcoltype             := GetAddress('dbcoltype');
+    @DBLibAPI.dbcoltypeinfo         := GetAddress('dbcoltypeinfo');
     @DBLibAPI.dbcolutype            := GetAddress('dbcolutype');
     @DBLibAPI.dbconvert             := GetAddress('dbconvert');
     @DBLibAPI.dbcurcmd              := GetAddress('dbcurcmd');
@@ -839,7 +944,7 @@ begin
   Result := DBLibAPI.dbcancel(dbProc);
 end;
 
-function TZDBLibBasePlainDriver.dbCmd(dbProc: PDBPROCESS; Cmd: PAnsiChar): RETCODE;
+function TZDBLibBasePlainDriver.dbCmd(const dbProc: PDBPROCESS; const Cmd: PAnsiChar): RETCODE;
 begin
   Result := DBLibAPI.dbcmd(dbProc, Cmd);
 end;
@@ -859,15 +964,15 @@ end;
 
 function TZDBLibBasePlainDriver.dbSqlExecAsync(dbProc: PDBPROCESS): RETCODE;
 var
-  lStartTick : Int64;
+  lStartMs: Integer;
 begin
   Result := DBLibAPI.dbsqlsend(dbProc);
   if Result = SUCCEED then begin
-    lStartTick := {$IFDEF FPC}GetMsCount{$ELSE}GetTickCount{$ENDIF};
+    lStartMs := 0;
     repeat
-      //DBApplication.ProcessMessages;
-    until ({$IFDEF FPC}GetMsCount{$ELSE}GetTickCount{$ENDIF} > lStartTick + TIMEOUT_MAXIMUM * 1000) or
-      (dbdataready(dbProc) = TRUE);
+      Sleep(1);
+      Inc(lStartMs);
+    until (lStartMs = TIMEOUT_MAXIMUM) or (dbdataready(dbProc) = TRUE);
     Result := DBLibAPI.dbsqlok(dbProc);
   end;
 end;
@@ -907,9 +1012,22 @@ begin
   Result := DBLibAPI.dbNumCols(dbProc);
 end;
 
+function TZDBLibBasePlainDriver.dbbind(Proc: PDBPROCESS;
+  Column, VarType, VarLen: Integer; VarAddr: PByte): RETCODE;
+begin
+  Result := DBLibAPI.dbbind(Proc, Column, VarType, VarLen, VarAddr);
+end;
+
 function TZDBLibBasePlainDriver.dbColName(dbProc: PDBPROCESS; Column: Integer): PAnsiChar;
 begin
   Result := DBLibAPI.dbColName(dbProc, Column);
+end;
+
+function TZDBLibBasePlainDriver.dbColSource(dbProc: PDBPROCESS; Column: Integer): PAnsiChar;
+begin
+  if Assigned(DBLibAPI.dbColSource)
+  then Result := DBLibAPI.dbColSource(dbProc, Column)
+  else Result := nil;
 end;
 
 function TZDBLibBasePlainDriver.dbColType(dbProc: PDBPROCESS; Column: Integer): Integer;
@@ -917,9 +1035,23 @@ begin
   Result := DBLibAPI.dbColType(dbProc, Column);
 end;
 
+function TZDBLibBasePlainDriver.dbcoltypeinfo(dbProc: PDBPROCESS; Column: Integer): PDBTYPEINFO;
+begin
+  if Assigned(DBLibAPI.dbcoltypeinfo) then
+    Result := DBLibAPI.dbcoltypeinfo(dbProc, Column)
+  else
+    Result := nil
+end;
+
 function TZDBLibBasePlainDriver.dbColLen(dbProc: PDBPROCESS; Column: Integer): DBInt;
 begin
   Result := DBLibAPI.dbColLen(dbProc, Column);
+end;
+
+function TZDBLibBasePlainDriver.dbColInfo(pdbhandle: PDBHANDLE; _Type: Integer;
+  Column: DBINT; ComputeId: DBINT; lpdbcol: PDBCOL): RETCODE;
+begin
+  Result := DBLIBAPI.dbColInfo(pdbhandle, _Type, Column, ComputeId, lpdbcol);
 end;
 
 function TZDBLibBasePlainDriver.dbData(dbProc: PDBPROCESS; Column: Integer): PByte;
@@ -991,7 +1123,10 @@ end;
 
 function TZDBLibBasePlainDriver.dbRetType(dbProc: PDBPROCESS; RetNum: Integer): Integer;
 begin
-  Result := DBLibAPI.dbRetType(dbProc, RetNum);
+  if Assigned(DBLibAPI.dbRetType) then
+    Result := DBLibAPI.dbRetType(dbProc, RetNum)
+  else
+    Result := Ord(tdsVoid);
 end;
 
 function TZDBLibBasePlainDriver.dbrbuf(Proc: PDBPROCESS): DBINT;
@@ -999,6 +1134,90 @@ begin
   Result := DBINT(dbdataready(Proc));
 end;
 
+{ BCP functions }
+function TZDBLibBasePlainDriver.bcp_batch(const Proc: PDBPROCESS): DBINT;
+begin
+  Result := DBLibAPI.bcp_batch(Proc);
+end;
+
+function TZDBLibBasePlainDriver.bcp_bind(Proc: PDBPROCESS; VarAddr: PByte; PrefixLen: Integer;
+  VarLen: DBINT; Terminator: PByte; TermLen, Typ, TableColumn: Integer): RETCODE;
+begin
+  Result := DBLibAPI.bcp_bind(Proc, VarAddr, PrefixLen, VarLen, Terminator,
+    TermLen, Typ, TableColumn);
+end;
+
+function TZDBLibBasePlainDriver.bcp_colfmt(Proc: PDBPROCESS; FileColumn: Integer; FileType: Byte;
+  FilePrefixLen: Integer; FileColLen: DBINT; FileTerm: PByte; FileTermLen,
+  TableColumn: Integer): RETCODE;
+begin
+  Result := DBLibAPI.bcp_colfmt(Proc, FileColumn, FileType, FilePrefixLen,
+    FileColLen, FileTerm, FileTermLen, TableColumn);
+end;
+
+function TZDBLibBasePlainDriver.bcp_collen(Proc: PDBPROCESS; VarLen: DBINT; TableColumn: Integer): RETCODE;
+begin
+  Result := DBLibAPI.bcp_collen(Proc, VarLen, TableColumn);
+end;
+
+function TZDBLibBasePlainDriver.bcp_colptr(Proc: PDBPROCESS; ColPtr: PByte; TableColumn: Integer): RETCODE;
+begin
+  Result := DBLibAPI.bcp_colptr(Proc, ColPtr, TableColumn);
+end;
+
+function TZDBLibBasePlainDriver.bcp_columns(Proc: PDBPROCESS; FileColCount: Integer): RETCODE;
+begin
+  Result := DBLibAPI.bcp_columns(Proc, FileColCount);
+end;
+
+function TZDBLibBasePlainDriver.bcp_control(Proc: PDBPROCESS; Field: Integer;
+  Value: DBINT): RETCODE;
+begin
+  Result := DBLibAPI.bcp_control(Proc, Field, Value);
+end;
+
+function TZDBLibBasePlainDriver.bcp_done(Proc: PDBPROCESS): DBINT;
+begin
+  Result := DBLibAPI.bcp_done(Proc);
+end;
+
+function TZDBLibBasePlainDriver.bcp_exec(Proc: PDBPROCESS; RowsCopied: PDBINT): RETCODE;
+begin
+  Result := DBLibAPI.bcp_exec(Proc, RowsCopied);
+end;
+
+function TZDBLibBasePlainDriver.bcp_init(Proc: PDBPROCESS; TableName, hFile,
+  ErrFile: PAnsiChar; Direction: Integer): RETCODE;
+begin
+  Result := DBLibAPI.bcp_init(Proc, TableName, hFile, ErrFile, Direction);
+end;
+
+function TZDBLibBasePlainDriver.bcp_moretext(Proc: PDBPROCESS; Size: DBINT;
+  Text: PByte): RETCODE;
+begin
+  Result := DBLibAPI.bcp_moretext(Proc, Size, Text);
+end;
+
+function TZDBLibBasePlainDriver.bcp_readfmt(Proc: PDBPROCESS; FileName: PAnsiChar): RETCODE;
+begin
+  Result := DBLibAPI.bcp_readfmt(Proc, FileName);
+end;
+
+function TZDBLibBasePlainDriver.bcp_sendrow(Proc: PDBPROCESS): RETCODE;
+begin
+  Result := DBLibAPI.bcp_sendrow(Proc);
+end;
+
+function TZDBLibBasePlainDriver.bcp_setl(Login: PLOGINREC; Enable: LongBool): RETCODE;
+begin
+  Result := DBLibAPI.bcp_setl(Login, Enable);
+end;
+
+function TZDBLibBasePlainDriver.bcp_writefmt(Proc: PDBPROCESS;
+  FileName: PAnsiChar): RETCODE;
+begin
+  Result := DBLibAPI.bcp_writefmt(Proc, FileName);
+end;
 
 { TZDBLibSybaseASE125PlainDriver }
 
@@ -1019,6 +1238,7 @@ begin
     @SybaseAPI.scan_xact             := GetAddress('scan_xact');
     @SybaseAPI.start_xact            := GetAddress('start_xact');
     @SybaseAPI.stat_xact             := GetAddress('stat_xact');
+    {bcp function}
     @SybaseAPI.bcp_batch             := GetAddress('bcp_batch');
     @SybaseAPI.bcp_bind              := GetAddress('bcp_bind');
     @SybaseAPI.bcp_colfmt            := GetAddress('bcp_colfmt');
@@ -1032,7 +1252,9 @@ begin
     @SybaseAPI.bcp_moretext          := GetAddress('bcp_moretext');
     @SybaseAPI.bcp_readfmt           := GetAddress('bcp_readfmt');
     @SybaseAPI.bcp_sendrow           := GetAddress('bcp_sendrow');
+    @SybaseAPI.bcp_setl              := GetAddress('bcp_setl');
     @SybaseAPI.bcp_writefmt          := GetAddress('bcp_writefmt');
+    { core function }
     @SybaseAPI.dbadata               := GetAddress('dbadata');
     @SybaseAPI.dbadlen               := GetAddress('dbadlen');
     @SybaseAPI.dbaltbind             := GetAddress('dbaltbind');
@@ -1051,17 +1273,25 @@ begin
     @SybaseAPI.dbclrbuf              := GetAddress('dbclrbuf');
     @SybaseAPI.dbclropt              := GetAddress('dbclropt');
     @SybaseAPI.dbcmd                 := GetAddress('dbcmd');
-    @SybaseAPI.dbcmdrow              := GetAddress('dbcmdrow');
+    @SybaseAPI.dbfcmd                := GetAddress('dbfcmd');
+    @SybaseAPI.dbcmdrow              := GetAddress('DBCMDROW'); //Syb use uppercase name!!
+    if not Assigned(SybaseAPI.dbcmdrow) then //test if renamed
+      @SybaseAPI.dbcmdrow            := GetAddress('dbcmdrow');
     @SybaseAPI.dbcolbrowse           := GetAddress('dbcolbrowse');
     @SybaseAPI.dbcollen              := GetAddress('dbcollen');
+    @SybaseAPI.dbcolinfo             := GetAddress('dbcolinfo');
     @SybaseAPI.dbcolname             := GetAddress('dbcolname');
     @SybaseAPI.dbcolsource           := GetAddress('dbcolsource');
-  //  @SybaseAPI.dbcoltypeinfo         := GetAddress('dbcoltypeinfo');
+    @SybaseAPI.dbcoltypeinfo         := GetAddress('dbcoltypeinfo');
     @SybaseAPI.dbcoltype             := GetAddress('dbcoltype');
     @SybaseAPI.dbcolutype            := GetAddress('dbcolutype');
     @SybaseAPI.dbconvert             := GetAddress('dbconvert');
-    @SybaseAPI.dbcount               := GetAddress('dbcount');
-    @SybaseAPI.dbcurcmd              := GetAddress('dbcurcmd');
+    @SybaseAPI.dbcount               := GetAddress('DBCOUNT'); //Syb use uppercase name!!
+    if not Assigned(SybaseAPI.dbcount) then //test if renamed
+      @SybaseAPI.dbcount            := GetAddress('dbcount');
+    @SybaseAPI.dbcurcmd              := GetAddress('DBCURCMD'); //Syb use uppercase name!!
+    if not Assigned(SybaseAPI.dbcurcmd) then //test if renamed
+      @SybaseAPI.dbcurcmd            := GetAddress('dbcurcmd');
     @SybaseAPI.dbcurrow              := GetAddress('dbcurrow');
     @SybaseAPI.dbcursor              := GetAddress('dbcursor');
     @SybaseAPI.dbcursorbind          := GetAddress('dbcursorbind');
@@ -1073,7 +1303,9 @@ begin
     @SybaseAPI.dbdata                := GetAddress('dbdata');
     @SybaseAPI.dbdatecrack           := GetAddress('dbdatecrack');
     @SybaseAPI.dbdatlen              := GetAddress('dbdatlen');
-    @SybaseAPI.dbdead                := GetAddress('dbdead');
+    @SybaseAPI.dbdead                := GetAddress('DBDEAD');//Syb use uppercase name!!
+    if not Assigned(SybaseAPI.dbdead) then //test if renamed
+      @SybaseAPI.dbdead              := GetAddress('dbdead');
     @SybaseAPI.dbexit                := GetAddress('dbexit');
     @SybaseAPI.dbfcmd                := GetAddress('dbfcmd');
     @SybaseAPI.dbfirstrow            := GetAddress('dbfirstrow');
@@ -1240,6 +1472,12 @@ begin
   Result := SybaseAPI.dbcolbrowse(Proc, Column);
 end;
 
+function TZDBLibSybaseASE125PlainDriver.dbbind(Proc: PDBPROCESS;
+  Column, VarType, VarLen: Integer; VarAddr: PByte): RETCODE;
+begin
+  Result := SybaseAPI.dbbind(Proc, Column, VarType, VarLen, VarAddr);
+end;
+
 function TZDBLibSybaseASE125PlainDriver.dbDead(dbProc: PDBPROCESS): Boolean;
 begin
   Result := SybaseAPI.dbDead(dbProc);
@@ -1316,7 +1554,8 @@ begin
   Result := SybaseAPI.dbcancel(dbProc);
 end;
 
-function TZDBLibSybaseASE125PlainDriver.dbCmd(dbProc: PDBPROCESS; Cmd: PAnsiChar): RETCODE;
+function TZDBLibSybaseASE125PlainDriver.dbCmd(const dbProc: PDBPROCESS;
+  const Cmd: PAnsiChar): RETCODE;
 begin
   Result := SybaseAPI.dbcmd(dbProc, Cmd);
 end;
@@ -1336,15 +1575,15 @@ end;
 
 function TZDBLibSybaseASE125PlainDriver.dbSqlExecAsync(dbProc: PDBPROCESS): RETCODE;
 var
-  lStartTick : Int64;
+  lStartMs : Cardinal;
 begin
   Result := SybaseAPI.dbsqlsend(dbProc);
   if Result = SUCCEED then begin
-    lStartTick := {$IFDEF FPC}GetMsCount{$ELSE}GetTickCount{$ENDIF};
+    lStartMs := 0;
     repeat
-      continue;
-    until ({$IFDEF FPC}GetMsCount{$ELSE}GetTickCount{$ENDIF} > lStartTick + TIMEOUT_MAXIMUM * 1000) or
-      (dbdataready(dbProc) = TRUE);
+      Sleep(1);
+      Inc(lStartMs);
+    until (lStartMs = TIMEOUT_MAXIMUM) or (dbdataready(dbProc) = TRUE);
     Result := SybaseAPI.dbsqlok(dbProc);
   end;
 end;
@@ -1399,14 +1638,35 @@ begin
   Result := SybaseAPI.dbColName(dbProc, Column);
 end;
 
+function TZDBLibSybaseASE125PlainDriver.dbColSource(dbProc: PDBPROCESS; Column: DBINT): PAnsiChar;
+begin
+  if Assigned(SybaseAPI.dbColSource)
+  then Result := SybaseAPI.dbColSource(dbProc, Column)
+  else Result := nil;
+end;
+
 function TZDBLibSybaseASE125PlainDriver.dbColType(dbProc: PDBPROCESS; Column: DBINT): DBINT;
 begin
   Result := SybaseAPI.dbColType(dbProc, Column);
 end;
 
+function TZDBLibSybaseASE125PlainDriver.dbcoltypeinfo(dbProc: PDBPROCESS; Column: Integer): PDBTYPEINFO;
+begin
+  if Assigned(SybaseAPI.dbcoltypeinfo) then
+    Result := SybaseAPI.dbcoltypeinfo(dbProc, Column)
+  else
+    Result := nil;
+end;
+
 function TZDBLibSybaseASE125PlainDriver.dbColLen(dbProc: PDBPROCESS; Column: DBINT): DBInt;
 begin
   Result := SybaseAPI.dbColLen(dbProc, Column);
+end;
+
+function TZDBLibSybaseASE125PlainDriver.dbColInfo(pdbhandle :PDBHANDLE; _Type:
+  Integer; Column: DBINT; ComputeId: DBINT; lpdbcol: PDBCOL): RETCODE;
+begin
+  Result := SybaseAPI.dbColInfo(pdbhandle, _Type, Column, ComputeId, lpdbcol);
 end;
 
 function TZDBLibSybaseASE125PlainDriver.dbData(dbProc: PDBPROCESS; Column: DBINT): PByte;
@@ -1503,6 +1763,91 @@ begin
   Result := Proc <> nil;
 end;
 
+{ BCP functions }
+function TZDBLibSybaseASE125PlainDriver.bcp_batch(const Proc: PDBPROCESS): DBINT;
+begin
+  Result := SybaseAPI.bcp_batch(Proc);
+end;
+
+function TZDBLibSybaseASE125PlainDriver.bcp_bind(Proc: PDBPROCESS; VarAddr: PByte; PrefixLen: Integer;
+  VarLen: DBINT; Terminator: PByte; TermLen, Typ, TableColumn: Integer): RETCODE;
+begin
+  Result := SybaseAPI.bcp_bind(Proc, VarAddr, PrefixLen, VarLen, Terminator,
+    TermLen, Typ, TableColumn);
+end;
+
+function TZDBLibSybaseASE125PlainDriver.bcp_colfmt(Proc: PDBPROCESS; FileColumn: Integer; FileType: Byte;
+  FilePrefixLen: Integer; FileColLen: DBINT; FileTerm: PByte; FileTermLen,
+  TableColumn: Integer): RETCODE;
+begin
+  Result := SybaseAPI.bcp_colfmt(Proc, FileColumn, FileType, FilePrefixLen,
+    FileColLen, FileTerm, FileTermLen, TableColumn);
+end;
+
+function TZDBLibSybaseASE125PlainDriver.bcp_collen(Proc: PDBPROCESS; VarLen: DBINT; TableColumn: Integer): RETCODE;
+begin
+  Result := SybaseAPI.bcp_collen(Proc, VarLen, TableColumn);
+end;
+
+function TZDBLibSybaseASE125PlainDriver.bcp_colptr(Proc: PDBPROCESS; ColPtr: PByte; TableColumn: Integer): RETCODE;
+begin
+  Result := SybaseAPI.bcp_colptr(Proc, ColPtr, TableColumn);
+end;
+
+function TZDBLibSybaseASE125PlainDriver.bcp_columns(Proc: PDBPROCESS; FileColCount: Integer): RETCODE;
+begin
+  Result := SybaseAPI.bcp_columns(Proc, FileColCount);
+end;
+
+function TZDBLibSybaseASE125PlainDriver.bcp_control(Proc: PDBPROCESS; Field: Integer;
+  Value: DBINT): RETCODE;
+begin
+  Result := SybaseAPI.bcp_control(Proc, Field, Value);
+end;
+
+function TZDBLibSybaseASE125PlainDriver.bcp_done(Proc: PDBPROCESS): DBINT;
+begin
+  Result := SybaseAPI.bcp_done(Proc);
+end;
+
+function TZDBLibSybaseASE125PlainDriver.bcp_exec(Proc: PDBPROCESS; RowsCopied: PDBINT): RETCODE;
+begin
+  Result := SybaseAPI.bcp_exec(Proc, RowsCopied);
+end;
+
+function TZDBLibSybaseASE125PlainDriver.bcp_init(Proc: PDBPROCESS; TableName, hFile,
+  ErrFile: PAnsiChar; Direction: Integer): RETCODE;
+begin
+  Result := SybaseAPI.bcp_init(Proc, TableName, hFile, ErrFile, Direction);
+end;
+
+function TZDBLibSybaseASE125PlainDriver.bcp_moretext(Proc: PDBPROCESS; Size: DBINT;
+  Text: PByte): RETCODE;
+begin
+  Result := SybaseAPI.bcp_moretext(Proc, Size, Text);
+end;
+
+function TZDBLibSybaseASE125PlainDriver.bcp_readfmt(Proc: PDBPROCESS; FileName: PAnsiChar): RETCODE;
+begin
+  Result := SybaseAPI.bcp_readfmt(Proc, FileName);
+end;
+
+function TZDBLibSybaseASE125PlainDriver.bcp_sendrow(Proc: PDBPROCESS): RETCODE;
+begin
+  Result := SybaseAPI.bcp_sendrow(Proc);
+end;
+
+function TZDBLibSybaseASE125PlainDriver.bcp_setl(Login: PLOGINREC; Enable: LongBool): RETCODE;
+begin
+  Result := SybaseAPI.bcp_setl(Login, Enable);
+end;
+
+function TZDBLibSybaseASE125PlainDriver.bcp_writefmt(Proc: PDBPROCESS;
+  FileName: PAnsiChar): RETCODE;
+begin
+  Result := SybaseAPI.bcp_writefmt(Proc, FileName);
+end;
+
 {TZDBLibMSSQL7PlainDriver}
 
 procedure TZDBLibMSSQL7PlainDriver.LoadApi;
@@ -1511,6 +1856,9 @@ begin
 { ************** Load adresses of API Functions ************* }
   with Loader do
   begin
+    if GetAddress('dbcoltypeinfo') <> nil then
+      raise Exception.Create('Wrong library bound. Propably a FreeTDS-Lib.'+LineEnding+
+         'Use the FreeTDS protocols instead!');
     //@MsSQLAPI.dbtablecolinfo  := GetAddress('dbtablecolinfo');
     @MsSQLAPI.dbdataready           := GetAddress('dbdataready');
     @MsSQLAPI.dbdatecrack           := GetAddress('dbdatecrack');
@@ -1657,15 +2005,15 @@ end;
 
 function TZDBLibMSSQL7PlainDriver.dbSqlExecAsync(dbProc: PDBPROCESS): RETCODE;
 var
-  lStartTick : Int64;
+  lStartMs : Cardinal;
 begin
   Result := DBLibAPI.dbsqlsend(dbProc);
   if Result = SUCCEED then begin
-    lStartTick := {$IFDEF FPC}GetMsCount{$ELSE}GetTickCount{$ENDIF};
+    lStartMs := 0;
     repeat
-      continue;
-    until ({$IFDEF FPC}GetMsCount{$ELSE}GetTickCount{$ENDIF} > lStartTick + TIMEOUT_MAXIMUM * 1000) or
-      (MsSQLAPI.dbdataready(dbProc) = TRUE);
+      Sleep(1);
+      Inc(lStartMs);
+    until (lStartMs = TIMEOUT_MAXIMUM) or (MsSQLAPI.dbdataready(dbProc) = TRUE);
     Result := DBLibAPI.dbsqlok(dbProc);
   end;
 end;
@@ -1858,30 +2206,6 @@ begin
   DBVariables.DBSetLoginRec[Z_SETENCRYPT] := TDSDBSETENCRYPT;
   DBVariables.DBSetLoginRec[Z_SETLABELED] := TDSDBSETLABELED;
   DBVariables.DBSetLoginRec[Z_SETDBNAME]  := TDSDBSETDBNAME;
-  {datatypes}
-  DBVariables.datatypes[Z_SQLVOID]      := TDSSQLVOID;
-  DBVariables.datatypes[Z_SQLTEXT]      := TDSSQLTEXT;
-  DBVariables.datatypes[Z_SQLVARBINARY] := TDSSQLVARBINARY;
-  DBVariables.datatypes[Z_SQLINTN]      := TDSSQLINTN;
-  DBVariables.datatypes[Z_SQLVARCHAR]   := TDSSQLVARCHAR;
-  DBVariables.datatypes[Z_SQLBINARY]    := TDSSQLBINARY;
-  DBVariables.datatypes[Z_SQLIMAGE]     := TDSSQLIMAGE;
-  DBVariables.datatypes[Z_SQLCHAR]      := TDSSQLCHAR;
-  DBVariables.datatypes[Z_SQLINT1]      := TDSSQLINT1;
-  DBVariables.datatypes[Z_SQLBIT]       := TDSSQLBIT;
-  DBVariables.datatypes[Z_SQLINT2]      := TDSSQLINT2;
-  DBVariables.datatypes[Z_SQLINT4]      := TDSSQLINT4;
-  DBVariables.datatypes[Z_SQLMONEY]     := TDSSQLMONEY;
-  DBVariables.datatypes[Z_SQLDATETIME]  := TDSSQLDATETIME;
-  DBVariables.datatypes[Z_SQLFLT8]      := TDSSQLFLT8;
-  DBVariables.datatypes[Z_SQLFLTN]      := TDSSQLFLTN;
-  DBVariables.datatypes[Z_SQLMONEYN]    := TDSSQLMONEYN;
-  DBVariables.datatypes[Z_SQLDATETIMN]  := TDSSQLDATETIMN;
-  DBVariables.datatypes[Z_SQLFLT4]      := TDSSQLFLT4;
-  DBVariables.datatypes[Z_SQLMONEY4]    := TDSSQLMONEY4;
-  DBVariables.datatypes[Z_SQLDATETIM4]  := TDSSQLDATETIM4;
-  DBVariables.datatypes[Z_SQLDECIMAL]   := TDSSQLDECIMAL;
-  DBVariables.datatypes[Z_SQLNUMERIC]   := TDSSQLNUMERIC;
 end;
 
 destructor TZFreeTDSBasePlainDriver.Destroy;
@@ -1893,6 +2217,12 @@ begin
     DBLibAPI.dbexit;
   end;
   inherited Destroy;
+end;
+
+function TZFreeTDSBasePlainDriver.dbOpen(Login: PLOGINREC; Host: PAnsiChar): PDBPROCESS;
+begin
+  DBLibAPI.dbsetlogintime(10);
+  Result := FreeTDSAPI.tdsdbopen(Login, Host, 0);
 end;
 
 function TZFreeTDSBasePlainDriver.GetProtocol: string;
@@ -1908,8 +2238,8 @@ end;
 function TZFreeTDSBasePlainDriver.dbLogin: PLOGINREC;
 begin
   Result := inherited dbLogin;
-  if not Assigned(Result)  then
-    if not  (dbsetlversion(Result) = DBSUCCEED ) then
+  if Assigned(Result)  then
+    if not (dbsetlversion(Result) = DBSUCCEED ) then
     begin
       dbloginfree(Result);
       Result := nil;
@@ -1954,7 +2284,11 @@ end;
 
 procedure TZFreeTDSBasePlainDriver.tdsDump_Open(const FileName: String);
 begin
-  FreeTDSAPI.tdsdump_open(PAnsiChar( AnsiString(FileName) ));
+  {$IFDEF UNICODE}
+  FreeTDSAPI.tdsdump_open(PAnsiChar(ZUnicodeToRaw(FileName,ZOSCodePage)));
+  {$ELSE}
+  FreeTDSAPI.tdsdump_open(Pointer(FileName));
+  {$ENDIF}
 end;
 
 function TZFreeTDSBasePlainDriver.dbdataready(Proc: PDBPROCESS): LongBool;
@@ -2022,12 +2356,11 @@ begin
     Result := False;
 end;
 
-function TZFreeTDSBasePlainDriver.dbColInfo(dbProc: PDBPROCESS;
-  Column: Integer; var ADBInfo: DBCOL): RETCODE;
+procedure TZFreeTDSBasePlainDriver.LoadCodePages;
 begin
-  FillChar(ADBInfo, SizeOf(DBCol), #0);
-  ADBInfo.SizeOfStruct := SizeOf(DBCol);
-  Result := FreeTDSAPI.dbcolinfo(dbProc, CI_REGULAR, Column, 0, @ADBInfo);
+  AddCodePage('UTF-8', 1, ceUTF8, zCP_UTF8,  '', 4, True);
+  AddCodePage('ISO-8859-1', 2, ceAnsi, zCP_L1_ISO_8859_1, '', 1, False);
+  AddCodePage('ASCII', 3, ceAnsi, zCP_us_ascii, '', 1, False);
 end;
 
 { TZFreeTDS42MsSQLPlainDriver }
@@ -2039,6 +2372,7 @@ end;
 procedure TZFreeTDS42MsSQLPlainDriver.LoadCodePages;
 begin
   AddmMSCodePages(Self);
+  inherited;
 end;
 
 constructor TZFreeTDS42MsSQLPlainDriver.Create;
@@ -2082,12 +2416,6 @@ begin
   Result := TZFreeTDS42SybasePlainDriver.Create;
 end;
 
-procedure TZFreeTDS42SybasePlainDriver.LoadCodePages;
-begin
-  AddCodePage('Not implemented!', -1);
-   { TODO -oEgonHugeist : Must be completed!!!! }
-end;
-
 constructor TZFreeTDS42SybasePlainDriver.Create;
 begin
   inherited Create;
@@ -2128,11 +2456,6 @@ begin
   Result := TZFreeTDS50PlainDriver.Create;
 end;
 
-procedure TZFreeTDS50PlainDriver.LoadCodePages;
-begin
-  AddSybaseCodePages(Self);
-end;
-
 constructor TZFreeTDS50PlainDriver.Create;
 begin
   inherited Create;
@@ -2151,18 +2474,19 @@ end;
 
 function TZFreeTDS50PlainDriver.dbsetversion: RETCODE;
 begin
-  Result := FreeTDSAPI.dbsetversion(TDSDBVERSION_46);
+  Result := FreeTDSAPI.dbsetversion(TDSDBVERSION_100);
+end;
+
+function TZFreeTDS50PlainDriver.dbsetlversion(Login: PLOGINREC): RETCODE;
+begin
+  Result := FreeTDSAPI.dbsetlversion(Login, DBVERSION_100);
 end;
 
 { TZFreeTDS70PlainDriver }
+
 function TZFreeTDS70PlainDriver.Clone: IZPlainDriver;
 begin
   Result := TZFreeTDS70PlainDriver.Create;
-end;
-
-procedure TZFreeTDS70PlainDriver.LoadCodePages;
-begin
-  inherited;
 end;
 
 function TZFreeTDS70PlainDriver.GetProtocol: string;
@@ -2191,11 +2515,6 @@ begin
   Result := TZFreeTDS71PlainDriver.Create;
 end;
 
-procedure TZFreeTDS71PlainDriver.LoadCodePages;
-begin
-  Inherited;
-end;
-
 function TZFreeTDS71PlainDriver.GetProtocol: string;
 begin
   Result := 'FreeTDS_MsSQL-2000';
@@ -2212,14 +2531,10 @@ begin
 end;
 
 { TZFreeTDS72PlainDriver }
+
 function TZFreeTDS72PlainDriver.Clone: IZPlainDriver;
 begin
   Result := TZFreeTDS72PlainDriver.Create;
-end;
-
-procedure TZFreeTDS72PlainDriver.LoadCodePages;
-begin
-  inherited;
 end;
 
 function TZFreeTDS72PlainDriver.GetProtocol: string;
@@ -2238,13 +2553,15 @@ begin
 end;
 
 initialization
-  SQLErrors := TList.Create;
-  SQLMessages := TList.Create;
+  SQLErrors := {$IFDEF TLIST_IS_DEPRECATED}TZSortedList{$ELSE}TList{$ENDIF}.Create;
+  SQLMessages := {$IFDEF TLIST_IS_DEPRECATED}TZSortedList{$ELSE}TList{$ENDIF}.Create;
+  ErrorCS := TCriticalSection.Create;
 finalization
+  FreeAndnil(ErrorCS);
 //Free any record in the list if any
   while SQLErrors.Count > 0 do
   begin
-    Dispose(SQLErrors.Items[0]);
+    Dispose(PDBLibError(SQLErrors.Items[0]));
     SQLErrors.Delete(0);
   end;
   if SQLErrors <> nil then
@@ -2253,9 +2570,11 @@ finalization
 //Free any record in the list if any
   while SQLMessages.Count > 0 do
   begin
-    Dispose(SQLMessages.Items[0]);
+    Dispose(PDBLibMessage(SQLMessages.Items[0]));
     SQLMessages.Delete(0);
   end;
   if SQLMessages <> nil then
     FreeAndNil(SQLMessages);
+{$ENDIF ZEOS_DISABLE_DBLIB}
+
 end.

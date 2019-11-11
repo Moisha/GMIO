@@ -61,6 +61,10 @@ interface
 
 {$I ZPlain.inc}
 
+{$IFNDEF ZEOS_DISABLE_MYSQL}
+
+//{$A-} //pack the records!   EH: nope this is wrong!
+{$Z+} //enum to DWORD
 uses
    ZCompatibility;
 
@@ -71,38 +75,6 @@ const
 
   MYSQL_PORT           = 3306;
   LOCAL_HOST           = 'localhost';
-
-{ Enum Field Types }
-{  FIELD_TYPE_DECIMAL   = 0;
-  FIELD_TYPE_TINY      = 1;
-  FIELD_TYPE_SHORT     = 2;
-  FIELD_TYPE_LONG      = 3;
-  FIELD_TYPE_FLOAT     = 4;
-  FIELD_TYPE_DOUBLE    = 5;
-  FIELD_TYPE_NULL      = 6;
-  FIELD_TYPE_TIMESTAMP = 7;
-  FIELD_TYPE_LONGLONG  = 8;
-  FIELD_TYPE_INT24     = 9;
-  FIELD_TYPE_DATE      = 10;
-  FIELD_TYPE_TIME      = 11;
-  FIELD_TYPE_DATETIME  = 12;
-  FIELD_TYPE_YEAR      = 13;
-  FIELD_TYPE_NEWDATE   = 14;
-  FIELD_TYPE_VARCHAR   = 15; //<--ADDED by fduenas 20-06-2006
-  FIELD_TYPE_BIT       = 16; //<--ADDED by fduenas 20-06-2006
-  FIELD_TYPE_NEWDECIMAL = 246; //<--ADDED by fduenas 20-06-2006
-  FIELD_TYPE_ENUM      = 247;
-  FIELD_TYPE_SET       = 248;
-  FIELD_TYPE_TINY_BLOB = 249;
-  FIELD_TYPE_MEDIUM_BLOB = 250;
-  FIELD_TYPE_LONG_BLOB = 251;
-  FIELD_TYPE_BLOB      = 252;
-  FIELD_TYPE_VAR_STRING = 253;
-  FIELD_TYPE_STRING    = 254;
-  FIELD_TYPE_GEOMETRY  = 255; }
-{ For Compatibility }
-{  FIELD_TYPE_CHAR      = FIELD_TYPE_TINY;
-  FIELD_TYPE_INTERVAL  = FIELD_TYPE_ENUM; }
 
   { Field's flags }
   NOT_NULL_FLAG          = 1;     { Field can't be NULL }
@@ -127,30 +99,6 @@ const
   FIELD_IN_ADD_INDEX     = $100000; { Intern: Field used in ADD INDEX }
   FIELD_IS_RENAMED       = $200000; { Intern: Field is being renamed}
 
-{ Client Connection Options }
-  _CLIENT_LONG_PASSWORD	  = 1;	  { new more secure passwords }
-  _CLIENT_FOUND_ROWS	  = 2;	  { Found instead of affected rows }
-  _CLIENT_LONG_FLAG	  = 4;	  { Get all column flags }
-  _CLIENT_CONNECT_WITH_DB = 8;	  { One can specify db on connect }
-  _CLIENT_NO_SCHEMA	  = 16;	  { Don't allow database.table.column }
-  _CLIENT_COMPRESS	  = 32;	  { Can use compression protcol }
-  _CLIENT_ODBC		  = 64;	  { Odbc client }
-  _CLIENT_LOCAL_FILES	  = 128;  { Can use LOAD DATA LOCAL }
-  _CLIENT_IGNORE_SPACE	  = 256;  { Ignore spaces before '(' }
-  _CLIENT_CHANGE_USER     = 512;  { Support the mysql_change_user() }
-  _CLIENT_INTERACTIVE     = 1024; { This is an interactive client }
-  _CLIENT_SSL             = 2048; { Switch to SSL after handshake }
-  _CLIENT_IGNORE_SIGPIPE  = 4096; { IGNORE sigpipes }
-  _CLIENT_TRANSACTIONS    = 8196; { Client knows about transactions }
-  _CLIENT_RESERVED        = 16384; { Old flag for 4.1 protocol  }
-  _CLIENT_SECURE_CONNECTION = 32768; { New 4.1 authentication }
-  _CLIENT_MULTI_STATEMENTS = 65536; { Enable/disable multi-stmt support }
-  _CLIENT_MULTI_RESULTS   = 131072; { Enable/disable multi-results }
-  _CLIENT_PS_MULTI_RESULTS = 262144; { Enable Multi-results in PS-protocol }
-  _CLIENT_PLUGIN_AUTH      = 524288;
-  _CLIENT_SSL_VERIFY_SERVER_CERT = 1073741824;
-  _CLIENT_REMEMBER_OPTIONS = 2147483648; {Enable/disable multi-results }
-
 {THD: Killable}
   MYSQL_SHUTDOWN_KILLABLE_CONNECT    = 1;
   MYSQL_SHUTDOWN_KILLABLE_TRANS      = 2;
@@ -168,9 +116,10 @@ const
    MYSQL_NO_DATA = 100;
    MYSQL_DATA_TRUNCATED  = 101;
 
+{$MINENUMSIZE 4}
 type
   TMySqlOption = (
-  MYSQL_OPT_CONNECT_TIMEOUT, MYSQL_OPT_COMPRESS, MYSQL_OPT_NAMED_PIPE,
+    MYSQL_OPT_CONNECT_TIMEOUT, MYSQL_OPT_COMPRESS, MYSQL_OPT_NAMED_PIPE,
     MYSQL_INIT_COMMAND, MYSQL_READ_DEFAULT_FILE, MYSQL_READ_DEFAULT_GROUP,
     MYSQL_SET_CHARSET_DIR, MYSQL_SET_CHARSET_NAME, MYSQL_OPT_LOCAL_INFILE,
     MYSQL_OPT_PROTOCOL, MYSQL_SHARED_MEMORY_BASE_NAME, MYSQL_OPT_READ_TIMEOUT,
@@ -188,7 +137,11 @@ type
     MYSQL_SERVER_PUBLIC_KEY,
     MYSQL_ENABLE_CLEARTEXT_PLUGIN,
     MYSQL_OPT_CAN_HANDLE_EXPIRED_PASSWORDS,
-    MYSQL_OPT_SSL_ENFORCE
+    MYSQL_OPT_SSL_ENFORCE,
+
+    MYSQL_OPT_MAX_ALLOWED_PACKET, MYSQL_OPT_NET_BUFFER_LENGTH,
+    MYSQL_OPT_TLS_VERSION,
+    MYSQL_OPT_SSL_MODE
   );
 const
   TMySqlOptionMinimumVersion: array[TMySqlOption] of Integer =
@@ -231,11 +184,25 @@ const
       {MYSQL_SERVER_PUBLIC_KEY}                 50606,
       {MYSQL_ENABLE_CLEARTEXT_PLUGIN}           50607,
       {MYSQL_OPT_CAN_HANDLE_EXPIRED_PASSWORDS}  50610,
-      {MYSQL_OPT_SSL_ENFORCE}                   50703
+      {MYSQL_OPT_SSL_ENFORCE}                   50703,
+      {MYSQL_OPT_MAX_ALLOWED_PACKET}            60111,
+      {MYSQL_OPT_NET_BUFFER_LENGTH}             60111,
+      {MYSQL_OPT_TLS_VERSION}                   60111,
+      {MYSQL_OPT_SSL_MODE}                      60111
     );
 type
+  // EgonHugeist: Use always a 4Byte unsigned Integer for Windows otherwise MySQL64 has problems on Win64!
+  // don't know anything about reported issues on other OS's
+  ULong                 = {$IFDEF MSWINDOWS}LongWord{$ELSE}NativeUInt{$ENDIF};
+  ULongLong             = UInt64;
+  PULong                = ^ULong;
+  PULongLong            = ^ULongLong;
+
+  Pmy_bool = ^my_bool;
+  my_bool = byte;
+
   PUSED_MEM=^USED_MEM;
-  USED_MEM = packed record
+  USED_MEM = record
     next:       PUSED_MEM;
     left:       Integer;
     size:       Integer;
@@ -245,7 +212,7 @@ type
   ERR_PROC = procedure;
 
   PMEM_ROOT = ^MEM_ROOT;
-  MEM_ROOT = packed record
+  MEM_ROOT = record
     free:          PUSED_MEM;
     used:          PUSED_MEM;
     pre_alloc:     PUSED_MEM;
@@ -277,8 +244,8 @@ type
 
   MYSQL_FIELD_OFFSET = UInt;
 
-  PMYSQL_OPTIONS   = ^_MYSQL_OPTIONS;
-  _MYSQL_OPTIONS = record
+  PMYSQL_OPTIONS   = ^TMYSQL_OPTIONS;
+  TMYSQL_OPTIONS = record
     connect_timeout:          UInt;
     read_timeout:             UInt;
     write_timeout:            UInt;
@@ -319,45 +286,43 @@ type
     local_infile_userdata:    Pointer;
   end;
 
-    PZMySQLConnect = Pointer;
-    PZMySQLResult = Pointer;
-    PZMySQLRow = Pointer;
-    PZMySQLField = Pointer;
-    PZMySQLRowOffset = Pointer;
-    PZMySqlPrepStmt = Pointer;
-    PZMysqlBindArray = Pointer;
+  PZMySQLResult = Pointer;
+  PZMySQLRow = Pointer;
+  PZMySQLRowOffset = Pointer;
+  PZMysqlBindArray = Pointer;
 
-{ Enum Field Types }
-      TMysqlFieldTypes = (
-  FIELD_TYPE_DECIMAL   = 0,
-  FIELD_TYPE_TINY      = 1,
-  FIELD_TYPE_SHORT     = 2,
-  FIELD_TYPE_LONG      = 3,
-  FIELD_TYPE_FLOAT     = 4,
-  FIELD_TYPE_DOUBLE    = 5,
-  FIELD_TYPE_NULL      = 6,
-  FIELD_TYPE_TIMESTAMP = 7,
-  FIELD_TYPE_LONGLONG  = 8,
-  FIELD_TYPE_INT24     = 9,
-  FIELD_TYPE_DATE      = 10,
-  FIELD_TYPE_TIME      = 11,
-  FIELD_TYPE_DATETIME  = 12,
-  FIELD_TYPE_YEAR      = 13,
-  FIELD_TYPE_NEWDATE   = 14,
-  FIELD_TYPE_VARCHAR   = 15, //<--ADDED by fduenas 20-06-2006
-  FIELD_TYPE_BIT       = 16, //<--ADDED by fduenas 20-06-2006
-  FIELD_TYPE_NEWDECIMAL = 246, //<--ADDED by fduenas 20-06-2006
-  FIELD_TYPE_ENUM      = 247,
-  FIELD_TYPE_SET       = 248,
-  FIELD_TYPE_TINY_BLOB = 249,
-  FIELD_TYPE_MEDIUM_BLOB = 250,
-  FIELD_TYPE_LONG_BLOB = 251,
-  FIELD_TYPE_BLOB      = 252,
-  FIELD_TYPE_VAR_STRING = 253,
-  FIELD_TYPE_STRING    = 254,
-  FIELD_TYPE_GEOMETRY  = 255
-    );
-  PTMysqlFieldTypes=^TMysqlFieldTypes;
+{ Enum Field Types from binary_log_types.h }
+  PMysqlFieldType = ^TMysqlFieldType;
+  TMysqlFieldType = (
+    FIELD_TYPE_DECIMAL   = 0,
+    FIELD_TYPE_TINY      = 1,
+    FIELD_TYPE_SHORT     = 2,
+    FIELD_TYPE_LONG      = 3,
+    FIELD_TYPE_FLOAT     = 4,
+    FIELD_TYPE_DOUBLE    = 5,
+    FIELD_TYPE_NULL      = 6,
+    FIELD_TYPE_TIMESTAMP = 7,
+    FIELD_TYPE_LONGLONG  = 8,
+    FIELD_TYPE_INT24     = 9,
+    FIELD_TYPE_DATE      = 10,
+    FIELD_TYPE_TIME      = 11,
+    FIELD_TYPE_DATETIME  = 12,
+    FIELD_TYPE_YEAR      = 13,
+    FIELD_TYPE_NEWDATE   = 14,
+    FIELD_TYPE_VARCHAR   = 15, //<--ADDED by fduenas 20-06-2006
+    FIELD_TYPE_BIT       = 16, //<--ADDED by fduenas 20-06-2006
+    MYSQL_TYPE_JSON      = 245,
+    FIELD_TYPE_NEWDECIMAL = 246, //<--ADDED by fduenas 20-06-2006
+    FIELD_TYPE_ENUM      = 247,
+    FIELD_TYPE_SET       = 248,
+    FIELD_TYPE_TINY_BLOB = 249,
+    FIELD_TYPE_MEDIUM_BLOB = 250,
+    FIELD_TYPE_LONG_BLOB = 251,
+    FIELD_TYPE_BLOB      = 252,
+    FIELD_TYPE_VAR_STRING = 253,
+    FIELD_TYPE_STRING    = 254,
+    FIELD_TYPE_GEOMETRY  = 255);
+
   { Options for mysql_set_option }
   TMySqlSetOption = (
     MYSQL_OPTION_MULTI_STATEMENTS_ON,
@@ -367,9 +332,24 @@ type
   TMysqlStmtAttrType = (
     STMT_ATTR_UPDATE_MAX_LENGTH,
     STMT_ATTR_CURSOR_TYPE,
-    STMT_ATTR_PREFETCH_ROWS
+    STMT_ATTR_PREFETCH_ROWS,
+    { mariadb 10.2.7up}
+    STMT_ATTR_PREBIND_PARAMS=200,
+    STMT_ATTR_ARRAY_SIZE,
+    STMT_ATTR_ROW_SIZE
   );
 
+  //http://eclipseclp.org/doc/bips/lib/dbi/cursor_next_execute-3.html
+  //"Only one active cursor of type no_cursor is allowed per session,
+  //and this active cursor must be closed before another query can be issued to the DBMS server.
+  //read_only cursor does not have this restriction,
+  //and several such cursors can be active at the same time "
+  Tenum_cursor_type = (
+    CURSOR_TYPE_NO_CURSOR   = 0,
+    CURSOR_TYPE_READ_ONLY   = 1,
+    CURSOR_TYPE_FOR_UPDATE  = 2,
+    CURSOR_TYPE_SCROLLABLE  = 4
+  );
   TMysqlShutdownLevel = (
     SHUTDOWN_DEFAULT = 0,
     SHUTDOWN_WAIT_CONNECTIONS = MYSQL_SHUTDOWN_KILLABLE_CONNECT,
@@ -430,7 +410,7 @@ TMYSQL_CLIENT_OPTIONS =
     MYSQL_TIMESTAMP_TIME = 2
   );
 
-  MYSQL_TIME = record
+  TMYSQL_TIME = record
     year:                UInt;
     month:               UInt;
     day:                 UInt;
@@ -438,11 +418,10 @@ TMYSQL_CLIENT_OPTIONS =
     minute:              UInt;
     second:              UInt;
     second_part:         ULong;
-    neg:                 Byte;
+    neg:                 my_bool;
     time_type:           mysql_timestamp_type;
-    padding:             UInt;    //ludob alignment is different? Mysql returns 36 bytes.
   end;
-  PMYSQL_TIME = ^MYSQL_TIME;
+  PMYSQL_TIME = ^TMYSQL_TIME;
 
   PLIST = ^LIST;
   LIST = record
@@ -451,14 +430,16 @@ TMYSQL_CLIENT_OPTIONS =
     data:       Pointer;
   end;
 
-  PMYSQL_FIELD = ^MYSQL_FIELD;
-  MYSQL_FIELD = record
+  PMYSQL_FIELD = Pointer;
+
+  PMYSQL_FIELD51 = ^TMYSQL_FIELD51;
+  TMYSQL_FIELD51 = record
     name:             PAnsiChar;   // Name of column
     org_name:         PAnsiChar;   // Original column name, if an alias
     table:            PAnsiChar;   // Table of column if column was a field
     org_table:        PAnsiChar;   // Org table name if table was an alias
     db:               PAnsiChar;   // Database for table
-    catalog:	        PAnsiChar;   // Catalog for table
+    catalog:          PAnsiChar;   // Catalog for table
     def:              PAnsiChar;   // Default value (set by mysql_list_fields)
     length:           ULong; // Width of column
     max_length:       ULong; // Max width of selected set
@@ -472,16 +453,116 @@ TMYSQL_CLIENT_OPTIONS =
     flags:            UInt; // Div flags
     decimals:         UInt; // Number of decimals in field
     charsetnr:        UInt; // Character set
-    _type:            TMysqlFieldTypes; // Type of field. Se mysql_com.h for types
+    _type:            TMysqlFieldType; // Type of field. Se mysql_com.h for types
+    extension:        Pointer //added in 4.1
   end;
 
-  PMYSQL_BIND41 = ^MYSQL_BIND41;
-  MYSQL_BIND41 =  record
+  PMYSQL_FIELD41 = ^MYSQL_FIELD41;
+  MYSQL_FIELD41 = record
+    name:             PAnsiChar; // Name of column
+    org_name:         PAnsiChar; // Original column name, if an alias
+    table:            PAnsiChar; // Table of column if column was a field
+    org_table:        PAnsiChar; // Org table name if table was an alias
+    db:               PAnsiChar; // Database for table
+    catalog:          PAnsiChar; // Catalog for table
+    def:              PAnsiChar; // Default value (set by mysql_list_fields)
+    length:           ULong; // Width of column
+    max_length:       ULong; // Max width of selected set
+    name_length:      UInt;
+    org_name_length:  UInt;
+    table_length:     UInt;
+    org_table_length: UInt;
+    db_length:        UInt;
+    catalog_length:   UInt;
+    def_length:       UInt;
+    flags:            UInt; // Div flags
+    decimals:         UInt; // Number of decimals in field
+    charsetnr:        UInt; // Character set
+    _type:            TMysqlFieldType;     // Type of field. Se enum_field_types.
+  end;
+  PMYSQL_FIELD401 = ^MYSQL_FIELD401;
+  MYSQL_FIELD401 = record
+    name:             PAnsiChar; // Name of column
+    org_name:         PAnsiChar; // Original column name, if an alias
+    table:            PAnsiChar; // Table of column if column was a field
+    org_table:        PAnsiChar; // Org table name if table was an alias
+    db:               PAnsiChar; // Database for table
+    def:              PAnsiChar; // Default value (set by mysql_list_fields)
+    length:           ULong; // Width of column
+    max_length:       ULong; // Max width of selected set
+    name_length:      UInt;
+    org_name_length:  UInt;
+    table_length:     UInt;
+    org_table_length: UInt;
+    db_length:        UInt;
+    def_length:       UInt;
+    flags:            UInt; // Div flags
+    decimals:         UInt; // Number of decimals in field
+    charsetnr:        UInt; // Character set
+    _type:            TMysqlFieldType;     // Type of field. Se mysql_com.h for types
+  end;
+  PMYSQL_FIELD40 = ^MYSQL_FIELD40;
+  MYSQL_FIELD40 = record
+    name:             PAnsiChar; // Name of column
+    table:            PAnsiChar; // Table of column if column was a field
+    org_table:        PAnsiChar; // Org table name if table was an alias
+    db:               PAnsiChar; // Database for table
+    def:              PAnsiChar; // Default value (set by mysql_list_fields)
+    length:           ULong; // Width of column
+    max_length:       ULong; // Max width of selected set
+    flags:            UInt; // Div flags
+    decimals:         UInt; // Number of decimals in field
+    _type:            TMysqlFieldType;     // Type of field. Se mysql_com.h for types
+  end;
+  PMYSQL_FIELD32 = ^MYSQL_FIELD32;
+  MYSQL_FIELD32 = record
+    name:             PAnsiChar; // Name of column
+    table:            PAnsiChar; // Table of column if column was a field
+    def:              PAnsiChar; // Default value (set by mysql_list_fields)
+    _type:            TMysqlFieldType;     // Type of field. Se mysql_com.h for types
+    length:           UInt; // Width of column
+    max_length:       UInt; // Max width of selected set
+    flags:            UInt; // Div flags
+    decimals:         UInt; // Number of decimals in field
+  end;
+
+  // offsets to used MYSQL_FIELDxx members.
+  // a negative entry means the field does not exits in the record
+  PMYSQL_FIELDOFFSETS = ^TMYSQL_FIELDOFFSETS;
+  TMYSQL_FIELDOFFSETS = record
+    name            : NativeUInt;
+    name_length     : NativeInt;
+    org_table       : NativeInt;
+    org_table_length: NativeInt;
+    org_name        : NativeInt;
+    org_name_length : NativeInt;
+    db              : NativeInt;
+    db_length       : NativeInt;
+    charsetnr       : NativeInt;
+    _type           : NativeUInt;
+    flags           : NativeUInt;
+    length          : NativeUInt;
+    decimals        : NativeUInt;
+  end;
+
+  PMYSQL_BIND041 = ^TMYSQL_BIND041;
+  TMYSQL_BIND041 = record
+    length: PLongWord;              // output length pointer
+    is_null: Pmy_bool;              // Pointer to null indicators
+    buffer: PByte;                  // buffer to get/put data
+    buffer_type: TMysqlFieldType;  // buffer type
+    buffer_length: LongWord;        // buffer length
+    param_number: LongWord;         // For null count and error messages
+    long_data_used: my_bool;        // If used with mysql_send_long_data
+  end;
+
+  PMYSQL_BIND411 = ^TMYSQL_BIND411;
+  TMYSQL_BIND411 =  record
     // 4.1.22 definition
     length:           PULong;
-    is_null:          PByte;
-    buffer:           PAnsiChar;
-    buffer_type:      TMysqlFieldTypes;
+    is_null:          Pmy_bool;
+    buffer:           Pointer;
+    buffer_type:      TMysqlFieldType;
     buffer_length:    ULong;
     //internal fields
     inter_buffer:     PByte;
@@ -489,44 +570,44 @@ TMYSQL_CLIENT_OPTIONS =
     internal_length:  ULong;
     param_number:     UInt;
     pack_length:      UInt;
-    is_unsigned:      Byte;
-    long_data_used:   Byte;
-    internal_is_null: Byte;
+    is_unsigned:      my_bool;
+    long_data_used:   my_bool;
+    internal_is_null: my_bool;
     store_param_func: Pointer;
     fetch_result:     Pointer;
     skip_result:      Pointer;
   end;
 
-  PMYSQL_BIND50 = ^MYSQL_BIND50;
-  MYSQL_BIND50 =  record
-    // 5.0.67 definition
+  PMYSQL_BIND506 = ^TMYSQL_BIND506;
+  TMYSQL_BIND506 =  record
+    // 5.0.67 up definition
     length:            PULong;
-    is_null:           PByte;
-    buffer:            PAnsiChar;
+    is_null:           Pmy_bool;
+    buffer:            Pointer;
     error:             PByte;
-    buffer_type:       TMysqlFieldTypes;
+    buffer_type:       TMysqlFieldType;
     buffer_length:     ULong;
     row_ptr:           PByte;
     offset:            ULong;
     length_value:      ULong;
-    param_number:      UInt;
-    pack_length:       UInt;
-    error_value:       Byte;
-    is_unsigned:       Byte;
-    long_data_used:    Byte;
-    is_null_value:     Byte;
+    param_number:      ULong;
+    pack_length:       ULong;
+    error_value:       my_bool;
+    is_unsigned:       my_bool;
+    long_data_used:    my_bool;
+    is_null_value:     my_bool;
     store_param_funct: Pointer;
     fetch_result:      Pointer;
     skip_result:       Pointer;
   end;
 
-  PMYSQL_BIND51 = ^MYSQL_BIND51;
-  MYSQL_BIND51 =  record
-    // 5.1.30 definition (Still valid for 5.6.25)
+  PMYSQL_BIND51 = ^TMYSQL_BIND51;
+  TMYSQL_BIND51 =  record
+    // 5.1.30 up and 6.x definition
     length:            PULong;
-    is_null:           PByte;
-    buffer:            PAnsiChar;
-    error:             PByte;
+    is_null:           Pmy_bool;
+    buffer:            Pointer;
+    error:             Pmy_bool;
     row_ptr:           PByte;
     store_param_funct: Pointer;
     fetch_result:      Pointer;
@@ -536,22 +617,26 @@ TMYSQL_CLIENT_OPTIONS =
     length_value:      ULong;
     param_number:      UInt;
     pack_length:       UInt;
-    buffer_type:       TMysqlFieldTypes;
-    error_value:       Byte;
-    is_unsigned:       Byte;
-    long_data_used:    Byte;
-    is_null_value:     Byte;
+    buffer_type:       TMysqlFieldType;
+    error_value:       my_bool;
+    is_unsigned:       my_bool;
+    long_data_used:    my_bool;
+    is_null_value:     my_bool;
     extension:         Pointer;
   end;
 
-  PMYSQL_BIND60 = ^MYSQL_BIND60;
-  MYSQL_BIND60 =  record
-    // 6.0.8 definition
+  PMARIADB_BIND1027 = ^TMARIADB_BIND1027;
+  TMARIADB_BIND1027 =  record
+    // MariaDB 10.2.7 up
     length:            PULong;
-    is_null:           PByte;
-    buffer:            PAnsiChar;
-    error:             PByte;
-    row_ptr:           PByte;
+    is_null:           Pmy_bool;
+    buffer:            Pointer;
+    error:             Pmy_bool;
+    u:                 record
+                          case Boolean of
+                          False: (row_ptr: PByte);
+                          True: (indicator: PShortInt);
+                        end;
     store_param_funct: Pointer;
     fetch_result:      Pointer;
     skip_result:       Pointer;
@@ -560,35 +645,59 @@ TMYSQL_CLIENT_OPTIONS =
     length_value:      ULong;
     param_number:      UInt;
     pack_length:       UInt;
-    buffer_type:       TMysqlFieldTypes;
-    error_value:       Byte;
-    is_unsigned:       Byte;
-    long_data_used:    Byte;
-    is_null_value:     Byte;
+    buffer_type:       TMysqlFieldType;
+    error_value:       my_bool;
+    is_unsigned:       my_bool;
+    long_data_used:    my_bool;
+    is_null_value:     my_bool;
     extension:         Pointer;
   end;
 
   // offsets to used MYSQL_BINDxx members. Filled by GetBindOffsets
-  MYSQL_BINDOFFSETS=record
+  TMYSQL_BINDOFFSETS = record
     buffer_type   :NativeUint;
     buffer_length :NativeUint;
     is_unsigned   :NativeUint;
     buffer        :NativeUint;
     length        :NativeUint;
     is_null       :NativeUint;
-    size          :integer;    //size of MYSQL_BINDxx
-    end;
-
-
-  PDOBindRecord2 = record
-      buffer:    Array of Byte;
-      length:    ULong;
-      is_null:   Byte;
+    size          :word;    //size of MYSQL_BINDxx
   end;
 
-  PMYSQL = ^MYSQL;
+  PULongArray = ^TULongArray;
+  TULongArray = array[0..High(Byte)] of Ulong; //http://dev.mysql.com/doc/refman/4.1/en/column-count-limit.html
 
-  MYSQL  = pointer;
+  Pmy_bool_array = ^Tmy_bool_array;
+  Tmy_bool_array = array[0..High(Byte)] of my_bool; //just 4 debugging
+
+  Tmysql_indicator_type =(
+    STMT_INDICATOR_NTS=-1,      //String is null terminated
+    STMT_INDICATOR_NONE=0,      //No semantics
+    STMT_INDICATOR_NULL=1,      //NULL value
+    STMT_INDICATOR_DEFAULT=2,   //Use columns default value
+    STMT_INDICATOR_IGNORE=3,    //Skip update of column
+    STMT_INDICATOR_IGNORE_ROW=4 //Skip update of row
+  );
+  Pmysql_indicator_types = ^Tmysql_indicator_types;
+  Tmysql_indicator_types = array[0..High(Byte)] of Tmysql_indicator_type;
+
+  PDOBindRecord2 = ^TDOBindRecord2;
+  TDOBindRecord2 = record
+    buffer:                 Array of Byte; //data place holder
+    buffer_address:         PPointer; //we don't need reserved mem in all case, but we need to set the address
+    buffer_length_address:  PULong; //set buffer_Length on the fly e.g. lob reading!
+    buffer_type:            TMysqlFieldType; //save exact type
+    buffer_type_address:    PMysqlFieldType;
+    length:                 ULong; //current length of our or retrieved data
+    is_null:                Byte; //null indicator
+    binary:                 Boolean; //binary field or not? Just for reading!
+    is_signed:              Boolean; //signed ordinals or not? Just for reading!
+    mysql_bind:             Pointer; //Save exact address of bind for lob reading
+    decimals:               Integer;
+  end;
+
+  PPMYSQL = ^PMYSQL;
+  PMYSQL  = pointer;
 
   PMY_CHARSET_INFO = ^MY_CHARSET_INFO;
   MY_CHARSET_INFO = record
@@ -611,271 +720,13 @@ TMYSQL_CLIENT_OPTIONS =
     MY_ST_PREPARE,
     MY_ST_EXECUTE);
 
+  PPMYSQL_STMT = ^PMYSQL_STMT;
   PMYSQL_STMT = Pointer;
 
-{ ****************** Plain API Types definition ***************** }
-
-type
-
-{ ************** Plain API Function types definition ************* }
-
-  { Functions to get information from the MYSQL and MYSQL_RES structures
-    Should definitely be used if one uses shared libraries. }
-  Tmysql_affected_rows          = function(Handle: PMYSQL): ULongLong;                                     {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_character_set_name     = function(Handle: PMYSQL): PAnsiChar;                                     {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_close                  = procedure(Handle: PMYSQL);                                           {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_connect                = function(Handle: PMYSQL; const Host, User, Passwd: PAnsiChar): PMYSQL;   {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_create_db              = function(Handle: PMYSQL; const Db: PAnsiChar): Integer;                  {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_data_seek              = procedure(Result: PMYSQL_RES; Offset: ULongLong);                        {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_debug                  = procedure(Debug: PAnsiChar);                                             {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_drop_db                = function(Handle: PMYSQL; const Db: PAnsiChar): Integer;                  {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_dump_debug_info        = function(Handle: PMYSQL): Integer;                                   {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_eof                    = function(Result: PMYSQL_RES): Byte;                                  {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_errno                  = function(Handle: PMYSQL): UInt;                                  {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_error                  = function(Handle: PMYSQL): PAnsiChar;                                     {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_escape_string          = function(PTo, PFrom: PAnsiChar; Len: ULong): ULong;                {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_fetch_field            = function(Result: PMYSQL_RES): PMYSQL_FIELD;                          {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_fetch_field_direct     = function(Result: PMYSQL_RES; FieldNo: UInt): PMYSQL_FIELD;       {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_fetch_fields           = function(Result: PMYSQL_RES): PMYSQL_FIELD;                          {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_fetch_lengths          = function(Result: PMYSQL_RES): PULong; {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_fetch_row              = function(Result: PMYSQL_RES): PMYSQL_ROW;                            {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_field_seek             = function(Result: PMYSQL_RES; Offset: MYSQL_FIELD_OFFSET): MYSQL_FIELD_OFFSET;
-                                                                                                       {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_field_tell             = function(Result: PMYSQL_RES): MYSQL_FIELD_OFFSET;                    {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_free_result            = procedure(Result: PMYSQL_RES);                                       {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_get_client_info        = function: PAnsiChar;                                                     {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_get_host_info          = function(Handle: PMYSQL): PAnsiChar;                                     {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_get_proto_info         = function(Handle: PMYSQL): UInt;                                  {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_get_server_info        = function(Handle: PMYSQL): PAnsiChar;                                     {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_info                   = function(Handle: PMYSQL): PAnsiChar;                                     {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_init                   = function(Handle: PMYSQL): PMYSQL;                                    {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_insert_id              = function(Handle: PMYSQL): ULongLong;                                     {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_kill                   = function(Handle: PMYSQL; Pid: ULong): Integer;                     {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_list_dbs               = function(Handle: PMYSQL; Wild: PAnsiChar): PMYSQL_RES;                   {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_list_fields            = function(Handle: PMYSQL; const Table, Wild: PAnsiChar): PMYSQL_RES;      {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_list_processes         = function(Handle: PMYSQL): PMYSQL_RES;                                {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_list_tables            = function(Handle: PMYSQL; const Wild: PAnsiChar): PMYSQL_RES;             {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_num_fields             = function(Result: PMYSQL_RES): UInt;                              {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_num_rows               = function(Result: PMYSQL_RES): ULongLong;                                 {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_options                = function(Handle: PMYSQL; Option: TMySqlOption; const Arg: PAnsiChar): Integer;
-                                                                                                       {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_ping                   = function(Handle: PMYSQL): Integer;                                   {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_query                  = function(Handle: PMYSQL; const Query: PAnsiChar): Integer;               {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_real_connect           = function(Handle: PMYSQL; const Host, User, Passwd, Db: PAnsiChar;
-                                           Port: UInt; const UnixSocket: PAnsiChar; ClientFlag: ULong): PMYSQL;
-                                                                                                       {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_real_escape_string     = function(Handle: PMYSQL; PTo: PAnsiChar; const PFrom: PAnsiChar; length: ULong): ULong;
-                                                                                                       {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_real_query             = function(Handle: PMYSQL; const Query: PAnsiChar; Length: ULong): Integer;
-                                                                                                       {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_refresh                = function(Handle: PMYSQL; Options: UInt): Integer;                {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_row_seek               = function(Result: PMYSQL_RES; Offset: PMYSQL_ROWS): PMYSQL_ROWS;      {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_row_tell               = function(Result: PMYSQL_RES): PMYSQL_ROWS;                           {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_select_db              = function(Handle: PMYSQL; const Db: PAnsiChar): Integer;                  {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_ssl_set                = function(Handle: PMYSQL; const key, cert, CA, CApath, cipher:
-                                  PAnsiChar): Byte;                                                        {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_stat                   = function(Handle: PMYSQL): PAnsiChar;                                     {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_store_result           = function(Handle: PMYSQL): PMYSQL_RES;                                {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_thread_id              = function(Handle: PMYSQL): ULong;                                  {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_use_result             = function(Handle: PMYSQL): PMYSQL_RES;                                {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-
-  { Set up and bring down a thread; these function should be called for each thread in an application which
-    opens at least one MySQL connection.  All uses of the connection(s) should be between these function calls. }
-  Tmy_init                      = procedure;                                                          {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_thread_init            = function: Byte;                                                     {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_thread_end             = procedure;                                                          {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_thread_safe            = function: UInt;                                                 {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-
-  { Set up and bring down the server; to ensure that applications will work when linked against either the
-    standard client library or the embedded server library, these functions should be called. }
-  Tmysql_server_init            = function(Argc: Integer; Argv, Groups: Pointer): Integer;            {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_server_end             = procedure;                                                          {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-
-  Tmysql_change_user            = function(mysql: PMYSQL; const user: PAnsiChar; const passwd: PAnsiChar; const db: PAnsiChar): Byte;
-  Tmysql_field_count            = function(Handle: PMYSQL): UInt;                                  {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-
-
-  Tmysql_get_client_version     = function: ULong;                                                  {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-
-  Tmysql_send_query = function(mysql: PMYSQL; const query: PAnsiChar;
-    length: ULong): Integer;
-    {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-
-  Tmysql_read_query_result = function(mysql: PMYSQL): Byte;
-    {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-
-
-  Tmysql_autocommit             = function(Handle: PMYSQL; const mode: Byte): Byte;                    {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_commit                 = function(Handle: PMYSQL): Byte;                                      {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_get_server_version     = function(Handle: PMYSQL): ULong;                                  {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_hex_string             = function(PTo, PFrom: PAnsiChar; Len: ULong): ULong;                {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_more_results           = function(Handle: PMYSQL): Byte;                                      {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_next_result            = function(Handle: PMYSQL): Integer;                                   {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_rollback               = function(Handle: PMYSQL): Byte;                                      {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_set_character_set      = function(Handle: PMYSQL; const csname: PAnsiChar): Integer;                    {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_set_server_option      = function(Handle: PMYSQL; Option: TMysqlSetOption): Integer;          {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_shutdown               = function(Handle: PMYSQL; shutdown_level: TMysqlShutdownLevel): Integer; {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_sqlstate               = function(Handle: PMYSQL): PAnsiChar;                                     {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_warning_count          = function(Handle: PMYSQL): UInt;                                  {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-{BELOW are new PREPARED STATEMENTS}
-  Tmysql_stmt_affected_rows     = function(stmt: PMYSQL_STMT): ULongLong;                                {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_stmt_attr_get          = function(stmt: PMYSQL_STMT; option: TMysqlStmtAttrType;
-                                  arg: PAnsiChar): Byte;                                              {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_stmt_attr_set          = function(stmt: PMYSQL_STMT; option: TMysqlStmtAttrType;
-                                  const arg: PAnsiChar): Byte;                                        {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_stmt_bind_param        = function(stmt: PMYSQL_STMT; bind: Pointer{BIND record}): Byte;              {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_stmt_bind_result       = function(stmt: PMYSQL_STMT; bind: Pointer{BIND record}): Byte;              {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_stmt_close             = function(stmt: PMYSQL_STMT): Byte;                                 {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_stmt_data_seek         = procedure(stmt: PMYSQL_STMT; offset: ULongLong);                       {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_stmt_errno             = function(stmt: PMYSQL_STMT): UInt;                             {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_stmt_error             = function(stmt: PMYSQL_STMT): PAnsiChar;                                {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_stmt_execute           = function(stmt: PMYSQL_STMT): Integer;                              {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_stmt_fetch             = function(stmt: PMYSQL_STMT): Integer;                              {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_stmt_fetch_column      = function(stmt: PMYSQL_STMT; bind: Pointer{BIND record}; column: UInt;
-                                  offset: ULong): Integer;                                        {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_stmt_field_count       = function(stmt: PMYSQL_STMT): UInt;                             {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_stmt_free_result       = function(stmt: PMYSQL_STMT): Byte;                                 {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_stmt_init              = function(Handle: PMYSQL): PMYSQL_STMT;                             {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_stmt_insert_id         = function(stmt: PMYSQL_STMT): ULongLong;                                {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_stmt_next_result       = function(stmt: PMYSQL_STMT): Integer;                                {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_stmt_num_rows          = function(stmt: PMYSQL_STMT): ULongLong;                                {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_stmt_param_count       = function(stmt: PMYSQL_STMT): ULong;                             {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_stmt_param_metadata    = function(stmt: PMYSQL_STMT): PMYSQL_RES;                           {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_stmt_prepare           = function(stmt: PMYSQL_STMT; const query: PAnsiChar; length: ULong):
-                                  Integer;                                                           {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_stmt_reset             = function(stmt: PMYSQL_STMT): Byte;                                 {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_stmt_result_metadata   = function(stmt: PMYSQL_STMT): PMYSQL_RES;                           {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_stmt_row_seek          = function(stmt: PMYSQL_STMT; offset: PMYSQL_ROWS): PMYSQL_ROWS;     {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_stmt_row_tell          = function(stmt: PMYSQL_STMT): PMYSQL_ROWS;                          {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_stmt_send_long_data    = function(stmt: PMYSQL_STMT; parameter_number: UInt; const
-                                  data: PAnsiChar; length: ULong): Byte;                              {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_stmt_sqlstate          = function(stmt: PMYSQL_STMT): PAnsiChar;                                {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_stmt_store_result      = function(stmt: PMYSQL_STMT): Integer;                              {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-
-  Tmysql_get_character_set_info = procedure(Handle: PMYSQL; cs: PMY_CHARSET_INFO);                     {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-  Tmysql_library_end            = procedure; {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
-
-{ ************** Collection of Plain API Function types definition ************* }
-TZMYSQL_API = record
-  mysql_affected_rows:          Tmysql_affected_rows;	          {mysql 3.2}
-  mysql_character_set_name:     Tmysql_character_set_name;      {mysql 3.2}
-  mysql_close:                  Tmysql_close;                   {mysql 3.2}
-  mysql_connect:                Tmysql_connect;                 {mysql 3.2} {deprecated for mysql_real_connect}
-  mysql_create_db:              Tmysql_create_db;               {mysql 3.2} {deprecated for mysql_query}
-  mysql_data_seek:              Tmysql_data_seek;               {mysql 3.2}
-  mysql_debug:                  Tmysql_debug;                   {mysql 3.2}
-  mysql_drop_db:                Tmysql_drop_db;                 {mysql 3.2} {deprecated for mysql_query}
-  mysql_dump_debug_info:        Tmysql_dump_debug_info;         {mysql 3.2}
-  mysql_eof:                    Tmysql_eof;                     {mysql 3.2} {deprecated for mysql_error/mysql_errno}
-  mysql_errno:                  Tmysql_errno;	                {mysql 3.2}
-  mysql_error:                  Tmysql_error;                   {mysql 3.2}
-  mysql_escape_string:          Tmysql_escape_string;           {mysql 3.2} {deprecated for mysql_real_escape_string}
-  mysql_fetch_field:            Tmysql_fetch_field;             {mysql 3.2}
-  mysql_fetch_field_direct:     Tmysql_fetch_field_direct;      {mysql 3.2}
-  mysql_fetch_fields:           Tmysql_fetch_fields;            {mysql 3.2}
-  mysql_fetch_lengths:          Tmysql_fetch_lengths;           {mysql 3.2}
-  mysql_fetch_row:              Tmysql_fetch_row;               {mysql 3.2}
-  mysql_field_seek:             Tmysql_field_seek;              {mysql 3.2}
-  mysql_field_tell:             Tmysql_field_tell;              {mysql 3.2}
-  mysql_free_result:            Tmysql_free_result;             {mysql 3.2}
-  mysql_get_client_info:        Tmysql_get_client_info;         {mysql 3.2}
-  mysql_get_host_info:          Tmysql_get_host_info;           {mysql 3.2}
-  mysql_get_proto_info:         Tmysql_get_proto_info;          {mysql 3.2}
-  mysql_get_server_info:        Tmysql_get_server_info;         {mysql 3.2}
-  mysql_info:                   Tmysql_info;                    {mysql 3.2}
-  mysql_init:                   Tmysql_init;                    {mysql 3.2}
-  mysql_insert_id:              Tmysql_insert_id;               {mysql 3.2}
-  mysql_kill:                   Tmysql_kill;                    {mysql 3.2}
-  mysql_list_dbs:               Tmysql_list_dbs;                {mysql 3.2}
-  mysql_list_fields:            Tmysql_list_fields;             {mysql 3.2}
-  mysql_list_processes:         Tmysql_list_processes;          {mysql 3.2}
-  mysql_list_tables:            Tmysql_list_tables;             {mysql 3.2}
-  mysql_num_fields:             Tmysql_num_fields;              {mysql 3.2}
-  mysql_num_rows:               Tmysql_num_rows;                {mysql 3.2}
-  mysql_options:                Tmysql_options;                 {mysql 3.2}
-  mysql_ping:                   Tmysql_ping;	                   {mysql 3.2}
-  mysql_query:                  Tmysql_query;                   {mysql 3.2} {deprecated for mysql_real_query}
-  mysql_real_connect:           Tmysql_real_connect;            {mysql 3.2}
-  mysql_real_escape_string:     Tmysql_real_escape_string;      {mysql 3.2}
-  mysql_real_query:             Tmysql_real_query;              {mysql 3.2}
-  mysql_refresh:                Tmysql_refresh;                 {mysql 3.2}
-  mysql_row_seek:               Tmysql_row_seek;                {mysql 3.2}
-  mysql_row_tell:               Tmysql_row_tell;                {mysql 3.2}
-  mysql_select_db:              Tmysql_select_db;               {mysql 3.2}
-  mysql_shutdown:               Tmysql_shutdown;                {mysql 3.2} {new argument 4.1}
-  mysql_ssl_set:                Tmysql_ssl_set;                 {mysql 3.2}
-  mysql_stat:                   Tmysql_stat;                    {mysql 3.2}
-  mysql_store_result:           Tmysql_store_result;            {mysql 3.2}
-  mysql_thread_id:              Tmysql_thread_id;               {mysql 3.2}
-  mysql_use_result:             Tmysql_use_result;              {mysql 3.2}
-
-  {API for THREADED FUNCTIONS }
-  my_init:                      Tmy_init;                       {mysql 3.2}
-  mysql_thread_init:            Tmysql_thread_init;             {mysql 3.2}
-  mysql_thread_end:             Tmysql_thread_end;              {mysql 3.2}
-  mysql_thread_safe:            tmysql_thread_safe;             {mysql 3.2}
-
-  {API for EMBEDDED SERVER  }
-  mysql_server_init:            Tmysql_server_init;             {mysql 3.2}
-  mysql_server_end:             Tmysql_server_end;              {mysql 3.2}
-
-  mysql_change_user:            Tmysql_change_user;             {mysql 3.23}
-  mysql_field_count:            Tmysql_field_count;             {mysql 3.22}
-
-  mysql_get_client_version:     Tmysql_get_client_version;      {mysql 4.0}
-
-  mysql_send_query:     Tmysql_send_query;
-  mysql_read_query_result: Tmysql_read_query_result;
-
-  mysql_autocommit:             Tmysql_autocommit;              {mysql 4.1}
-  mysql_commit:                 Tmysql_commit;                  {mysql 4.1}
-  mysql_get_server_version:     Tmysql_get_server_version;      {mysql 4.1}
-  mysql_hex_string:             Tmysql_hex_string;              {mysql 4.1.8}
-  mysql_more_results:           Tmysql_more_results;            {mysql 4.1}
-  mysql_next_result:            Tmysql_next_result;             {mysql 4.1}
-  mysql_rollback:               Tmysql_rollback;                {mysql 4.1}
-  mysql_set_character_set:      Tmysql_set_character_set;       {mysql 4.1.13}
-  mysql_set_server_option:      Tmysql_set_server_option;       {mysql 4.1}
-  mysql_sqlstate:               Tmysql_sqlstate;                {mysql 4.1}
-  mysql_warning_count:          Tmysql_warning_count;           {mysql 4.1}
-  {API for PREPARED STATEMENTS}
-  mysql_stmt_affected_rows:     Tmysql_stmt_affected_rows;      {mysql 4.1.0}
-  mysql_stmt_attr_get:          Tmysql_stmt_attr_get;           {mysql 4.1.2}
-  mysql_stmt_attr_set:          Tmysql_stmt_attr_set;           {mysql 4.1.2} {augmented 5.0.2/6}
-  mysql_stmt_bind_param:        Tmysql_stmt_bind_param;         {mysql 4.1.2}
-  mysql_stmt_bind_result:       Tmysql_stmt_bind_result;        {mysql 4.1.2}
-  mysql_stmt_close:             Tmysql_stmt_close;              {mysql 4.1.0}
-  mysql_stmt_data_seek:         Tmysql_stmt_data_seek;          {mysql 4.1.1}
-  mysql_stmt_errno:             Tmysql_stmt_errno;              {mysql 4.1.0}
-  mysql_stmt_error:             Tmysql_stmt_error;              {mysql 4.1.0}
-  mysql_stmt_execute:           Tmysql_stmt_execute;            {mysql 4.1.2}
-  mysql_stmt_fetch:             Tmysql_stmt_fetch;              {mysql 4.1.2}
-  mysql_stmt_fetch_column:      Tmysql_stmt_fetch_column;       {mysql 4.1.2}
-  mysql_stmt_field_count:       Tmysql_stmt_field_count;        {mysql 4.1.3}
-  mysql_stmt_free_result:       Tmysql_stmt_free_result;        {mysql 4.1.1}
-  mysql_stmt_init:              Tmysql_stmt_init;               {mysql 4.1.2}
-  mysql_stmt_insert_id:         Tmysql_stmt_insert_id;          {mysql 4.1.2}
-  mysql_stmt_next_result:       Tmysql_stmt_next_result;        {mysql 5.5.3}
-  mysql_stmt_num_rows:          Tmysql_stmt_num_rows;           {mysql 4.1.1}
-  mysql_stmt_param_count:       Tmysql_stmt_param_count;        {mysql 4.1.2}
-  mysql_stmt_param_metadata:    Tmysql_stmt_param_metadata;     {mysql 4.1.2}
-  mysql_stmt_prepare:           Tmysql_stmt_prepare;            {mysql 4.1.2}
-  mysql_stmt_reset:             Tmysql_stmt_reset;              {mysql 4.1.1}
-  mysql_stmt_result_metadata:   Tmysql_stmt_result_metadata;    {mysql 4.1.2}
-  mysql_stmt_row_seek:          Tmysql_stmt_row_seek;           {mysql 4.1.1}
-  mysql_stmt_row_tell:          Tmysql_stmt_row_tell;           {mysql 4.1.1}
-  mysql_stmt_send_long_data:    Tmysql_stmt_send_long_data;     {mysql 4.1.2}
-  mysql_stmt_sqlstate:          Tmysql_stmt_sqlstate;           {mysql 4.1.1}
-  mysql_stmt_store_result:      Tmysql_stmt_store_result;       {mysql 4.1.0}
-
-  mysql_get_character_set_info: Tmysql_get_character_set_info;  {mysql 5.0.10}
-end;
+  TMySQLForks = (fMySQL, fMariaDB, fSphinx, fPercona, fDrizzle, WebScaleSQL, OurDelta);
 
 const
-  EMBEDDED_DEFAULT_DATA_DIR = {$IFDEF WIN32}
-                               '.\data\'
-                              {$ELSE} './data/'
-                              {$ENDIF};
+  EMBEDDED_DEFAULT_DATA_DIR = {$IFDEF WINDOWS}'.\data\'{$ELSE}'./data/'{$ENDIF};
   SERVER_ARGUMENTS_KEY_PREFIX = 'ServerArgument';
   SERVER_GROUPS : array [0..2] of PAnsiChar = ('embedded'#0, 'server'#0, nil);
 
@@ -884,7 +735,24 @@ const
                                             '--set-variable=key_buffer_size=32M'#0);
 
 const
-    MaxBlobSize = 1000000;
+  MaxBlobSize = 1000000;
+
+
+{** offet of MYSSQL.server_status field:
+  The struct of the record tends to change to often and we don't need all the
+  definitions
+
+  Value := NativeUInt(@(MYSQLx(Nil).server_status
+}
+  MYSQL5up_server_status_offset: NativeUInt = 748;
+  MYSQL41_server_status_offset: NativeUInt = 436;
+  MYSQL323_server_status_offset: NativeUInt = 328;
+
+  //mysql_com.h
+  SERVER_PS_OUT_PARAMS = LongWord(4096); //To mark ResultSet containing output parameter values.
+  SERVER_MORE_RESULTS_EXIST = LongWord(8); //Multi query - next query exists
+
+{$ENDIF ZEOS_DISABLE_MYSQL}
 
 implementation
 

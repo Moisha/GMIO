@@ -55,7 +55,7 @@ interface
 
 {$I ZCore.inc}
 
-uses Classes, ZClasses;
+uses Classes, ZClasses, ZCompatibility;
 
 type
 
@@ -126,7 +126,7 @@ type
   private
     procedure RaiseException;
   public
-    constructor Create(Collection: IZCollection);
+    constructor Create(const Collection: IZCollection);
     destructor Destroy; override;
 
     function Clone: IZInterface; override;
@@ -177,7 +177,7 @@ type
     function GetValues: IZCollection;
     function GetCount: Integer;
 
-    function Remove(Key: IZInterface): Boolean;
+    function Remove(const Key: IZInterface): Boolean;
     procedure Clear;
 
     property Count: Integer read GetCount;
@@ -198,7 +198,7 @@ type
 
     function Peek: IZInterface;
     function Pop: IZInterface;
-    procedure Push(Value: IZInterface);
+    procedure Push(const Value: IZInterface);
     function GetCount: Integer;
 
     property Count: Integer read GetCount;
@@ -206,11 +206,7 @@ type
 
 implementation
 
-uses SysUtils, ZMessages;
-
-{$IFDEF FPC}
-  {$HINTS OFF}
-{$ENDIF}
+uses SysUtils, ZMessages {$IFDEF FAST_MOVE}, ZFastCode{$ENDIF};
 
 { TZIterator }
 
@@ -271,19 +267,11 @@ end;
   @param Data a integer value to describe an error.
 }
 class procedure TZCollection.Error(const Msg: string; Data: Integer);
-
-{$IFNDEF FPC}
-  function ReturnAddr: Pointer;
-  asm
-          MOV     EAX,[EBP+4]
-  end;
-{$ENDIF}
-
 begin
   {$IFDEF FPC}
   raise EListError.CreateFmt(Msg,[Data]) at get_caller_addr(get_frame);
   {$ELSE}
-  raise EListError.CreateFmt(Msg, [Data]) at ReturnAddr;
+  raise EListError.CreateFmt(Msg, [Data]) at ReturnAddress;
   {$ENDIF}
 end;
 
@@ -312,15 +300,15 @@ end;
 }
 procedure TZCollection.SetCapacity(NewCapacity: Integer);
 begin
-{$IFOPT R+}
+  {$IFNDEF DISABLE_CHECKING}
   if (NewCapacity < FCount) or (NewCapacity > {$IFDEF WITH_MAXLISTSIZE_DEPRECATED}Maxint div 16{$ELSE}MaxListSize{$ENDIF}) then
     Error(SListCapacityError, NewCapacity);
-{$ENDIF}
+  {$ENDIF}
   if NewCapacity <> FCapacity then
   begin
     ReallocMem(FList, NewCapacity * SizeOf(IZInterface));
     if NewCapacity > FCapacity then
-         FillChar(FList^[FCount], (NewCapacity - FCapacity) *
+      System.FillChar(FList^[FCount], (NewCapacity - FCapacity) *
             SizeOf(IZInterface), 0);
     FCapacity := NewCapacity;
   end;
@@ -334,10 +322,10 @@ procedure TZCollection.SetCount(NewCount: Integer);
 var
   I: Integer;
 begin
-{$IFOPT R+}
+  {$IFNDEF DISABLE_CHECKING}
   if (NewCount < 0) or (NewCount > {$IFDEF WITH_MAXLISTSIZE_DEPRECATED}Maxint div 16{$ELSE}MaxListSize{$ENDIF}) then
     Error(SListCountError, NewCount);
-{$ENDIF}
+  {$ENDIF}
   if NewCount > FCapacity then
     SetCapacity(NewCount);
   if NewCount < FCount then
@@ -441,15 +429,15 @@ end;
 }
 procedure TZCollection.Delete(Index: Integer);
 begin
-{$IFOPT R+}
+  {$IFNDEF DISABLE_CHECKING}
   if (Index < 0) or (Index >= FCount) then
     Error(SListIndexError, Index);
-{$ENDIF}
+  {$ENDIF}
   FList^[Index] := nil;
   Dec(FCount);
   if Index < FCount then
   begin
-    System.Move(FList^[Index + 1], FList^[Index],
+    {$IFDEF FAST_MOVE}ZFastCode{$ELSE}System{$ENDIF}.Move(FList^[Index + 1], FList^[Index],
       (FCount - Index) * SizeOf(IZInterface));
     {now nil pointer or on replacing the entry we'll get a bad interlockdecrement}
     Pointer(FList^[FCount]) := nil; //see http://sourceforge.net/p/zeoslib/tickets/100/
@@ -465,12 +453,12 @@ procedure TZCollection.Exchange(Index1, Index2: Integer);
 var
   Item: IZInterface;
 begin
-{$IFOPT R+}
+  {$IFNDEF DISABLE_CHECKING}
   if (Index1 < 0) or (Index1 >= FCount) then
     Error(SListIndexError, Index1);
   if (Index2 < 0) or (Index2 >= FCount) then
     Error(SListIndexError, Index2);
-{$ENDIF}
+  {$ENDIF}
   Item := FList^[Index1];
   FList^[Index1] := FList^[Index2];
   FList^[Index2] := Item;
@@ -492,10 +480,10 @@ end;
 }
 function TZCollection.Get(Index: Integer): IZInterface;
 begin
-{$IFOPT R+}
+  {$IFNDEF DISABLE_CHECKING}
   if (Index < 0) or (Index >= FCount) then
     Error(SListIndexError, Index);
-{$ENDIF}
+  {$ENDIF}
   Result := FList^[Index];
 end;
 
@@ -568,15 +556,15 @@ end;
 }
 procedure TZCollection.Insert(Index: Integer; const Item: IZInterface);
 begin
-{$IFOPT R+}
+  {$IFNDEF DISABLE_CHECKING}
   if (Index < 0) or (Index > FCount) then
     Error(SListIndexError, Index);
-{$ENDIF}
+  {$ENDIF}
   if FCount = FCapacity then
     Grow;
   if Index < FCount then
   begin
-    System.Move(FList^[Index], FList^[Index + 1],
+    {$IFDEF FAST_MOVE}ZFastCode{$ELSE}System{$ENDIF}.Move(FList^[Index], FList^[Index + 1],
       (FCount - Index) * SizeOf(IZInterface));
     {now nil pointer or on replacing the entry we'll get a bad interlockdecrement}
     Pointer(Flist^[Index]) := nil; //see http://sourceforge.net/p/zeoslib/tickets/100/
@@ -601,10 +589,10 @@ end;
 }
 procedure TZCollection.Put(Index: Integer; const Item: IZInterface);
 begin
-{$IFOPT R+}
+  {$IFNDEF DISABLE_CHECKING}
   if (Index < 0) or (Index >= FCount) then
     Error(SListIndexError, Index);
-{$ENDIF}
+  {$ENDIF}
   FList^[Index] := Item;
 end;
 
@@ -661,7 +649,7 @@ end;
   Constructs this object and assignes main properties.
   @param Collection an initial modifiable list of interfaces.
 }
-constructor TZUnmodifiableCollection.Create(Collection: IZCollection);
+constructor TZUnmodifiableCollection.Create(const Collection: IZCollection);
 begin
   inherited Create;
   FCollection := Collection;
@@ -692,6 +680,8 @@ procedure TZUnmodifiableCollection.RaiseException;
 begin
   raise EInvalidOperation.Create(SImmutableOpIsNotAllowed);
 end;
+
+{$IFDEF FPC} {$PUSH} {$WARN 5024 off : Parameter "$1" not used} {$ENDIF} // unmodifyable - parameters not used intentionally
 
 {**
   Adds a new object at the and of this collection.
@@ -866,6 +856,8 @@ begin
   Result := FCollection.ToString;
 end;
 
+{$IFDEF FPC} {$POP} {$ENDIF}
+
 { TZHashMap }
 
 {**
@@ -975,7 +967,7 @@ end;
   @param Key a key of the element.
   @return <code>true</code> of the hash map was changed.
 }
-function TZHashMap.Remove(Key: IZInterface): Boolean;
+function TZHashMap.Remove(const Key: IZInterface): Boolean;
 var
   Index: Integer;
 begin
@@ -1071,7 +1063,7 @@ end;
   Puts a new element to the top of this stack.
   @param Value a new element to be put.
 }
-procedure TZStack.Push(Value: IZInterface);
+procedure TZStack.Push(const Value: IZInterface);
 begin
   FValues.Add(Value);
 end;

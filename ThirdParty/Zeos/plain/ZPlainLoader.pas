@@ -55,9 +55,16 @@ interface
 
 {$I ZPlain.inc}
 
-uses Types, ZCompatibility;
+uses Types,
+{$IFDEF FPC}
+  dynlibs,
+{$ENDIF}
+  ZCompatibility;
 
 type
+  {$IFDEF FPC}
+  THandle = TLibHandle;
+  {$ENDIF}
   {** Implements a loader for native library. }
 
   { TZNativeLibraryLoader }
@@ -65,46 +72,38 @@ type
   TZNativeLibraryLoader = class (TObject)
   private
     FLocations: TStringDynArray;
-  {$IFDEF FPC}
-    FHandle: PtrInt;
-  {$ELSE}
     FHandle: THandle;  //M.A. LongWord;
-  {$ENDIF}
     FLoaded: Boolean;
     FCurrentLocation: String;
-    function ZLoadLibrary(Location: String): Boolean;
+    function ZLoadLibrary(const Location: String): Boolean;
   protected
     procedure FreeNativeLibrary; virtual;
   public
-    constructor Create(Locations: array of string);
+    constructor Create(const Locations: array of string);
     destructor Destroy; override;
 
     procedure ClearLocations;
-    procedure AddLocation(Location: String);
+    procedure AddLocation(const Location: String);
     function Load: Boolean; virtual;
     function LoadNativeLibrary: Boolean; virtual;
-    function LoadNativeLibraryStrict(Location: String): Boolean;
+    function LoadNativeLibraryStrict(const Location: String): Boolean;
     procedure LoadIfNeeded; virtual;
 
     property Loaded: Boolean read FLoaded write FLoaded;
-  {$IFDEF FPC}
-    property Handle: PtrInt read FHandle write FHandle;
-  {$ELSE}
     property Handle: THandle { M.A. LongWord} read FHandle write FHandle;
-  {$ENDIF}
     property CurrentLocation: String read FCurrentLocation write FCurrentLocation;
-    function GetAddress(ProcName: PAnsiChar): Pointer;
+    function GetAddress(ProcName: {$IFDEF HAVE_GetProcAddressW}PWideChar{$ELSE}PAnsiChar{$ENDIF}): Pointer;
   end;
 
 implementation
 
 uses SysUtils, 
-{$IFNDEF UNIX} 
-  Windows, 
-{$ELSE} 
-  {$IFNDEF FPC} 
-    libc, 
-  {$ENDIF} 
+{$IFDEF MSWINDOWS}
+  Windows,
+(*{$ELSE}
+  {$IFNDEF FPC}
+    libc,
+  {$ENDIF} *)
 {$ENDIF}
   ZMessages;
 
@@ -114,7 +113,7 @@ uses SysUtils,
   Creates this loader class and assignes main properties.
   @param Locations locations of native library on windows platform.
 }
-constructor TZNativeLibraryLoader.Create(Locations: array of string);
+constructor TZNativeLibraryLoader.Create(const Locations: array of string);
 var
   I: Integer;
 begin
@@ -141,7 +140,7 @@ begin
   SetLength(FLocations,0);
 end;
 
-procedure TZNativeLibraryLoader.AddLocation(Location: String);
+procedure TZNativeLibraryLoader.AddLocation(const Location: String);
 var
    i: integer;
 begin
@@ -172,7 +171,7 @@ begin
     Load;
 end;
 
-function TZNativeLibraryLoader.ZLoadLibrary(Location: String): Boolean;
+function TZNativeLibraryLoader.ZLoadLibrary(const Location: String): Boolean;
 var newpath, temp: String; // AB modif
 begin
   if FLoaded then
@@ -241,7 +240,7 @@ begin
   Result := True;
 end;
 
-function TZNativeLibraryLoader.LoadNativeLibraryStrict(Location: String): Boolean;
+function TZNativeLibraryLoader.LoadNativeLibraryStrict(const Location: String): Boolean;
 begin
   If not ZLoadLibrary(Location) then
     if FileExists(Location) then
@@ -268,7 +267,7 @@ end;
   @param ProcName a name of the procedure.
   @return a procedure address.
 }
-function TZNativeLibraryLoader.GetAddress(ProcName: PAnsiChar): Pointer;
+function TZNativeLibraryLoader.GetAddress(ProcName: {$IFDEF HAVE_GetProcAddressW}PWideChar{$ELSE}PAnsiChar{$ENDIF}): Pointer;
 begin
   Result := GetProcAddress(Handle, ProcName);
 end;

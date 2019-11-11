@@ -52,11 +52,10 @@ interface
 
 {$I ZDbc.inc}
 
-implementation
-
+{$IFNDEF ZEOS_DISABLE_POOLED} //if set we have an empty unit
 uses
-  Classes, {$IFDEF MSEgui}mclasses,{$ENDIF} Contnrs, DateUtils, SysUtils, Types,
-  SyncObjs,
+  Classes, {$IFDEF MSEgui}mclasses,{$ENDIF} SyncObjs,
+  {$IFNDEF NO_UNIT_CONTNRS}Contnrs,{$ENDIF} DateUtils, SysUtils,
   ZCompatibility, ZClasses, ZURL, ZDbcConnection, ZDbcIntfs, ZPlainDriver,
   ZMessages, ZVariant;
 
@@ -129,9 +128,12 @@ type
     function GetConnection: IZConnection;
   protected // IZConnection
     FClientCodePage: String;
+    procedure RegisterStatement(const Value: IZStatement);
+    procedure DeregisterStatement(const Value: IZStatement);
     procedure CheckCharEncoding(CharSet: String;
       const DoArrange: Boolean = False);
     function GetClientCodePageInformations: PZCodePage; //EgonHugeist
+    function GetClientVariantManager: IZClientVariantManager;
     function GetAutoEncodeStrings: Boolean; //EgonHugeist
     procedure SetAutoEncodeStrings(const Value: Boolean);
     function CreateStatement: IZStatement;
@@ -151,7 +153,7 @@ type
     procedure CommitPrepared(const transactionid: string);
     procedure RollbackPrepared(const transactionid: string);
     function PingServer: Integer;
-    function EscapeString(Value : RawByteString) : RawByteString;
+    function EscapeString(const Value : RawByteString) : RawByteString;
     procedure Open;
     procedure Close;
     function IsClosed: Boolean;
@@ -175,7 +177,7 @@ type
     constructor Create(const ConnectionPool: TConnectionPool);
     destructor Destroy; override;
     function GetBinaryEscapeString(const Value: RawByteString): String; overload;
-    function GetBinaryEscapeString(const Value: TByteDynArray): String; overload;
+    function GetBinaryEscapeString(const Value: TBytes): String; overload;
     function GetEscapeString(const Value: ZWideString): ZWideString; overload; virtual;
     function GetEscapeString(const Value: RawByteString): RawByteString; overload; virtual;
     function GetEncoding: TZCharEncoding;
@@ -186,7 +188,6 @@ type
     {$ENDIF}
   end;
 
-  {$WARNINGS OFF}
   TZDbcPooledConnectionDriver = class(TZAbstractDriver)
   private
     PoolList: TObjectList;
@@ -205,8 +206,10 @@ type
     constructor Create; override;
     destructor Destroy; override;
   end;
-  {$WARNINGS ON}
 
+{$ENDIF ZEOS_DISABLE_POOLED} //if set we have an empty unit
+implementation
+{$IFNDEF ZEOS_DISABLE_POOLED} //if set we have an empty unit
 { TConnectionPool }
 
 constructor TConnectionPool.Create(const URL: string; const ConnectionTimeout: Integer = 0; const MaxConnections: Integer = 0; const Wait: Boolean = True);
@@ -263,10 +266,8 @@ var
   I: Integer;
 begin
   Result := nil;
-  I := 0;
 
-  while True do
-  begin
+  repeat
     FCriticalSection.Enter;
     try
       // Try to get an existing connection
@@ -330,10 +331,10 @@ begin
     if FWait then
       Sleep(100)
     else
-      raise Exception.Create(ClassName + '.Acquire'+LineEnding+'O pool de conexatingiu o limite maximo');
+      raise Exception.Create(ClassName + '.Acquire'+LineEnding+'Connection pool reached the maximum limit');
             //2013-10-13 mse: please replace non ASCII characters (>127) by the 
             //#nnn notation in order to have encoding independent sources
-  end;
+  until False;
 
   //
   // If there is no connection in the pool, create a new one.
@@ -423,6 +424,11 @@ begin
   {$ENDIF}
 end;
 
+procedure TZDbcPooledConnection.DeregisterStatement(const Value: IZStatement);
+begin
+  GetConnection.DeregisterStatement(Value);
+end;
+
 destructor TZDbcPooledConnection.Destroy;
 begin
   if FConnection <> nil then
@@ -498,7 +504,7 @@ begin
   Result := GetConnection.CreateStatementWithParams(Info);
 end;
 
-function TZDbcPooledConnection.EscapeString(Value: RawByteString): RawByteString;
+function TZDbcPooledConnection.EscapeString(const Value: RawByteString): RawByteString;
 begin
   Result := GetConnection.EscapeString(Value);
 end;
@@ -603,6 +609,11 @@ begin
   GetConnection.PrepareTransaction(transactionid);
 end;
 
+procedure TZDbcPooledConnection.RegisterStatement(const Value: IZStatement);
+begin
+  GetConnection.RegisterStatement(Value);
+end;
+
 procedure TZDbcPooledConnection.Rollback;
 begin
   GetConnection.Rollback;
@@ -682,7 +693,7 @@ begin
   Result := GetConnection.GetBinaryEscapeString(Value);
 end;
 
-function TZDbcPooledConnection.GetBinaryEscapeString(const Value: TByteDynArray): String;
+function TZDbcPooledConnection.GetBinaryEscapeString(const Value: TBytes): String;
 begin
   Result := GetConnection.GetBinaryEscapeString(Value);
 end;
@@ -699,7 +710,7 @@ end;
 
 function TZDbcPooledConnection.GetEncoding: TZCharEncoding;
 begin
-  Result := ConSettings.ClientCodePage^.Encoding;
+  Result := ConSettings^.ClientCodePage^.Encoding;
 end;
 
 function TZDbcPooledConnection.GetConSettings: PZConSettings;
@@ -729,7 +740,12 @@ end;
 }
 function TZDbcPooledConnection.GetClientCodePageInformations: PZCodePage; //EgonHugeist
 begin
-  Result := ConSettings.ClientCodePage
+  Result := ConSettings^.ClientCodePage
+end;
+
+function TZDbcPooledConnection.GetClientVariantManager: IZClientVariantManager;
+begin
+  Result := GetConnection.GetClientVariantManager;
 end;
 
 { TZDbcPooledConnectionDriver }
@@ -761,17 +777,14 @@ var
   TempURL: TZURL;
   I: Integer;
   ConnectionPool: TConnectionPool;
-  ConnetionTimeout: Integer;
+  ConnectionTimeout: Integer;
   MaxConnections: Integer;
   Wait: Boolean;
 begin
   Result := nil;
 
-  TempURL := TZURL.Create;
+  TempURL := TZURL.Create(GetEmbeddedURL(URL.URL), URL.Properties);
   try
-    TempURL.URL := GetEmbeddedURL(URL.URL);
-    TempURL.Properties.Text := URL.Properties.Text;
-
     ConnectionPool := nil;
 
 { TODO
@@ -794,10 +807,10 @@ begin
     //
     if ConnectionPool = nil then
     begin
-      ConnetionTimeout := StrToIntDef(TempURL.Properties.Values['ConnectionTimeout'], 0);
+      ConnectionTimeout := StrToIntDef(TempURL.Properties.Values['ConnectionTimeout'], 0);
       MaxConnections := StrToIntDef(TempURL.Properties.Values['MaxConnections'], 0);
       Wait := StrToBoolDef(TempURL.Properties.Values['Wait'], True);
-      ConnectionPool := TConnectionPool.Create(TempURL.URL, ConnetionTimeout, MaxConnections, Wait);
+      ConnectionPool := TConnectionPool.Create(TempURL.URL, ConnectionTimeout, MaxConnections, Wait);
       PoolList.Add(ConnectionPool);
       URLList.Add(TempURL.URL);
     end;
@@ -882,7 +895,7 @@ begin
         if (FConnectionPool.FConnections[I] <> nil) and
            (not FConnectionPool.FSlotsInUse[I]) and
            (FConnectionPool.FConnectionsReturnTimes[I] <> 0) and
-           (MilliSecondsBetween(FConnectionPool.FConnectionsReturnTimes[I], Now) > FConnectionPool.FConnectionTimeout * 1000) then
+           (MilliSecondsBetween(FConnectionPool.FConnectionsReturnTimes[I], Now) {%H-}> FConnectionPool.FConnectionTimeout * 1000) then
              FConnectionPool.FConnections[I] := nil;
     finally
       FConnectionPool.FCriticalSection.Leave;
@@ -897,5 +910,6 @@ initialization
 finalization
   DriverManager.DeregisterDriver(_Driver);
 
+{$ENDIF ZEOS_DISABLE_POOLED} //if set we have an empty unit
 end.
 

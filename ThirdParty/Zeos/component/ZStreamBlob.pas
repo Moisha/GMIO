@@ -78,7 +78,7 @@ type
 
 implementation
 
-uses ZEncoding;
+uses ZFastCode, ZSysUtils, ZEncoding;
 
 { TZBlobStream }
 
@@ -89,7 +89,8 @@ uses ZEncoding;
 constructor TZBlobStream.Create(Field: TBlobField; Blob: IZBlob;
   Mode: TBlobStreamMode; ConSettings: PZConSettings);
 var
-  TempStream: TStream;
+  Buffer: Pointer;
+  ASize: Integer;
 begin
   inherited Create;
 
@@ -97,17 +98,36 @@ begin
   FMode := Mode;
   FField := Field;
   FConSettings := ConSettings;
-  if (Mode in [bmRead, bmReadWrite]) and not Blob.IsEmpty then
+
+  if (Mode in [bmRead, bmReadWrite] ) and not Blob.IsEmpty then
   begin
-    TempStream := Blob.GetStream;
-    try
-      TempStream.Position := 0;
-      CopyFrom(TempStream, TempStream.Size);
+    if Blob.IsClob then
+      case Field.DataType of
+        ftMemo, ftFmtMemo:
+          if FConSettings^.AutoEncode then
+            Buffer := Blob.GetPAnsiChar(FConSettings^.CTRL_CP)
+          else
+            Buffer := Blob.GetPAnsiChar(FConSettings^.ClientCodePage^.CP);
+        {$IFDEF WITH_WIDEMEMO}
+        ftWideMemo:
+          Buffer := Blob.GetPWideChar;
+        {$ENDIF}
+        else
+          Buffer := Blob.GetBuffer;
+      end
+    else
+      Buffer := Blob.GetBuffer;
+    ASize := Blob.Length;
+    {$IFNDEF WITH_MM_CAN_REALLOC_EXTERNAL_MEM}
+    if Mode = bmReadWrite then
+    begin
+      WriteBuffer(Buffer^, ASize); //something courrupts the FPC-Memory-Manager here??? D7??
       Position := 0;
-    finally
-      TempStream.Free;
-    end;
-  end
+    end
+    else
+    {$ENDIF}
+      SetPointer(Buffer, ASize);
+  end;
 end;
 
 type THackedDataset = class(TDataset);
@@ -116,35 +136,76 @@ type THackedDataset = class(TDataset);
   Destroys this object and cleanups the memory.
 }
 destructor TZBlobStream.Destroy;
-{$IFDEF WITH_WIDEMEMO}
 var
-  TempStream: TStream;
-{$ENDIF}
+  UnCachedLob: IZUnCachedLob;
+  RawCP: Word;
 begin
   if Mode in [bmWrite, bmReadWrite] then
   begin
-    if Assigned(Self.Memory) then
-    begin
-    {$IFDEF WITH_WIDEMEMO}
-      if FField.DataType = ftWideMemo then
-      begin
-        TempStream := GetValidatedUnicodeStream(Memory, Cardinal(Size),
-          FConSettings, False);
-        Blob.SetStream(TempStream, True);
-        TempStream.Free;
-      end
-      else
-    {$ENDIF}
-      Blob.SetStream(Self)
-    end
-    else
-      Blob.SetStream(nil);
-    try
+    Self.Position := 0;
+    {EH: speed upgrade:
+     instead of moving mem from A to B i set the mem-pointer to the lobs instead.
+     But we have to validate the mem if required.. }
+
+    if Memory <> nil then begin
+      case FField.DataType of
+        {$IFDEF WITH_WIDEMEMO}
+        { EH: i've omitted a ancoding detection for the UTF16 encoding that fails in all areas }
+        ftWideMemo: Blob.SetPWideChar(Memory, Size div 2);
+        {$ENDIF}
+        ftMemo:
+          if Blob.IsClob then
+            {EH: not happy about this part. TBlobStream.LoadFromFile loads single encoded strings
+            but if the Data is set by a Memo than we've got two-byte encoded strings.
+            So there is NO way around to test this encoding. Acutally i've no idea about a more exact way
+            than going this route...}
+            if FConSettings^.AutoEncode then
+              case ZDetectUTF8Encoding(Memory, Size) of  //testencoding adds one leading null bytes
+                etUSASCII: //us ascii found, use faster conversion
+                  Blob.SetPAnsiChar(Memory, ZEncoding.zCP_us_ascii, Size);
+                etAnsi: begin
+                    if (ZCompatibleCodePages(FConSettings^.ClientCodePage^.CP, zCP_UTF8)) then
+                      if (ZCompatibleCodePages(FConSettings^.CTRL_CP, zCP_UTF8)) then
+                        if (ZCompatibleCodePages(ZOSCodePage, zCP_UTF8)) then
+                        {no idea what to do with ansiencoding, if everything if set to UTF8!}
+                          RawCP := zCP_UTF8 //all convertions would fail so.. let the server raise an error!
+                        else RawCP := ZOSCodePage
+                      else RawCP := FConSettings^.CTRL_CP
+                    else RawCP := FConSettings^.ClientCodePage^.CP;
+                    Blob.SetPAnsiChar(Memory, RawCP, Size);
+                  end;
+                etUTF8:
+                  Blob.SetPAnsiChar(Memory, ZEncoding.zCP_UTF8, Size);
+              end
+            else
+              Blob.SetPAnsiChar(Memory, FConSettings^.ClientCodePage^.CP, Size)
+          else begin
+            {$IFDEF WITH_MM_CAN_REALLOC_EXTERNAL_MEM} //set data directly -> no move
+            Blob.SetBlobData(Memory, Size);
+            SetPointer(nil, 0); //don't forget! Keep Lob mem alive!
+            {$ELSE} //need to move data
+            Blob.SetBuffer(Memory, Size);
+            {$ENDIF}
+          end
+        else begin//ftBLOB
+          {$IFDEF WITH_MM_CAN_REALLOC_EXTERNAL_MEM} //set data directly -> no move
+          Blob.SetBlobData(Memory, Size);
+          SetPointer(nil, 0); //don't forget! Keep Lob mem alive!
+          {$ELSE} //need to move data
+          Blob.SetBuffer(Memory, Size);
+          {$ENDIF}
+        end;
+      end; {case ...}
+    end else { if Memory <> nil then}
+      Blob.Clear;
+    //try
       if Assigned(FField.Dataset) then
-        THackedDataset(FField.DataSet).DataEvent(deFieldChange, ULong(FField));
-    except
-        ApplicationHandleException(Self);
-    end;
+        THackedDataset(FField.DataSet).DataEvent(deFieldChange, NativeInt(FField));
+    //except ApplicationHandleException(Self); end; //commented see https://sourceforge.net/p/zeoslib/tickets/226/
+  end else begin
+    SetPointer(nil, 0); //don't forget! Keep Lob mem alive!
+    if Supports(Blob, IZUnCachedLob, UnCachedLob) then
+      UnCachedLob.FlushBuffer;
   end;
   inherited Destroy;
 end;

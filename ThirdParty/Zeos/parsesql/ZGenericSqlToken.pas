@@ -57,9 +57,32 @@ interface
 
 uses
   Classes, {$IFDEF MSEgui}mclasses,{$ENDIF} SysUtils,
-  ZTokenizer, ZCompatibility;
+  ZSysUtils, ZTokenizer, ZCompatibility;
 
 type
+
+  {**
+    Implements a number state object.
+    Depending on the FSupportsHex flag it could read hex values.
+    It is base abstract class that shouldn't be used.
+  }
+  TZGenericBaseNumberState = class (TZNumberState)
+  private
+    FSupportsHex: Boolean;
+  public
+    function NextToken(Stream: TStream; FirstChar: Char;
+      Tokenizer: TZTokenizer): TZToken; override;
+  end;
+
+  TZGenericSQLNoHexNumberState = class (TZGenericBaseNumberState)
+  public
+    constructor Create;
+  end;
+
+  TZGenericSQLHexNumberState = class (TZGenericBaseNumberState)
+  public
+    constructor Create;
+  end;
 
   {** Implements a symbol state object. }
   TZGenericSQLSymbolState = class (TZSymbolState)
@@ -80,19 +103,170 @@ type
   TZGenericSQLQuoteState = class (TZQuoteState)
   public
     function NextToken(Stream: TStream; FirstChar: Char;
-      Tokenizer: TZTokenizer): TZToken; override;
+      {%H-}Tokenizer: TZTokenizer): TZToken; override;
 
     function EncodeString(const Value: string; QuoteChar: Char): string; override;
     function DecodeString(const Value: string; QuoteChar: Char): string; override;
   end;
 
+  {** Implements a comment state object.
+    Processes common SQL comments like -- and /* */
+  }
+  TZGenericSQLCommentState = class (TZCppCommentState)
+  public
+    function NextToken(Stream: TStream; FirstChar: Char;
+      Tokenizer: TZTokenizer): TZToken; override;
+  end;
+
   {** Implements a default tokenizer object. }
   TZGenericSQLTokenizer = class (TZTokenizer)
-  public
-    constructor Create;
+  protected
+    procedure CreateTokenStates; override;
   end;
 
 implementation
+
+{$IFDEF FAST_MOVE}uses ZFastCode;{$ENDIF}
+
+{ TZGenericBaseNumberState }
+
+function TZGenericBaseNumberState.NextToken(Stream: TStream; FirstChar: Char;
+  Tokenizer: TZTokenizer): TZToken;
+var
+  LastChar: Char;
+
+  // Uses external variables: Stream, LastChar, Result.Value
+  procedure ReadDecDigits;
+  begin
+    LastChar := #0;
+    while Stream.Read(LastChar, SizeOf(Char)) > 0 do
+      if CharInSet(LastChar, ['0'..'9']) then
+      begin
+        ToBuf(LastChar, Result.Value);
+        LastChar := #0;
+      end
+      else
+      begin
+        Stream.Seek(-SizeOf(Char), soFromCurrent);
+        Break;
+      end;
+  end;
+
+  // Uses external variables: Stream, LastChar, Result.Value
+  procedure ReadHexDigits;
+  begin
+    LastChar := #0;
+    while Stream.Read(LastChar, SizeOf(Char)) > 0 do
+      if CharInSet(LastChar, ['0'..'9','a'..'f','A'..'F']) then
+      begin
+        ToBuf(LastChar, Result.Value);
+        LastChar := #0;
+      end
+      else
+      begin
+        Stream.Seek(-SizeOf(Char), soFromCurrent);
+        Break;
+      end;
+  end;
+
+  // Uses external variables: Stream, LastChar, Result.Value
+  procedure ReadExp;
+  begin
+    Stream.Read(LastChar, SizeOf(Char));
+    ToBuf(LastChar, Result.Value);
+
+    Stream.Read(LastChar, SizeOf(Char));
+    if CharInSet(LastChar, ['0'..'9','-','+']) then
+    begin
+      ToBuf(LastChar, Result.Value);
+      ReadDecDigits;
+    end
+    else
+    begin
+      FlushBuf(Result.Value);
+      SetLength(Result.Value, Length(Result.Value) - 1);
+      Stream.Seek(-2*SizeOf(Char), soFromCurrent);
+    end;
+  end;
+
+var
+  HexDecimal: Boolean;
+  FloatPoint: Boolean;
+begin
+  HexDecimal := False;
+  FloatPoint := FirstChar = '.';
+  LastChar := #0;
+
+  Result.Value := '';
+  InitBuf(FirstChar);
+  Result.TokenType := ttUnknown;
+
+  { Reads the first part of the number before decimal point }
+  if not FloatPoint then
+  begin
+    ReadDecDigits;
+    FloatPoint := (LastChar = '.');
+    if FloatPoint then
+    begin
+      Stream.Read(LastChar, SizeOf(Char));
+      ToBuf(LastChar, Result.Value);
+    end;
+  end;
+
+  { Reads the second part of the number after decimal point }
+  if FloatPoint then
+    ReadDecDigits;
+
+  { Reads a power part of the number }
+  if (Ord(LastChar) or $20) = ord('e') then //CharInSet(LastChar, ['e','E']) then
+  begin
+    FloatPoint := True;
+    ReadExp;
+  end;
+
+  { Reads the hexadecimal number }
+  if FSupportsHex then
+  begin
+    if (Result.Value = '') and (FirstChar = '0') and
+      ((Ord(LastChar) or $20) = ord('x')) then //CharInSet(LastChar, ['x','X']) then
+    begin
+      Stream.Read(LastChar, SizeOf(Char));
+      ToBuf(LastChar, Result.Value);
+      ReadHexDigits;
+      HexDecimal := True;
+    end;
+  end;
+  FlushBuf(Result.Value);
+
+  { Prepare the result }
+  if Result.Value = '.' then
+  begin
+    if Tokenizer.SymbolState <> nil then
+      Result := Tokenizer.SymbolState.NextToken(Stream, FirstChar, Tokenizer);
+  end
+  else if HexDecimal then
+    Result.TokenType := ttHexDecimal
+  else if FloatPoint then
+    Result.TokenType := ttFloat
+  else
+    Result.TokenType := ttInteger;
+end;
+
+{ TZGenericSQLNoHexNumberState }
+
+constructor TZGenericSQLNoHexNumberState.Create;
+begin
+  inherited;
+  FSupportsHex := False;
+end;
+
+{ TZGenericSQLHexNumberState }
+
+constructor TZGenericSQLHexNumberState.Create;
+begin
+  inherited;
+  FSupportsHex := True;
+end;
 
 { TZGenericSQLSymbolState }
 
@@ -145,13 +319,10 @@ begin
   Temp := UpperCase(Result.Value);
 
   for I := Low(Keywords) to High(Keywords) do
-  begin
-    if Temp = Keywords[I] then
-    begin
+    if Temp = Keywords[I] then begin
       Result.TokenType := ttKeyword;
       Break;
     end;
-  end;
 end;
 
 
@@ -164,118 +335,73 @@ end;
 
   @return a quoted string token from a reader
 }
-{$IFDEF FPC}
-  {$HINTS OFF}
-{$ENDIF}
 function TZGenericSQLQuoteState.NextToken(Stream: TStream;
   FirstChar: Char; Tokenizer: TZTokenizer): TZToken;
 var
-  ReadChar: Char;
-  LastChar: Char;
-  ReadCounter, NumericCounter, CountDoublePoint, CountSlash, CountSpace : integer;
+  ReadChar, LastChar: Char;
+  ReadCounter, NumericCounter, TimeSepCount, DateSepCount, SpaceCount: integer;
 begin
-  Result.Value := FirstChar;
+  Result.Value := '';
+  InitBuf(FirstChar);
   LastChar := #0;
-  CountDoublePoint := 0;
-  CountSlash := 0;
-  CountSpace := 0;
+  TimeSepCount := 0;
+  DateSepCount := 0;
+  SpaceCount := 0;
   ReadCounter := 0;
   NumericCounter := 0;
 
-  while Stream.Read(ReadChar, SizeOf(Char)) > 0 do
+  while Stream.Read(ReadChar{%H-}, SizeOf(Char)) > 0 do
   begin
     if (LastChar = FirstChar) and (ReadChar <> FirstChar) then
     begin
       Stream.Seek(-SizeOf(Char), soFromCurrent);
       Break;
     end;
-    if ReadChar = {$IFDEF WITH_FORMATSETTINGS}FormatSettings.{$ENDIF}TimeSeparator then
-      inc(CountDoublePoint)
-    else if ReadChar = {$IFDEF WITH_FORMATSETTINGS}FormatSettings.{$ENDIF}DateSeparator then
-      inc(CountSlash)
-    else if ReadChar = ' ' then
-      inc(CountSpace)
-    else if CharInSet(ReadChar, ['0'..'9']) then
-      inc(NumericCounter);
+    inc(TimeSepCount, Ord(ReadChar = {$IFDEF WITH_FORMATSETTINGS}FormatSettings.{$ENDIF}TimeSeparator));
+    inc(DateSepCount, Ord(ReadChar = {$IFDEF WITH_FORMATSETTINGS}FormatSettings.{$ENDIF}DateSeparator));
+    inc(SpaceCount, Ord(ReadChar = ' '));
+    inc(NumericCounter, Ord(Ord(ReadChar) in [Ord('0')..Ord('9')]));
     Inc(ReadCounter);
 
-    Result.Value := Result.Value + ReadChar;
-    if (LastChar = FirstChar) and (ReadChar = FirstChar) then
-      LastChar := #0
+    ToBuf(ReadChar, Result.Value);
+    if (LastChar = FirstChar) and (ReadChar = FirstChar)
+    then LastChar := #0
     else LastChar := ReadChar;
   end;
+  FlushBuf(Result.Value);
 
   if FirstChar = '"' then
     Result.TokenType := ttWord
   else Result.TokenType := ttQuoted;
 
-  // Time constant
-  if (CountDoublePoint = 2) and (CountSlash = 0) and
-    ((NumericCounter + CountDoublePoint) = ReadCounter-1) then
-  begin
-    try
+  if (TimeSepCount = 2) and (DateSepCount = 0) and // test Time constant
+    ((NumericCounter + TimeSepCount) = ReadCounter-1) then 
+    try //D7 seems to make trouble here: TestDateTimeFilterExpression but why?? -> use a define instead
+    //EH: Is this correct??? This method uses Formatsettings which may differ to given Format!
       if StrToTimeDef(DecodeString(Result.Value, FirstChar), 0) = 0 then
         Exit;
       Result.Value := DecodeString(Result.Value,'"');
       Result.TokenType := ttTime;
-    except
-    end;
-  end;
-  // Date constant
-  if (CountDoublePoint = 0) and (CountSlash = 2) and
-    ((NumericCounter + CountSlash) = ReadCounter-1) then
-  begin
-    try
+    except end
+  else if (TimeSepCount = 0) and (DateSepCount = 2) and // test Date constant
+    ((NumericCounter + DateSepCount) = ReadCounter-1) then 
+    try //D7 seems to make trouble here: TestDateTimeFilterExpression but why?? -> use a define instead
+      //EH: Is this correct??? This method uses Formatsettings which may differ to given Format!
       if StrToDateDef(DecodeString(Result.Value, FirstChar), 0) = 0 then
         Exit;
       Result.Value := DecodeString(Result.Value,'"');
       Result.TokenType := ttDate;
-    except
-    end;
-  end;
-
-  // DateTime constant
-  if (CountDoublePoint = 2) and (CountSlash = 2) and
-    ((NumericCounter + CountDoublePoint + CountSlash + CountSpace) = ReadCounter-1) then
-  begin
-    try
+    except end
+  else if (TimeSepCount = 2) and (DateSepCount = 2) and // test DateTime constant
+    ((NumericCounter + TimeSepCount + DateSepCount + SpaceCount) = ReadCounter-1) then
+    try //D7 seems to make trouble here: TestDateTimeFilterExpression but why?? -> use a define instead
+      //EH: Is this correct??? This method uses Formatsettings which may differ to given Format!
       if StrToDateTimeDef(DecodeString(Result.Value, FirstChar), 0) = 0 then
         Exit;
       Result.Value := DecodeString(Result.Value,'"');
       Result.TokenType := ttDateTime;
-    except
-    end;
-  end;
-
-  if not ( Result.TokenType in [ttQuoted, ttWord] ) then
-    Exit;
-  
-  //No System-defaults found, Check for SQL format;
-  {AStamp := TimestampStrToDateTime(DecodeString(Result.Value, FirstChar)); //minimize the handling
-  if AStamp = 0 then
-    Exit
-  else
-    if ( TDate(AStamp) <> EmptyDate ) then
-      if ( TTime(AStamp) <> EmptyTime ) then
-      begin
-        Result.Value := DateTimeToStr(AStamp);
-        Result.TokenType := ttDateTime;
-      end
-      else
-      begin
-        Result.Value := DateToStr(AStamp);
-        Result.TokenType := ttDate;
-      end
-    else
-      if ( TTime(AStamp) <> EmptyTime ) then
-      begin
-        Result.Value := TimeToStr(AStamp);
-        Result.TokenType := ttTime;
-      end;}
+    except end
 end;
-{$IFDEF FPC}
-  {$HINTS ON}
-{$ENDIF}
 
 {**
   Encodes a string value.
@@ -286,8 +412,8 @@ end;
 function TZGenericSQLQuoteState.EncodeString(const Value: string;
   QuoteChar: Char): string;
 begin
-  if CharInSet(QuoteChar, [#39, '"', '`']) then
-    Result := AnsiQuotedStr(Value, QuoteChar)
+  if Ord(QuoteChar) in [Ord(#39), Ord('"'), Ord('`')]
+  then Result := SQLQuotedStr(Value, QuoteChar)
   else Result := Value;
 end;
 
@@ -301,25 +427,71 @@ function TZGenericSQLQuoteState.DecodeString(const Value: string;
   QuoteChar: Char): string;
 var
   Len: Integer;
+  P: PChar;
 begin
   Len := Length(Value);
-  if (Len >= 2) and CharInSet(QuoteChar, [#39, '"', '`'])
-    and (Value[1] = QuoteChar) and (Value[Len] = QuoteChar) then
-  begin
-    if Len > 2 then
-      Result := AnsiDequotedStr(Value, QuoteChar)
-    else Result := '';
-  end
+  P := Pointer(Value);
+  if (Len >= 2) and (Ord(QuoteChar) in [Ord(#39), Ord('"'), Ord('`')]) and
+    (P^ = QuoteChar) and ((P+Len-1)^ = QuoteChar)
+  then if Len > 2
+    then Result := AnsiDequotedStr(Value, QuoteChar)
+    else Result := ''
   else Result := Value;
+end;
+
+{ TZGenericSQLCommentState }
+
+function TZGenericSQLCommentState.NextToken(Stream: TStream; FirstChar: Char;
+  Tokenizer: TZTokenizer): TZToken;
+var
+  ReadChar: Char;
+  ReadNum: Integer;
+begin
+  InitBuf(FirstChar);
+  Result.Value := '';
+  Result.TokenType := ttUnknown;
+
+  case FirstChar of
+    '-':
+      begin
+        ReadNum := Stream.Read(ReadChar{%H-}, SizeOf(Char));
+        if ReadNum > 0 then
+          if ReadChar = '-' then
+          begin
+            Result.TokenType := ttComment;
+            ToBuf(ReadChar, Result.Value);
+            GetSingleLineComment(Stream, Result.Value);
+          end
+          else
+            Stream.Seek(-SizeOf(Char), soFromCurrent);
+      end;
+    '/':
+      begin
+        ReadNum := Stream.Read(ReadChar{%H-}, SizeOf(Char));
+        if ReadNum > 0 then
+          if ReadChar = '*' then
+          begin
+            Result.TokenType := ttComment;
+            ToBuf(ReadChar, Result.Value);
+            GetMultiLineComment(Stream, Result.Value);
+          end
+          else
+            Stream.Seek(-SizeOf(Char), soFromCurrent);
+      end;
+  end;
+
+  if (Result.TokenType = ttUnknown) and (Tokenizer.SymbolState <> nil) then
+    Result := Tokenizer.SymbolState.NextToken(Stream, FirstChar, Tokenizer)
+  else
+    FlushBuf(Result.Value);
 end;
 
 { TZGenericSQLTokenizer }
 
 {**
-  Constructs a tokenizer with a default state table (as
-  described in the class comment).
+  Constructs a default state table (as described in the class comment).
 }
-constructor TZGenericSQLTokenizer.Create;
+procedure TZGenericSQLTokenizer.CreateTokenStates;
 begin
   NumberState := TZNumberState.Create;
   QuoteState := TZGenericSQLQuoteState.Create;
@@ -346,6 +518,7 @@ begin
   SetCharacterState('`', '`', QuoteState);
 
   SetCharacterState('/', '/', CommentState);
+  SetCharacterState('-', '-', CommentState);
 end;
 
 end.

@@ -41,8 +41,38 @@
 {********************************************************@}
 // Compilation directives for Lazarus
 
-{$DEFINE WITH_UNIDIRECTIONALBUG} //still buggy with IsUnidirectional prop of TDataSet FPC still moves the recordBuffer-> visit TestReadOnlyQueryUniDirectional and TZAbstractRODataset.GetRecord
+// Suppress some FPC hints that are known to be false
+{$WARN 4055 off : Conversion between ordinals and pointers is not portable} //suppress compiler buggy warning -> our Native(U)Int is Pointer size aligned
+{$WARN 4056 off : Conversion between ordinals and pointers is not portable}
+{$WARN 5093 off : function result variable of a managed type does not seem to be initialized} //suppress warning - we suppose all managed types are init'd as empty
+{$WARN 5094 off : function result variable of a managed type does not seem to be initialized}
+{$WARN 5089 off : Local variable "$1" of a managed type does not seem to be initialized}
+{$WARN 5090 off : Variable "$1" of a managed type does not seem to be initialized}
+{$WARN 5091 off : Local variable "$1" of a managed type does not seem to be initialized}
 
+{$DEFINE PUREPASCAL}
+
+{.$DEFINE WITH_VARIANT_UINT64}         // System.TVariant supports UInt64 Values
+{$DEFINE WITH_VARIANT_UNICODESTRING}  // System.TVariant supports UnicodeString Values
+{$DEFINE WITH_TFIELD_FREEBUFFERS} //TField has virtual FreeBuffers procedure
+{$DEFINE TFIELD_HAS_ASBYTES}          // TField.AsBytes is supported
+{$DEFINE TFIELD_HAS_ASLARGEINT}       // TField-baseclass hase AsLargeIntProperty
+{$DEFINE HAVE_UNKNOWN_CIRCULAR_REFERENCE_ISSUES} //seems FPC behaves different to Delphi. Some weired ref issues arrive if Ancastor units using Descendants in implementation uses section??
+{$DEFINE HAVE_BCDTOSTR_FORMATSETTINGS} //(Try)BCDToStr/StrToBCD has parameter FormatSettings
+{$DEFINE NEED_TYPED_UINT64_CONSTANTS}
+{$DEFINE WITH_PUREPASCAL_INTPOWER}
+{$DEFINE TFIELD_ASWIDESTRING_IS_WIDESTRING}
+{$DEFINE HAVE_CS_TRYENTER} //TCriticalSection has method TryEnter
+{$IFDEF SYSTEMINLINE} //global FPC define
+  {$DEFINE WITH_INLINE}           // compiler supports inline methodes
+{$ENDIF}
+{$DEFINE WITH_UNIDIRECTIONALBUG} //still buggy with IsUnidirectional prop of TDataSet FPC still moves the recordBuffer-> visit TestReadOnlyQueryUniDirectional and TZAbstractRODataset.GetRecord
+{$IFNDEF MSWINDOWS}
+ {$DEFINE USE_RAW2WIDE_PROCS} //FPC is really not optimal with code generation use MultibultToWidechar instead for known CP's
+{$ENDIF}
+{$IFNDEF CPU386}
+  {$DEFINE WITH_IE200706094} //Fatal: Internal error 200706094 see: http://zeoslib.sourceforge.net/viewtopic.php?f=40&t=11096#p34381
+{$ENDIF}
 // These are in a spearate file as Delphi compilers don't digest the macros stuff very well
 {$MACRO ON}             // Macros needed for FPC_VERSION and FPC_RELEASE
   {$MODE DELPHI}
@@ -53,10 +83,7 @@
       {$DEFINE OLDFPC}
     {$IFEND}
 
-//    {$IF FPC_FULLVERSION>=20400}  // 2.4.0 status is unknown. 2.4.2+ should be generally fine.
-//      {$DEFINE FPC2_4UP}
-//    {$IFEND}
-
+    {$DEFINE WITH_PARAM_ASLARGEINT} //supportet since FPC 2.0.4 -> see http://zeoslib.sourceforge.net/viewtopic.php?p=68484#p68484
     {$DEFINE WITH_FTWIDESTRING}  // Supported from somewhere between 2.2 and 2.4
 
     {$IF FPC_FULLVERSION>=20500}  // Upgrade to 2.6.x asap.
@@ -65,20 +92,27 @@
       {$DEFINE WITH_IPROVIDER}
     {$IFEND}
     {$IF FPC_FULLVERSION>=20600}  // assumes 2.5.1 pretty close to 2.6.0. Summer 2011 or newer
+       {$DEFINE WITH_INC_PBYTE_SUPPORT}  // Compiler supports incrementing PByte-Pointer
        {$DEFINE WITH_WIDEMEMO}
        {$DEFINE WITH_ASLARGEINT}      // tlargeint aslargeint. Fixed 2.6.0+ or 2.6.2+ probably
        {$DEFINE WITH_ASCURRENCY}      // Has AsCurrency.
        {$DEFINE WITH_ASVARIANT}
        {$DEFINE WITH_FORMATSETTINGS}
-       {$DEFINE WITH_WIDEFIELDS}	// Wide-fields are supported (common define for ftWideString/ftWideMemo)
+       {$DEFINE WITH_WIDEFIELDS}      // Wide-fields are supported (common define for ftWideString/ftWideMemo)
        {$DEFINE PWIDECHAR_IS_PUNICODECHAR}
        {$DEFINE WITH_FTGUID} //TStringField descendant TGuidField is supported 
        {$DEFINE FPC2_6UP}
     {$IFEND}
 
-    {$IF FPC_FULLVERSION>=20602}
-       {$DEFINE HAVE_TBYTES}         // TBytes is declared only in FPC 2.6.2 instead of 2.6.0 as declared...
+    {$IF FPC_FULLVERSION>=30000}
+       {$DEFINE FPC3_0UP}
+	{$ELSE}
+       {$DEFINE FPC2_6DOWN}	
     {$ENDIF}
+	
+	{$IF FPC_FULLVERSION>=30200}
+	   {$UNDEF MISS_MATH_NATIVEUINT_MIN_MAX_OVERLOAD}
+	{$ENDIF}
 
     {$IFDEF LCL}
       {$DEFINE WITH_LCONVENCODING} //Only available for Lazarus
@@ -88,7 +122,6 @@
     {$DEFINE WITH_FPC_FTTIME_BUG} //http://zeos.firmos.at/viewtopic.php?t=3534&postdays=0&postorder=asc&start=0
     {$DEFINE WITH_FPC_BOF_BUG} //http://bugs.freepascal.org/view.php?id=22377
     {$DEFINE WITH_FPC_MODIFIED_BUG} //http://bugs.freepascal.org/view.php?id=22381
-    {$DEFINE WITHOUT_VARBYTESASSTRING}
     {$DEFINE WITH_PWIDECHAR_TOWIDESTRING}
     {$DEFINE WITH_CLASS_VARS}
   {$ELSE}
@@ -100,23 +133,36 @@
   {$IFDEF FPC_FULLVERSION>20601}
     {$UNDEF WITH_FPC_FTTIME_BUG} //seems like the never FPC2.6.2 also have fixed the NativData bug for TTimeFields+TDataSet
   {$ENDIF}
-  {$IF FPC_FULLVERSION>20602}       // will be introduced in 2.6.2 (and up to date 2.6.1)
-    {$DEFINE WITH_INLINE}           // compiler supports inline methodes
-  {$IFEND}
   {$IF FPC_FULLVERSION>20700}       // will be introduced in 2.7+
-    {$DEFINE WITH_TRECORDBUFFER}
-    {$DEFINE WITH_TBOOKMARK}        // Have TBookmark
+    {$ifndef MSEgui} 
+      {$DEFINE WITH_TBOOKMARK}        // Have TBookmark
+    {$endif}
+    {$DEFINE TFIELD_HAS_ASBYTES}          // TField.AsBytes is supported
+    {$DEFINE TFIELD_HAS_ASLARGEINT}  // TFIeld.AsLargeInt is supported
     {$UNDEF WITH_FPC_BOF_BUG}
     {$UNDEF WITH_FPC_MODIFIED_BUG}
     {$DEFINE WITH_RAWBYTESTRING}          // Have RawByteString CP $FFFFF
-    {$DEFINE WITH_FPC_STRING_CONVERSATION} //After string conversations to RawByteString like AnsiZoUTF8 the results are equal to original value
+    {$DEFINE WITH_FPC_STRING_CONVERSION} //After string conversions to RawByteString like AnsiToUTF8 the results are equal to original value
     {$DEFINE WITH_DEFAULTSYSTEMCODEPAGE}
     {$DEFINE MISS_RBS_SETSTRING_OVERLOAD} //SetString overload for RawByteString is missing
     {$IFNDEF FPC_HAS_BUILTIN_WIDESTR_MANAGER} //Hack for *nix systems where i couldn't locate this define )):
       {$DEFINE FPC_HAS_BUILTIN_WIDESTR_MANAGER}
     {$ENDIF}
+    {$DEFINE WITH_RAWBYTESTRING_CONVERSION_BUG} //2.7 gen did bad conversions with possible data-loss here
   {$IFEND}
-
+  {$IF FPC_FULLVERSION>30000}       // will be introduced in 3.0+
+    {.$UNDEF MISS_RBS_SETSTRING_OVERLOAD} //SetString overload for RawByteString is available now
+    {$DEFINE WITH_tagVARIANT_UINT64} //ActiveX tagVariant supports Int64/uInt64 values not sure about the proper FPC version here
+    {$DEFINE WITH_varUString} //Variant now supports refcounted UnicodeStrings
+    {$UNDEF WITH_RAWBYTESTRING_CONVERSION_BUG} //issue seems to be fixed
+    {$DEFINE WITH_VIRTUAL_TFIELD_BIND} //TField has procedure Bind(Binding: Boolean);
+    {$IF FPC_FULLVERSION>=30100}
+      {$WARN 6058 off : Call to subroutine "$1" marked as inline is not inlined} //suppress warning that marks all Variant operators f.ex.
+      
+      {$DEFINE WITH_ASANSISTRING} // TField.AsAnsiString is supported
+      {$DEFINE WITH_ASUTF8STRING} // TFIeld.AsUtf8String is supported
+    {$IFEND}
+  {$IFEND}
   // todo
   //   VIRTUALSETFIELDDATA: in nativeformat versions of SETFIELDDATA, inherited wasn't called.
   //                Afaik that methoid is virtual in FPC since December 2006, and there is no comment why

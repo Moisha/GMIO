@@ -56,28 +56,31 @@ interface
 {$I ZDbc.inc}
 
 uses
-{$IFDEF FPC}
-  {$IFDEF WIN32}
-    Comobj,
-  {$ENDIF}
-{$ENDIF}
-  Types, Classes, {$IFDEF MSEgui}mclasses,{$ENDIF} SysUtils, Contnrs,
+  Types, Classes, {$IFDEF MSEgui}mclasses,{$ENDIF} SysUtils,
+  {$IFNDEF NO_UNIT_CONTNRS}Contnrs,{$ENDIF}
   ZSysUtils, ZClasses, ZDbcIntfs, ZDbcResultSetMetadata, ZDbcCachedResultSet,
   ZDbcCache, ZCompatibility, ZSelectSchema, ZURL, ZDbcConnection;
 
-const
-  procedureColumnUnknown = 0;
-  procedureColumnIn = 1;
-  procedureColumnInOut = 2;
-  procedureColumnOut = 4;
-  procedureColumnReturn = 5;
-  procedureColumnResult = 3;
-  procedureNoNulls = 0;
-  procedureNullable = 1;
-  procedureNullableUnknown = 2;
+//commented out because we don't use them and because they have different ordinal values than TZProcedureColumnType
+//const
+//  procedureColumnUnknown = 0;
+//  procedureColumnIn = 1;
+//  procedureColumnInOut = 2;
+//  procedureColumnOut = 4;
+//  procedureColumnReturn = 5;
+//  procedureColumnResult = 3;
+//  procedureNoNulls = 0;
+//  procedureNullable = 1;
+//  procedureNullableUnknown = 2;
 
 type
-  TZWildcardsSet= {$IFDEF UNICODE}TSysCharSet{$ELSE}set of Char{$ENDIF};
+  TZWildcardsSet= {$IFDEF UNICODE}
+                    {$IFNDEF TSYSCHARSET_IS_DEPRECATED}
+                    TSysCharSet
+                    {$ELSE}
+                    array of Char
+                    {$ENDIF}
+                  {$ELSE} set of Char {$ENDIF};
 
   {** Defines a metadata resultset column definition. }
   TZMetadataColumnDef = {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}packed{$endif} record
@@ -99,46 +102,65 @@ type
   {** Implements Virtual ResultSet. }
   TZVirtualResultSet = class(TZAbstractCachedResultSet, IZVirtualResultSet)
   protected
-    procedure CalculateRowDefaults(RowAccessor: TZRowAccessor); override;
-    procedure PostRowUpdates(OldRowAccessor, NewRowAccessor: TZRowAccessor);
+    procedure CalculateRowDefaults({%H-}RowAccessor: TZRowAccessor); override;
+    procedure PostRowUpdates({%H-}OldRowAccessor, {%H-}NewRowAccessor: TZRowAccessor);
       override;
   public
-    constructor CreateWithStatement(const SQL: string; Statement: IZStatement;
+    constructor CreateWithStatement(const SQL: string; const Statement: IZStatement;
       ConSettings: PZConSettings);
     constructor CreateWithColumns(ColumnsInfo: TObjectList; const SQL: string;
       ConSettings: PZConSettings);
+  public
+    procedure ChangeRowNo(CurrentRowNo, NewRowNo: NativeInt);
+  end;
+
+  {** Implements Unclosable ResultSet which frees all memory if it's not referenced anymore. }
+  TZUnCloseableResultSet = class(TZVirtualResultSet)
+  private
+    fDoClose: Boolean;
+  public
+    procedure Close; override;
     destructor Destroy; override;
+    procedure ResetCursor; override;
   end;
 
   {** Implements Abstract Database Metadata. }
 
   { TZAbstractDatabaseMetadata }
-
   TZAbstractDatabaseMetadata = class(TContainedObject, IZDatabaseMetadata)
   private
     FConnection: Pointer;
     FUrl: TZURL;
     FCachedResultSets: IZHashMap;
     FDatabaseInfo: IZDatabaseInfo;
-    FConSettings: PZConSettings;
     FIC: IZIdentifierConvertor;
     function GetInfo: TStrings;
     function GetURLString: String;
-    function StripEscape(const Pattern: string): string;
-    function HasNoWildcards(const Pattern: string): boolean;
+  private
+    fCurrentBufIndex: Byte;
+    fBuf: Array[Byte] of Char;
+  protected
+    FConSettings: PZConSettings;
+    procedure InitBuf(FirstChar: Char); {$IFDEF WITH_INLINE}inline;{$ENDIF}
+    procedure ClearBuf; {$IFDEF WITH_INLINE}inline;{$ENDIF}
+    procedure FlushBuf(var Value: String); {$IFDEF WITH_INLINE}inline;{$ENDIF}
+    procedure ToBuf(C: Char; var Value: String); {$IFDEF WITH_INLINE}inline;{$ENDIF}
   protected
     FDatabase: String;
-    WildcardsArray: array of char; //Added by Cipto
+    WildcardsArray: {$IFDEF TSYSCHARSET_IS_DEPRECATED}TZWildcardsSet{$ELSE}array of char{$ENDIF}; //Added by Cipto
+    function StripEscape(const Pattern: string): string;
+    function HasNoWildcards(const Pattern: string): boolean;
     function EscapeString(const S: string): string; virtual;
     function DecomposeObjectString(const S: String): String; virtual;
     function CreateDatabaseInfo: IZDatabaseInfo; virtual; // technobot 2008-06-24
     function GetStatement: IZSTatement; // technobot 2008-06-28 - moved from descendants
 
     { Metadata ResultSets Caching. }
-    procedure AddResultSetToCache(const Key: string; ResultSet: IZResultSet);
+    procedure AddResultSetToCache(const Key: string; const ResultSet: IZResultSet);
     function GetResultSetFromCache(const Key: string): IZResultSet;
+    function HasKey(const Key: String): Boolean;
     function ConstructVirtualResultSet(ColumnsDefs: TZMetadataColumnDefs):
-      IZVirtualResultSet;
+      IZVirtualResultSet; virtual;
     function CopyToVirtualResultSet(SrcResultSet: IZResultSet;
       DestResultSet: IZVirtualResultSet): IZVirtualResultSet;
     function CloneCachedResultSet(ResultSet: IZResultSet): IZResultSet;
@@ -146,56 +168,55 @@ type
     function AddEscapeCharToWildcards(const Pattern:string): string;
     function GetWildcardsSet:TZWildcardsSet;
     procedure FillWildcards; virtual;
-    function NormalizePatternCase(Pattern:String): string;
+    function NormalizePatternCase(Pattern: String): string;
     property Url: string read GetURLString;
     property Info: TStrings read GetInfo;
     property CachedResultSets: IZHashMap read FCachedResultSets
       write FCachedResultSets;
-    property ConSettings: PZConSettings read FConSettings write FConSettings;
     property IC: IZIdentifierConvertor read FIC;
   protected
-    function UncachedGetTables(const Catalog: string; const SchemaPattern: string;
-      const TableNamePattern: string; const Types: TStringDynArray): IZResultSet; virtual;
+    function UncachedGetTables(const {%H-}Catalog: string; const {%H-}SchemaPattern: string;
+      const {%H-}TableNamePattern: string; const {%H-}Types: TStringDynArray): IZResultSet; virtual;
     function UncachedGetSchemas: IZResultSet; virtual;
     function UncachedGetCatalogs: IZResultSet; virtual;
     function UncachedGetTableTypes: IZResultSet; virtual;
-    function UncachedGetColumns(const Catalog: string; const SchemaPattern: string;
-      const TableNamePattern: string; const ColumnNamePattern: string): IZResultSet; virtual;
-    function UncachedGetTablePrivileges(const Catalog: string; const SchemaPattern: string;
-      const TableNamePattern: string): IZResultSet; virtual;
-    function UncachedGetColumnPrivileges(const Catalog: string; const Schema: string;
-      const Table: string; const ColumnNamePattern: string): IZResultSet; virtual;
+    function UncachedGetColumns(const {%H-}Catalog: string; const {%H-}SchemaPattern: string;
+      const {%H-}TableNamePattern: string; const {%H-}ColumnNamePattern: string): IZResultSet; virtual;
+    function UncachedGetTablePrivileges(const {%H-}Catalog: string; const {%H-}SchemaPattern: string;
+      const {%H-}TableNamePattern: string): IZResultSet; virtual;
+    function UncachedGetColumnPrivileges(const {%H-}Catalog: string; const {%H-}Schema: string;
+      const {%H-}Table: string; const {%H-}ColumnNamePattern: string): IZResultSet; virtual;
 
-    function UncachedGetPrimaryKeys(const Catalog: string; const Schema: string;
-      const Table: string): IZResultSet; virtual;
-    function UncachedGetImportedKeys(const Catalog: string; const Schema: string;
-      const Table: string): IZResultSet; virtual;
-    function UncachedGetExportedKeys(const Catalog: string; const Schema: string;
-      const Table: string): IZResultSet; virtual;
-    function UncachedGetCrossReference(const PrimaryCatalog: string; const PrimarySchema: string;
-      const PrimaryTable: string; const ForeignCatalog: string; const ForeignSchema: string;
-      const ForeignTable: string): IZResultSet; virtual;
-    function UncachedGetIndexInfo(const Catalog: string; const Schema: string; const Table: string;
-      Unique: Boolean; Approximate: Boolean): IZResultSet; virtual;
-    function UncachedGetSequences(const Catalog: string; const SchemaPattern: string;
-      const SequenceNamePattern: string): IZResultSet; virtual;
-    function UncachedGetTriggers(const Catalog: string; const SchemaPattern: string;
-      const TableNamePattern: string; const TriggerNamePattern: string): IZResultSet; virtual; //EgonHugeist
-    function UncachedGetCollationAndCharSet(const Catalog, SchemaPattern,
-      TableNamePattern, ColumnNamePattern: string): IZResultSet; virtual; //EgonHugeist
+    function UncachedGetPrimaryKeys(const {%H-}Catalog: string; const {%H-}Schema: string;
+      const {%H-}Table: string): IZResultSet; virtual;
+    function UncachedGetImportedKeys(const {%H-}Catalog: string; const {%H-}Schema: string;
+      const {%H-}Table: string): IZResultSet; virtual;
+    function UncachedGetExportedKeys(const {%H-}Catalog: string; const {%H-}Schema: string;
+      const {%H-}Table: string): IZResultSet; virtual;
+    function UncachedGetCrossReference(const {%H-}PrimaryCatalog: string; const {%H-}PrimarySchema: string;
+      const {%H-}PrimaryTable: string; const {%H-}ForeignCatalog: string; const {%H-}ForeignSchema: string;
+      const {%H-}ForeignTable: string): IZResultSet; virtual;
+    function UncachedGetIndexInfo(const {%H-}Catalog: string; const {%H-}Schema: string; const {%H-}Table: string;
+      {%H-}Unique: Boolean; {%H-}Approximate: Boolean): IZResultSet; virtual;
+    function UncachedGetSequences(const {%H-}Catalog: string; const {%H-}SchemaPattern: string;
+      const {%H-}SequenceNamePattern: string): IZResultSet; virtual;
+    function UncachedGetTriggers(const {%H-}Catalog: string; const {%H-}SchemaPattern: string;
+      const {%H-}TableNamePattern: string; const {%H-}TriggerNamePattern: string): IZResultSet; virtual; //EgonHugeist
+    function UncachedGetCollationAndCharSet(const {%H-}Catalog, {%H-}SchemaPattern,
+      {%H-}TableNamePattern, {%H-}ColumnNamePattern: string): IZResultSet; virtual; //EgonHugeist
     function UncachedGetCharacterSets: IZResultSet; virtual; //EgonHugeist
-    function UncachedGetProcedures(const Catalog: string; const SchemaPattern: string;
-      const ProcedureNamePattern: string): IZResultSet; virtual;
-    function UncachedGetProcedureColumns(const Catalog: string; const SchemaPattern: string;
-      const ProcedureNamePattern: string; const ColumnNamePattern: string):
+    function UncachedGetProcedures(const {%H-}Catalog: string; const {%H-}SchemaPattern: string;
+      const {%H-}ProcedureNamePattern: string): IZResultSet; virtual;
+    function UncachedGetProcedureColumns(const {%H-}Catalog: string; const {%H-}SchemaPattern: string;
+      const {%H-}ProcedureNamePattern: string; const {%H-}ColumnNamePattern: string):
       IZResultSet; virtual;
     function UncachedGetBestRowIdentifier(const Catalog: string; const Schema: string;
-      const Table: string; Scope: Integer; Nullable: Boolean): IZResultSet; virtual;
-    function UncachedGetVersionColumns(const Catalog: string; const Schema: string;
-      const Table: string): IZResultSet; virtual;
+      const Table: string; {%H-}Scope: Integer; {%H-}Nullable: Boolean): IZResultSet; virtual;
+    function UncachedGetVersionColumns(const {%H-}Catalog: string; const {%H-}Schema: string;
+      const {%H-}Table: string): IZResultSet; virtual;
     function UncachedGetTypeInfo: IZResultSet; virtual;
-    function UncachedGetUDTs(const Catalog: string; const SchemaPattern: string;
-      const TypeNamePattern: string; const Types: TIntegerDynArray): IZResultSet; virtual;
+    function UncachedGetUDTs(const {%H-}Catalog: string; const {%H-}SchemaPattern: string;
+      const {%H-}TypeNamePattern: string; const {%H-}Types: TIntegerDynArray): IZResultSet; virtual;
   public
     constructor Create(Connection: TZAbstractConnection; const Url: TZURL); virtual;
     destructor Destroy; override;
@@ -297,6 +318,7 @@ type
       const TypeNamePattern: string; const Types: TIntegerDynArray): string;
 
     procedure GetCacheKeys(List: TStrings);
+    property ConSettings: PZConSettings Read FConSettings write FConSettings;
     // <-- technobot 2008-06-14
   end;
 
@@ -305,6 +327,7 @@ type
   TZAbstractDatabaseInfo = class(TInterfacedObject, IZDatabaseInfo)
   private
     FMetadata: TZAbstractDatabaseMetadata;
+    FIdentifierQuoteKeywords: TStringList;
   protected
     FIdentifierQuotes: String;
     property Metadata: TZAbstractDatabaseMetadata read FMetadata;
@@ -321,7 +344,7 @@ type
     function GetDriverVersion: string; virtual;
     function GetDriverMajorVersion: Integer; virtual;
     function GetDriverMinorVersion: Integer; virtual;
-    function GetServerVersion: string;
+    function GetServerVersion: string; virtual;
 
     // capabilities (what it can/cannot do):
     function AllProceduresAreCallable: Boolean; virtual;
@@ -332,7 +355,7 @@ type
     function SupportsAlterTableWithDropColumn: Boolean; virtual;
     function SupportsColumnAliasing: Boolean; virtual;
     function SupportsConvert: Boolean; virtual;
-    function SupportsConvertForTypes(FromType: TZSQLType; ToType: TZSQLType):
+    function SupportsConvertForTypes({%H-}FromType: TZSQLType; {%H-}ToType: TZSQLType):
       Boolean; virtual;
     function SupportsTableCorrelationNames: Boolean; virtual;
     function SupportsDifferentTableCorrelationNames: Boolean; virtual;
@@ -366,6 +389,7 @@ type
     function SupportsCatalogsInIndexDefinitions: Boolean; virtual;
     function SupportsCatalogsInPrivilegeDefinitions: Boolean; virtual;
     function SupportsOverloadPrefixInStoredProcedureName: Boolean; virtual;
+    function SupportsParameterBinding: Boolean; virtual;
     function SupportsPositionedDelete: Boolean; virtual;
     function SupportsPositionedUpdate: Boolean; virtual;
     function SupportsSelectForUpdate: Boolean; virtual;
@@ -382,16 +406,18 @@ type
     function SupportsOpenStatementsAcrossCommit: Boolean; virtual;
     function SupportsOpenStatementsAcrossRollback: Boolean; virtual;
     function SupportsTransactions: Boolean; virtual;
-    function SupportsTransactionIsolationLevel(Level: TZTransactIsolationLevel):
+    function SupportsTransactionIsolationLevel(const {%H-}Level: TZTransactIsolationLevel):
       Boolean; virtual;
     function SupportsDataDefinitionAndDataManipulationTransactions: Boolean; virtual;
     function SupportsDataManipulationTransactionsOnly: Boolean; virtual;
-    function SupportsResultSetType(_Type: TZResultSetType): Boolean; virtual;
-    function SupportsResultSetConcurrency(_Type: TZResultSetType;
-      Concurrency: TZResultSetConcurrency): Boolean; virtual;
+    function SupportsResultSetType(const {%H-}_Type: TZResultSetType): Boolean; virtual;
+    function SupportsResultSetConcurrency(const {%H-}_Type: TZResultSetType;
+      const {%H-}Concurrency: TZResultSetConcurrency): Boolean; virtual;
     function SupportsBatchUpdates: Boolean; virtual;
     function SupportsNonEscapedSearchStrings: Boolean; virtual;
+    function SupportsMilliSeconds: Boolean; virtual;
     function SupportsUpdateAutoIncrementFields: Boolean; virtual;
+    function SupportsArrayBindings: Boolean; virtual;
 
     // maxima:
     function GetMaxBinaryLiteralLength: Integer; virtual;
@@ -443,6 +469,7 @@ type
     function GetCatalogTerm: string; virtual;
     function GetCatalogSeparator: string; virtual;
     function GetSQLKeywords: string; virtual;
+    function GetIdentifierQuoteKeywordsSorted: TStringList;
     function GetNumericFunctions: string; virtual;
     function GetStringFunctions: string; virtual;
     function GetSystemFunctions: string; virtual;
@@ -464,8 +491,9 @@ type
     function IsUpperCase(const Value: string): Boolean;
     function IsSpecialCase(const Value: string): Boolean; virtual;
   public
-    constructor Create(Metadata: IZDatabaseMetadata);
+    constructor Create(const Metadata: IZDatabaseMetadata);
 
+    function GetIdentifierCase(const Value: String; TestKeyWords: Boolean): TZIdentifierCase;
     function IsCaseSensitive(const Value: string): Boolean;
     function IsQuoted(const Value: string): Boolean; virtual;
     function Quote(const Value: string): string; virtual;
@@ -476,35 +504,237 @@ type
       Const SchemaPattern:String;Const TableNamePattern:String;const Types: TStringDynArray):String;
       deprecated; // (technobot) use TZAbstractDatabaseMetadata.GetTablesCacheKey instead
 
+const
+  CatalogNameIndex = FirstDbcIndex + 0;
+  SchemaNameIndex  = FirstDbcIndex + 1;
+  TableNameIndex   = FirstDbcIndex + 2;
+  ColumnNameIndex  = FirstDbcIndex + 3;
 
+const
+  CollationAndCharSetNameIndex = FirstDbcIndex + 5;
 var
-  CharacterSetsColumnsDynArray: TZMetadataColumnDefs; //EgonHugeist
-  CollationCharSetColumnsDynArray: TZMetadataColumnDefs; //EgonHugeist
-  TriggersColumnsDynArray: TZMetadataColumnDefs; //EgonHugeist
-  TriggersColColumnsDynArray: TZMetadataColumnDefs;
+  CharacterSetsColumnsDynArray: TZMetadataColumnDefs;
+const
+  CharacterSetsNameIndex = FirstDbcIndex + 0;
+  CharacterSetsIDIndex   = FirstDbcIndex + 1;
+var
+  CollationCharSetColumnsDynArray: TZMetadataColumnDefs;
+const
+  CollationNameIndex    = FirstDbcIndex + 4;
+  CharacterSetNameIndex = FirstDbcIndex + 5;
+  CharacterSetIDIndex   = FirstDbcIndex + 6;
+  CharacterSetSizeIndex = FirstDbcIndex + 7;
+var
+  TriggersColumnsDynArray: TZMetadataColumnDefs;
+const
+  TrgColTriggerNameIndex     = FirstDbcIndex + 2;
+  TrgColRelationNameIndex    = FirstDbcIndex + 3;
+  TrgColTriggerTypeIndex     = FirstDbcIndex + 4;
+  TrgColTriggerInactiveIndex = FirstDbcIndex + 5;
+  TrgColTriggerSourceIndex   = FirstDbcIndex + 6;
+  TrgColDescriptionIndex     = FirstDbcIndex + 7;
+const
+  ProcedureNameIndex       = FirstDbcIndex + 2;
+  ProcedureOverloadIndex   = FirstDbcIndex + 3;
+  ProcedureReserved1Index  = FirstDbcIndex + 4;
+  ProcedureReserved2Index  = FirstDbcIndex + 5;
+  ProcedureRemarksIndex    = FirstDbcIndex + 6;
+  ProcedureTypeIndex       = FirstDbcIndex + 7;
+var
   ProceduresColumnsDynArray: TZMetadataColumnDefs;
+const
+  ProcColProcedureNameIndex = FirstDbcIndex + 2;
+  ProcColColumnNameIndex    = FirstDbcIndex + 3;
+  ProcColColumnTypeIndex    = FirstDbcIndex + 4;
+  ProcColDataTypeIndex      = FirstDbcIndex + 5;
+  ProcColTypeNameIndex      = FirstDbcIndex + 6;
+  ProcColPrecisionIndex     = FirstDbcIndex + 7;
+  ProcColLengthIndex        = FirstDbcIndex + 8;
+  ProcColScaleIndex         = FirstDbcIndex + 9;
+  ProcColRadixIndex         = FirstDbcIndex + 10;
+  ProcColNullableIndex      = FirstDbcIndex + 11;
+  ProcColRemarksIndex       = FirstDbcIndex + 12;
+var
   ProceduresColColumnsDynArray: TZMetadataColumnDefs;
+const
+  TableColumnsSQLType = FirstDbcIndex + 3;
+  TableColumnsRemarks = FirstDbcIndex + 4;
+var
   TableColumnsDynArray: TZMetadataColumnDefs;
+const
+  SchemaColumnsTableSchemaIndex = FirstDbcIndex;
+var
   SchemaColumnsDynArray: TZMetadataColumnDefs;
   CatalogColumnsDynArray: TZMetadataColumnDefs;
+const
+  TableTypeColumnTableTypeIndex = FirstDbcIndex;
+var
   TableTypeColumnsDynArray: TZMetadataColumnDefs;
+const
+  TableColColumnTypeIndex               = FirstDbcIndex + 4;
+  TableColColumnTypeNameIndex           = FirstDbcIndex + 5;
+  TableColColumnSizeIndex               = FirstDbcIndex + 6;
+  TableColColumnBufLengthIndex          = FirstDbcIndex + 7;
+  TableColColumnDecimalDigitsIndex      = FirstDbcIndex + 8;
+  TableColColumnNumPrecRadixIndex       = FirstDbcIndex + 9;
+  TableColColumnNullableIndex           = FirstDbcIndex + 10;
+  TableColColumnRemarksIndex            = FirstDbcIndex + 11;
+  TableColColumnColDefIndex             = FirstDbcIndex + 12;
+  TableColColumnSQLDataTypeIndex        = FirstDbcIndex + 13;
+  TableColColumnSQLDateTimeSubIndex     = FirstDbcIndex + 14;
+  TableColColumnCharOctetLengthIndex    = FirstDbcIndex + 15;
+  TableColColumnOrdPosIndex             = FirstDbcIndex + 16;
+  TableColColumnIsNullableIndex         = FirstDbcIndex + 17;
+  TableColColumnAutoIncIndex            = FirstDbcIndex + 18;
+  TableColColumnCaseSensitiveIndex      = FirstDbcIndex + 19;
+  TableColColumnSearchableIndex         = FirstDbcIndex + 20;
+  TableColColumnWritableIndex           = FirstDbcIndex + 21;
+  TableColColumnDefinitelyWritableIndex = FirstDbcIndex + 22;
+  TableColColumnReadonlyIndex           = FirstDbcIndex + 23;
+var
   TableColColumnsDynArray: TZMetadataColumnDefs;
+const
+  TableColPrivGrantorIndex     = FirstDbcIndex + 4;
+  TableColPrivGranteeIndex     = FirstDbcIndex + 5;
+  TableColPrivPrivilegeIndex   = FirstDbcIndex + 6;
+  TableColPrivIsGrantableIndex = FirstDbcIndex + 7;
+var
   TableColPrivColumnsDynArray: TZMetadataColumnDefs;
+const
+  TablePrivGrantorIndex     = FirstDbcIndex + 3;
+  TablePrivGranteeIndex     = FirstDbcIndex + 4;
+  TablePrivPrivilegeIndex   = FirstDbcIndex + 5;
+  TablePrivIsGrantableIndex = FirstDbcIndex + 6;
+var
   TablePrivColumnsDynArray: TZMetadataColumnDefs;
+const
+  BestRowIdentScopeIndex         = FirstDbcIndex + 0;
+  BestRowIdentColNameIndex       = FirstDbcIndex + 1;
+  BestRowIdentDataTypeIndex      = FirstDbcIndex + 2;
+  BestRowIdentTypeNameIndex      = FirstDbcIndex + 3;
+  BestRowIdentColSizeIndex       = FirstDbcIndex + 4;
+  BestRowIdentBufLengthIndex     = FirstDbcIndex + 5;
+  BestRowIdentDecimalDigitsIndex = FirstDbcIndex + 6;
+  BestRowIdentPseudoColumnIndex  = FirstDbcIndex + 7;
+var
   BestRowIdentColumnsDynArray: TZMetadataColumnDefs;
+const
+  TableColVerScopeIndex         = FirstDbcIndex + 0;
+  TableColVerColNameIndex       = FirstDbcIndex + 1;
+  TableColVerDataTypeIndex      = FirstDbcIndex + 2;
+  TableColVerTypeNameIndex      = FirstDbcIndex + 3;
+  TableColVerColSizeIndex       = FirstDbcIndex + 4;
+  TableColVerBufLengthIndex     = FirstDbcIndex + 5;
+  TableColVerDecimalDigitsIndex = FirstDbcIndex + 6;
+  TableColVerPseudoColumnIndex  = FirstDbcIndex + 7;
+var
   TableColVerColumnsDynArray: TZMetadataColumnDefs;
+const
+  PrimaryKeyColumnNameIndex = FirstDbcIndex + 3;
+  PrimaryKeyKeySeqIndex     = FirstDbcIndex + 4;
+  PrimaryKeyPKNameIndex     = FirstDbcIndex + 5;
+var
   PrimaryKeyColumnsDynArray: TZMetadataColumnDefs;
+const
+  ImportedKeyColPKTableCatalogIndex = FirstDbcIndex + 0;
+  ImportedKeyColPKTableSchemaIndex  = FirstDbcIndex + 1;
+  ImportedKeyColPKTableNameIndex    = FirstDbcIndex + 2;
+  ImportedKeyColPKColumnNameIndex   = FirstDbcIndex + 3;
+  ImportedKeyColFKTableCatalogIndex = FirstDbcIndex + 4;
+  ImportedKeyColFKTableSchemaIndex  = FirstDbcIndex + 5;
+  ImportedKeyColFKTableNameIndex    = FirstDbcIndex + 6;
+  ImportedKeyColFKColumnNameIndex   = FirstDbcIndex + 7;
+  ImportedKeyColKeySeqIndex         = FirstDbcIndex + 8;
+  ImportedKeyColUpdateRuleIndex     = FirstDbcIndex + 9;
+  ImportedKeyColDeleteRuleIndex     = FirstDbcIndex + 10;
+  ImportedKeyColFKNameIndex         = FirstDbcIndex + 11;
+  ImportedKeyColPKNameIndex         = FirstDbcIndex + 12;
+  ImportedKeyColDeferrabilityIndex  = FirstDbcIndex + 13;
+var
   ImportedKeyColumnsDynArray: TZMetadataColumnDefs;
+const
+  ExportedKeyColPKTableCatalogIndex = FirstDbcIndex + 0;
+  ExportedKeyColPKTableSchemaIndex  = FirstDbcIndex + 1;
+  ExportedKeyColPKTableNameIndex    = FirstDbcIndex + 2;
+  ExportedKeyColPKColumnNameIndex   = FirstDbcIndex + 3;
+  ExportedKeyColFKTableCatalogIndex = FirstDbcIndex + 4;
+  ExportedKeyColFKTableSchemaIndex  = FirstDbcIndex + 5;
+  ExportedKeyColFKTableNameIndex    = FirstDbcIndex + 6;
+  ExportedKeyColFKColumnNameIndex   = FirstDbcIndex + 7;
+  ExportedKeyColKeySeqIndex         = FirstDbcIndex + 8;
+  ExportedKeyColUpdateRuleIndex     = FirstDbcIndex + 9;
+  ExportedKeyColDeleteRuleIndex     = FirstDbcIndex + 10;
+  ExportedKeyColFKNameIndex         = FirstDbcIndex + 11;
+  ExportedKeyColPKNameIndex         = FirstDbcIndex + 12;
+  ExportedKeyColDeferrabilityIndex  = FirstDbcIndex + 13;
+var
   ExportedKeyColumnsDynArray: TZMetadataColumnDefs;
+const
+  CrossRefKeyColPKTableCatalogIndex = FirstDbcIndex + 0;
+  CrossRefKeyColPKTableSchemaIndex  = FirstDbcIndex + 1;
+  CrossRefKeyColPKTableNameIndex    = FirstDbcIndex + 2;
+  CrossRefKeyColPKColumnNameIndex   = FirstDbcIndex + 3;
+  CrossRefKeyColFKTableCatalogIndex = FirstDbcIndex + 4;
+  CrossRefKeyColFKTableSchemaIndex  = FirstDbcIndex + 5;
+  CrossRefKeyColFKTableNameIndex    = FirstDbcIndex + 6;
+  CrossRefKeyColFKColumnNameIndex   = FirstDbcIndex + 7;
+  CrossRefKeyColKeySeqIndex         = FirstDbcIndex + 8;
+  CrossRefKeyColUpdateRuleIndex     = FirstDbcIndex + 9;
+  CrossRefKeyColDeleteRuleIndex     = FirstDbcIndex + 10;
+  CrossRefKeyColFKNameIndex         = FirstDbcIndex + 11;
+  CrossRefKeyColPKNameIndex         = FirstDbcIndex + 12;
+  CrossRefKeyColDeferrabilityIndex  = FirstDbcIndex + 13;
+var
   CrossRefColumnsDynArray: TZMetadataColumnDefs;
+const
+  TypeInfoTypeNameIndex          = FirstDbcIndex + 0;
+  TypeInfoDataTypeIndex          = FirstDbcIndex + 1;
+  TypeInfoPecisionIndex          = FirstDbcIndex + 2;
+  TypeInfoLiteralPrefixIndex     = FirstDbcIndex + 3;
+  TypeInfoLiteralSuffixIndex     = FirstDbcIndex + 4;
+  TypeInfoCreateParamsIndex      = FirstDbcIndex + 5;
+  TypeInfoNullAbleIndex          = FirstDbcIndex + 6;
+  TypeInfoCaseSensitiveIndex     = FirstDbcIndex + 7;
+  TypeInfoSearchableIndex        = FirstDbcIndex + 8;
+  TypeInfoUnsignedAttributeIndex = FirstDbcIndex + 9;
+  TypeInfoFixedPrecScaleIndex    = FirstDbcIndex + 10;
+  TypeInfoAutoIncrementIndex     = FirstDbcIndex + 11;
+  TypeInfoLocaleTypeNameIndex    = FirstDbcIndex + 12;
+  TypeInfoMinimumScaleIndex      = FirstDbcIndex + 13;
+  TypeInfoMaximumScaleIndex      = FirstDbcIndex + 14;
+  TypeInfoSQLDataTypeIndex       = FirstDbcIndex + 15;
+  TypeInfoSQLDateTimeSubIndex    = FirstDbcIndex + 16;
+  TypeInfoNumPrecRadix           = FirstDbcIndex + 17;
+var
   TypeInfoColumnsDynArray: TZMetadataColumnDefs;
+const
+  IndexInfoColNonUniqueIndex       = FirstDbcIndex + 3;
+  IndexInfoColIndexQualifierIndex  = FirstDbcIndex + 4;
+  IndexInfoColIndexNameIndex       = FirstDbcIndex + 5;
+  IndexInfoColTypeIndex            = FirstDbcIndex + 6;
+  IndexInfoColOrdPositionIndex     = FirstDbcIndex + 7;
+  IndexInfoColColumnNameIndex      = FirstDbcIndex + 8;
+  IndexInfoColAscOrDescIndex       = FirstDbcIndex + 9;
+  IndexInfoColCardinalityIndex     = FirstDbcIndex + 10;
+  IndexInfoColPagesIndex           = FirstDbcIndex + 11;
+  IndexInfoColFilterConditionIndex = FirstDbcIndex + 12;
+var
   IndexInfoColumnsDynArray: TZMetadataColumnDefs;
+const
+  SequenceNameIndex = FirstDbcIndex + 2;
+var
   SequenceColumnsDynArray: TZMetadataColumnDefs;
+const
+  UDTColTypeNameIndex  = FirstDbcIndex + 2;
+  UDTColClassNameIndex = FirstDbcIndex + 3;
+  UDTColDataTypeIndex  = FirstDbcIndex + 4;
+  UDTColRemarksIndex   = FirstDbcIndex + 5;
+var
   UDTColumnsDynArray: TZMetadataColumnDefs;
 
 implementation
 
-uses ZVariant, ZCollections, ZMessages;
+uses ZFastCode, ZVariant, ZCollections, ZMessages;
 
 { TZAbstractDatabaseInfo }
 
@@ -546,6 +776,7 @@ end;
 destructor TZAbstractDatabaseInfo.Destroy;
 begin
   FMetadata := nil;
+  FreeAndNil(FIdentifierQuoteKeywords);
   inherited;
 end;
 
@@ -778,6 +1009,36 @@ end;
 function TZAbstractDatabaseInfo.StoresMixedCaseQuotedIdentifiers: Boolean;
 begin
   Result := False;
+end;
+
+function TZAbstractDatabaseInfo.GetIdentifierQuoteKeywordsSorted: TStringList;
+const
+  SQL92Keywords = 'insert,update,delete,select,drop,create,for,from,set,values,'
+    + 'where,order,group,by,having,into,as,table,index,primary,key,on,is,null,'
+    + 'char,varchar,integer,number,alter,column,value,values,'
+    + 'current,top,login,status,version';
+
+  procedure Append(const Values: String; Dest: TStrings);
+  begin
+    if StoresUpperCaseIdentifiers
+      then ZSysUtils.AppendSplitString(Dest, UpperCase(Values), ',')
+      else ZSysUtils.AppendSplitString(Dest, LowerCase(Values), ',');
+  end;
+
+begin
+  if FIdentifierQuoteKeywords = nil then
+  begin
+    FIdentifierQuoteKeywords := TStringList.Create;
+    FIdentifierQuoteKeywords.Sorted := True;
+    FIdentifierQuoteKeywords.Duplicates := dupIgnore;
+    Append(SQL92Keywords, FIdentifierQuoteKeywords);
+    Append(GetSQLKeyWords, FIdentifierQuoteKeywords);
+    Append(GetNumericFunctions, FIdentifierQuoteKeywords);
+    Append(GetStringFunctions, FIdentifierQuoteKeywords);
+    Append(GetSystemFunctions, FIdentifierQuoteKeywords);
+    Append(GetTimeDateFunctions, FIdentifierQuoteKeywords);
+  end;
+  Result := FIdentifierQuoteKeywords;
 end;
 
 {**
@@ -1282,6 +1543,15 @@ begin
 end;
 
 {**
+  Is parameter bindings supported by Provider?
+  @return <code>true</code> if so; <code>false</code> otherwise
+}
+function TZAbstractDatabaseInfo.SupportsParameterBinding: Boolean;
+begin
+  Result := True;
+end;
+
+{**
   Is positioned DELETE supported?
   @return <code>true</code> if so; <code>false</code> otherwise
 }
@@ -1676,7 +1946,7 @@ end;
   @see Connection
 }
 function TZAbstractDatabaseInfo.SupportsTransactionIsolationLevel(
-  Level: TZTransactIsolationLevel): Boolean;
+  const Level: TZTransactIsolationLevel): Boolean;
 begin
   Result := True;
 end;
@@ -1728,7 +1998,7 @@ end;
   @return <code>true</code> if so; <code>false</code> otherwise
 }
 function TZAbstractDatabaseInfo.SupportsResultSetType(
-  _Type: TZResultSetType): Boolean;
+  const _Type: TZResultSetType): Boolean;
 begin
   Result := True;
 end;
@@ -1742,7 +2012,7 @@ end;
   @return <code>true</code> if so; <code>false</code> otherwise
 }
 function TZAbstractDatabaseInfo.SupportsResultSetConcurrency(
-  _Type: TZResultSetType; Concurrency: TZResultSetConcurrency): Boolean;
+  const _Type: TZResultSetType; const Concurrency: TZResultSetConcurrency): Boolean;
 begin
   Result := True;
 end;
@@ -1767,6 +2037,15 @@ begin
 end;
 
 {**
+  Does the database driver supports milliseconds?
+  @return <code>true</code> if so; <code>false</code> otherwise
+}
+function TZAbstractDatabaseInfo.SupportsMilliSeconds: Boolean;
+begin
+  Result := True;
+end;
+
+{**
   Does the Database support updating auto incremental fields?
   @return <code>true</code> if the DataBase allows it.
 }
@@ -1775,12 +2054,21 @@ begin
   Result := True;
 end;
 
+{**
+  Does the Database support binding arrays? Is the ZDbc ready for this?
+  @return <code>true</code> if the DataBase allows it.
+}
+function TZAbstractDatabaseInfo.SupportsArrayBindings: Boolean;
+begin
+  Result := False;
+end;
+
 { TZAbstractDatabaseMetadata }
 
 {**
   Constructs this object and assignes the main properties.
   @param Connection a database connection object.
-  @param Url a database connection url string.
+  @param Url a database connection url class.
 }
 constructor TZAbstractDatabaseMetadata.Create(Connection: TZAbstractConnection;
   const Url: TZURL);
@@ -1813,31 +2101,53 @@ end;
 }
 function TZAbstractDatabaseMetadata.StripEscape(const Pattern: string): string;
 var
-  I: Integer;
-  PreviousChar: Char;
-  EscapeChar: string;
+  L: Integer;
+  PreviousChar, EscapeChar: Char;
+  pPat, pPatEnd, pRes: PChar;
 begin
   PreviousChar := #0;
-  Result := '';
-  EscapeChar := GetDatabaseInfo.GetSearchStringEscape;
-  for I := 1 to Length(Pattern) do
-  begin
-    if (Pattern[i] <> EscapeChar) then
-    begin
-      Result := Result + Pattern[I];
-      PreviousChar := Pattern[I];
-    end
-    else
-    begin
-      if (PreviousChar = EscapeChar) then
-      begin
-        Result := Result + Pattern[I];
-        PreviousChar := #0;
-      end
-      else
-        PreviousChar := Pattern[i];
-    end;
+  L := Length(Pattern);
+  SetLength(Result, L);
+  pRes := Pointer(GetDatabaseInfo.GetSearchStringEscape);
+  if (L = 0) or (pRes = nil) then Exit;
+  EscapeChar := pRes^;
+  pRes := Pointer(Result);
+  pPat := Pointer(Pattern);
+  pPatEnd := pPat+L;
+  while pPat < pPatEnd do begin
+    if (pPat^ <> EscapeChar) then begin
+      PreviousChar := pPat^;
+      pRes^ := PreviousChar;
+      Inc(pRes);
+    end else if (PreviousChar = EscapeChar) then begin
+      pRes^ := PreviousChar;
+      PreviousChar := #0;
+      Inc(pRes);
+    end else
+      PreviousChar := pPat^;
+    Inc(pPat);
   end;
+  pPat := Pointer(Result);
+  if (pRes-pPat) <> L then
+    SetLength(Result, (pRes-pPat));
+end;
+
+procedure TZAbstractDatabaseMetadata.ToBuf(C: Char; var Value: String);
+begin
+  if fCurrentBufIndex < High(Byte) then begin
+    fBuf[fCurrentBufIndex] := C;
+    Inc(fCurrentBufIndex);
+  end else begin
+    FlushBuf(Value);
+    InitBuf(C);
+  end;
+end;
+
+function TZAbstractDatabaseMetadata.HasKey(const Key: String): Boolean;
+var  TempKey: IZAnyValue;
+begin
+  TempKey := TZAnyValue.CreateWithString(Key);
+  Result := FCachedResultSets.Get(TempKey) <> nil;
 end;
 
 {**
@@ -1845,31 +2155,49 @@ end;
    @param Pattern a sql pattern
    @return if pattern contain wildcards return true otherwise false
 }
-function TZAbstractDatabaseMetadata.HasNoWildcards(const Pattern: string
-  ): boolean;
+function TZAbstractDatabaseMetadata.HasNoWildcards(const Pattern: string): boolean;
 var
-  I: Integer;
   PreviousCharWasEscape: Boolean;
   EscapeChar,PreviousChar: Char;
   WildcardsSet: TZWildcardsSet;
+  P, PEnd: PChar;
+  {$IFDEF TSYSCHARSET_IS_DEPRECATED}
+  function CharInSet(C: Char; const CharSet: TZWildcardsSet): Boolean;
+  var I: Integer;
+  begin
+    Result := False;
+    for I := Low(CharSet) to High(CharSet) do
+      if CharSet[i] = C then begin
+        Result := True;
+        Break;
+      end;
+  end;
+  {$ENDIF}
 begin
   Result := False;
   PreviousChar := #0;
   PreviousCharWasEscape := False;
-  EscapeChar := Char(GetDatabaseInfo.GetSearchStringEscape[1]);
+  P := Pointer(GetDatabaseInfo.GetSearchStringEscape);
+  EscapeChar := P^;
   WildcardsSet := GetWildcardsSet;
-  for I := 1 to Length(Pattern) do
-  begin
-    if (not PreviousCharWasEscape) and CharInset(Pattern[I], WildcardsSet) then
+  P := Pointer(Pattern);
+  PEnd := P+Length(Pattern);
+  while P<PEnd do begin
+    if (not PreviousCharWasEscape) and CharInset(P^, WildcardsSet) then
      Exit;
-
-    PreviousCharWasEscape := (Pattern[I] = EscapeChar) and (PreviousChar <> EscapeChar);
-    if (PreviousCharWasEscape) and (Pattern[I] = EscapeChar) then
-      PreviousChar := #0
-    else
-      PreviousChar := Pattern[I];
+    PreviousCharWasEscape := (P^ = EscapeChar) and (PreviousChar <> EscapeChar);
+    if (PreviousCharWasEscape) and (P^ = EscapeChar)
+    then PreviousChar := #0
+    else PreviousChar := P^;
+    Inc(P);
   end;
   Result := True;
+end;
+
+procedure TZAbstractDatabaseMetadata.InitBuf(FirstChar: Char);
+begin
+  fBuf[0] := FirstChar;
+  fCurrentBufIndex := 1;
 end;
 
 function TZAbstractDatabaseMetadata.EscapeString(const S: string): string;
@@ -1877,12 +2205,18 @@ begin
   Result := '''' + S + '''';
 end;
 
+{**
+  Decomposes a object name, QuotedStr or NullText
+  @param S the object string
+  @return a non-quoted string
+}
 function TZAbstractDatabaseMetadata.DecomposeObjectString(const S: String): String;
 begin
-  if IC.IsQuoted(s) then
-    Result := IC.ExtractQuote(s)
-  else
-    Result := s;
+  if S = ''
+  then Result := S
+  else if IC.IsQuoted(S)
+    then Result := IC.ExtractQuote(S)
+    else Result := S;
 end;
 
 {**  Destroys this object and cleanups the memory.}
@@ -1942,20 +2276,17 @@ begin
     for I := 0 to High(ColumnsDefs) do
     begin
       ColumnInfo := TZColumnInfo.Create;
-      with ColumnInfo do
-      begin
+      with ColumnInfo do begin
         ColumnLabel := ColumnsDefs[I].Name;
         ColumnType := ColumnsDefs[I].SQLType;
-        ColumnDisplaySize := ColumnsDefs[I].Length;
         Precision := ColumnsDefs[I].Length;
       end;
       ColumnsInfo.Add(ColumnInfo);
     end;
 
-    Result := TZVirtualResultSet.CreateWithColumns(ColumnsInfo, '',
-      IZConnection(FConnection).GetConSettings);
-    with Result do
-    begin
+    Result := TZUnCloseableResultSet.CreateWithColumns(ColumnsInfo, '',
+      FConSettings);
+    with Result do begin
       SetType(rtScrollInsensitive);
       SetConcurrency(rcUpdatable);
     end;
@@ -1975,6 +2306,11 @@ end;
 {**
   Clears specific cached metadata.
 }
+procedure TZAbstractDatabaseMetadata.ClearBuf;
+begin
+  fCurrentBufIndex := 0;
+end;
+
 procedure TZAbstractDatabaseMetadata.ClearCache(const Key: string);
 var
   TempKey: IZAnyValue;
@@ -1989,12 +2325,16 @@ end;
   @param ResultSet a resultset interface.
 }
 procedure TZAbstractDatabaseMetadata.AddResultSetToCache(const Key: string;
-  ResultSet: IZResultSet);
+  const ResultSet: IZResultSet);
 var
   TempKey: IZAnyValue;
 begin
   TempKey := TZAnyValue.CreateWithString(Key);
-  FCachedResultSets.Put(TempKey, CloneCachedResultSet(ResultSet));
+  if ResultSet <> nil then
+    ResultSet.BeforeFirst;
+  FCachedResultSets.Put(TempKey, ResultSet);
+  //EH: see my comment below
+  //FCachedResultSets.Put(TempKey, CloneCachedResultSet(ResultSet));
 end;
 
 {**
@@ -2009,8 +2349,17 @@ var
 begin
   TempKey := TZAnyValue.CreateWithString(Key);
   Result := FCachedResultSets.Get(TempKey) as IZResultSet;
+  //EH: this propably has been made because of thread-safety but this is wrong too
+  //worst case:
+  //while a thread moves the cursor anotherone could move the cursor of template RS as well
+  //count of copied rows may be randomly
+  //here we need a different way using the MainThreadID+CurrentThreadID,
+  //a Lock with a CriticalSection, Copy if Required
+  //and put back in a threadpooled list
+  //if Result <> nil then
+    //Result := CloneCachedResultSet(Result);
   if Result <> nil then
-    Result := CloneCachedResultSet(Result);
+    Result.BeforeFirst;
 end;
 
 {**
@@ -2025,16 +2374,21 @@ function TZAbstractDatabaseMetadata.CopyToVirtualResultSet(
 var
   I: Integer;
   Metadata: IZResultSetMetadata;
+  Len: NativeUInt;
+  IsUTF16: Boolean;
 begin
   DestResultSet.SetType(rtScrollInsensitive);
   DestResultSet.SetConcurrency(rcUpdatable);
 
   Metadata := SrcResultSet.GetMetadata;
+  IsUTF16 :=  (not ConSettings^.ClientCodePage^.IsStringFieldCPConsistent) or
+             (ConSettings^.ClientCodePage^.Encoding = ceUTF16);
+
   while SrcResultSet.Next do
   begin
     DestResultSet.MoveToInsertRow;
-    for I := 1 to Metadata.GetColumnCount do
-    begin
+    for I := FirstDbcIndex to Metadata.GetColumnCount {$IFDEF GENERIC_INDEX}-1{$ENDIF}do
+    if not SrcResultSet.IsNull(I) then begin
       case Metadata.GetColumnType(I) of
         stBoolean:
           DestResultSet.UpdateBoolean(I, SrcResultSet.GetBoolean(I));
@@ -2042,21 +2396,30 @@ begin
           DestResultSet.UpdateByte(I, SrcResultSet.GetByte(I));
         stShort:
           DestResultSet.UpdateShort(I, SrcResultSet.GetShort(I));
+        stWord:
+          DestResultSet.UpdateWord(I, SrcResultSet.GetWord(I));
+        stSmall:
+          DestResultSet.UpdateSmall(I, SrcResultSet.GetSmall(I));
+        stLongWord:
+          DestResultSet.UpdateUInt(I, SrcResultSet.GetUInt(I));
         stInteger:
           DestResultSet.UpdateInt(I, SrcResultSet.GetInt(I));
+        stULong:
+          DestResultSet.UpdateULong(I, SrcResultSet.GetULong(I));
         stLong:
           DestResultSet.UpdateLong(I, SrcResultSet.GetLong(I));
         stFloat:
           DestResultSet.UpdateFloat(I, SrcResultSet.GetFloat(I));
         stDouble:
           DestResultSet.UpdateDouble(I, SrcResultSet.GetDouble(I));
+        stCurrency:
+          DestResultSet.UpdateCurrency(I, SrcResultSet.GetCurrency(I));
         stBigDecimal:
           DestResultSet.UpdateBigDecimal(I, SrcResultSet.GetBigDecimal(I));
-        stString:
-          DestResultSet.UpdateString(I, SrcResultSet.GetString(I));
-        stUnicodeString:
-          DestResultSet.UpdateUnicodeString(I, SrcResultSet.GetUnicodeString(I));
-        stBytes:
+        stString, stUnicodeString, stAsciiStream, stUnicodeStream: if IsUTF16
+          then DestResultSet.UpdatePWideChar(I, SrcResultSet.GetPWideChar(I, Len), @Len)
+          else DestResultSet.UpdatePAnsiChar(I, SrcResultSet.GetPAnsiChar(I, Len), @Len);
+        stGUID, stBytes, stBinaryStream:
           DestResultSet.UpdateBytes(I, SrcResultSet.GetBytes(I));
         stDate:
           DestResultSet.UpdateDate(I, SrcResultSet.GetDate(I));
@@ -2064,10 +2427,6 @@ begin
           DestResultSet.UpdateTime(I, SrcResultSet.GetTime(I));
         stTimestamp:
           DestResultSet.UpdateTimestamp(I, SrcResultSet.GetTimestamp(I));
-        stAsciiStream,
-        stUnicodeStream,
-        stBinaryStream:
-          DestResultSet.UpdateString(I, SrcResultSet.GetString(I));
       end;
       if SrcResultSet.WasNull then
         DestResultSet.UpdateNull(I);
@@ -2097,7 +2456,7 @@ begin
   Metadata := ResultSet.GetMetadata;
   ColumnsInfo := TObjectList.Create(True);
   try
-    for I := 1 to Metadata.GetColumnCount do
+    for I := FirstDbcIndex to Metadata.GetColumnCount{$IFDEF GENERIC_INDEX}-1{$ENDIF} do
     begin
       ColumnInfo := TZColumnInfo.Create;
       with ColumnInfo do
@@ -2110,11 +2469,12 @@ begin
       ColumnsInfo.Add(ColumnInfo);
     end;
 
-    ResultSet.BeforeFirst;
+    if not ResultSet.IsBeforeFirst and  (ResultSet.GetType <> rtForwardOnly) then
+      ResultSet.BeforeFirst;
     Result := CopyToVirtualResultSet(ResultSet,
-      TZVirtualResultSet.CreateWithColumns(ColumnsInfo, '',
-        IZConnection(Self.FConnection).GetConSettings));
-    ResultSet.BeforeFirst;
+      TZVirtualResultSet.CreateWithColumns(ColumnsInfo, '', ConSettings));
+    if ResultSet.GetType <> rtForwardOnly then
+      ResultSet.BeforeFirst;
   finally
     ColumnsInfo.Free;
   end;
@@ -2128,8 +2488,6 @@ end;
 }
 function TZAbstractDatabaseMetadata.ConstructNameCondition(Pattern: string;
   Column: string): string;
-const
-  Spaces = '';
 var
   WorkPattern: string;
 begin
@@ -2139,17 +2497,14 @@ begin
 
   if (Pattern = '%') or (Pattern = '') then
      Exit;
-  WorkPattern:=NormalizePatternCase(Pattern);
+  WorkPattern := NormalizePatternCase(Pattern);
   if HasNoWildcards(WorkPattern) then
   begin
     WorkPattern := StripEscape(WorkPattern);
-    Result := Format('%s = %s', [Column, EscapeString(WorkPattern)]);
+    Result := Column+' = '+EscapeString(WorkPattern);
   end
   else
-  begin
-    Result := Format('%s like %s',
-      [Column, EscapeString(WorkPattern+'%')]);
-  end;
+    Result := Column+' like '+EscapeString(WorkPattern);
 end;
 
 {**
@@ -2270,7 +2625,7 @@ end;
 function TZAbstractDatabaseMetadata.UncachedGetProcedures(const Catalog: string;
   const SchemaPattern: string; const ProcedureNamePattern: string): IZResultSet;
 begin
-    Result := ConstructVirtualResultSet(ProceduresColumnsDynArray);
+  Result := ConstructVirtualResultSet(ProceduresColumnsDynArray);
 end;
 
 {**
@@ -3157,7 +3512,7 @@ begin
       with GetPrimaryKeys(Catalog, Schema, Table) do
       begin
         while Next do
-          ColumnNames.Add(GetStringByName('COLUMN_NAME'));
+          ColumnNames.Add(GetString(PrimaryKeyColumnNameIndex));
         Close;
       end;
 
@@ -3170,35 +3525,35 @@ begin
           while Next do
           begin
             if IndexName = '' then
-              IndexName := GetStringByName('INDEX_NAME');
-            if GetStringByName('INDEX_NAME') = IndexName then
-              ColumnNames.Add(GetStringByName('COLUMN_NAME'));
+              IndexName := GetString(IndexInfoColIndexNameIndex);
+            if GetString(IndexInfoColIndexNameIndex) = IndexName then
+              ColumnNames.Add(GetString(ColumnNameIndex));
           end;
           Close;
         end;
       end;
 
-      with GetColumns(Catalog, Schema, Table, '') do
+      with GetColumns(Catalog, AddEscapeCharToWildcards(Schema), AddEscapeCharToWildcards(Table), '') do
       begin
         while Next do
         begin
           if (ColumnNames.Count <> 0) and (ColumnNames.IndexOf(
-            GetStringByName('COLUMN_NAME')) < 0) then
+            GetString(ColumnNameIndex)) < 0) then
             Continue;
           if (ColumnNames.Count = 0)
-            and (TZSQLType(GetIntByName('DATA_TYPE')) in
+            and (TZSQLType(GetSmall(TableColColumnTypeIndex)) in
             [stBytes, stBinaryStream, stAsciiStream, stUnicodeStream]) then
             Continue;
 
           Result.MoveToInsertRow;
-          Result.UpdateInt(1, Ord(sbrSession));
-          Result.UpdateString(2, GetStringByName('COLUMN_NAME'));
-          Result.UpdateInt(3, GetIntByName('DATA_TYPE'));
-          Result.UpdateString(4, GetStringByName('TYPE_NAME'));
-          Result.UpdateInt(5, GetIntByName('COLUMN_SIZE'));
-          Result.UpdateInt(6, GetIntByName('BUFFER_LENGTH'));
-          Result.UpdateInt(7, GetIntByName('DECIMAL_DIGITS'));
-          Result.UpdateInt(8, Ord(brNotPseudo));
+          Result.UpdateInt(BestRowIdentScopeIndex, Ord(sbrSession));
+          Result.UpdateString(BestRowIdentColNameIndex, GetString(ColumnNameIndex));
+          Result.UpdateSmall(BestRowIdentDataTypeIndex, GetSmall(TableColColumnTypeIndex));
+          Result.UpdateString(BestRowIdentTypeNameIndex, GetString(TableColColumnTypeNameIndex));
+          Result.UpdateInt(BestRowIdentColSizeIndex, GetInt(TableColColumnSizeIndex));
+          Result.UpdateInt(BestRowIdentBufLengthIndex, GetInt(TableColColumnBufLengthIndex));
+          Result.UpdateInt(BestRowIdentDecimalDigitsIndex, GetInt(TableColColumnDecimalDigitsIndex));
+          Result.UpdateInt(BestRowIdentPseudoColumnIndex, Ord(brNotPseudo));
           Result.InsertRow;
         end;
         Close;
@@ -3522,7 +3877,7 @@ end;
 function TZAbstractDatabaseMetadata.UncachedGetImportedKeys(const Catalog: string;
   const Schema: string; const Table: string): IZResultSet;
 begin
-    Result := ConstructVirtualResultSet(ImportedKeyColumnsDynArray);
+  Result := ConstructVirtualResultSet(ImportedKeyColumnsDynArray);
 end;
 
 {**
@@ -4278,23 +4633,41 @@ end;
 }
 procedure TZAbstractDatabaseMetadata.FillWildcards;
 begin
-  SetLength(WildcardsArray,1);
-  WildcardsArray[0]:='%';
-  {SetLength(WildcardsArray,2);
-  WildcardsArray[0]:='_';  <---- seems to be a trublemaker, no idea how to test it with our tests. See http://zeoslib.sourceforge.net/viewtopic.php?f=40&t=13184
-  WildcardsArray[1]:='%';}
+  SetLength(WildcardsArray,2);
+  WildcardsArray[0]:='_';  //<---- seems to be a trublemaker, no idea how to test it with our tests. See http://zeoslib.sourceforge.net/viewtopic.php?f=40&t=13184
+  WildcardsArray[1]:='%';
 end;
 
-function TZAbstractDatabaseMetadata.NormalizePatternCase(Pattern:String): string;
+procedure TZAbstractDatabaseMetadata.FlushBuf(var Value: String);
+var I: Integer;
 begin
-  if not GetIdentifierConvertor.IsQuoted(Pattern) then
-    if FDatabaseInfo.StoresUpperCaseIdentifiers then
-      Result := UpperCase(Pattern)
-    else if FDatabaseInfo.StoresLowerCaseIdentifiers then
-      Result := LowerCase(Pattern)
-    else Result := Pattern
-  else
-    Result := GetIdentifierConvertor.ExtractQuote(Pattern);
+  if fCurrentBufIndex > 0 then begin
+    I := Length(Value);
+    SetLength(Value, i+fCurrentBufIndex);
+    {$IFDEF FAST_MOVE}ZFastCode{$ELSE}System{$ENDIF}.Move(fBuf[0], Value[I+1], fCurrentBufIndex * SizeOf(Char));
+    fCurrentBufIndex := 0;
+  end;
+end;
+
+function TZAbstractDatabaseMetadata.NormalizePatternCase(Pattern: String): string;
+begin
+  with FIC do
+    if not IsQuoted(Pattern) then begin
+      //EH: if this is not made test spaced name will fail
+      Result := Pattern;
+      case GetIdentifierCase(Pattern, False) of
+        icLower: if FDatabaseInfo.StoresUpperCaseIdentifiers then
+                  Result := UpperCase(Pattern);
+        icUpper: if FDatabaseInfo.StoresLowerCaseIdentifiers then
+                   Result := LowerCase(Pattern);
+        icMixed: if not FDatabaseInfo.StoresLowerCaseIdentifiers then
+                  if FDatabaseInfo.StoresUpperCaseIdentifiers then
+                    Result := UpperCase(Pattern)
+                  else
+                    Result := LowerCase(Pattern);
+      end
+    end else
+      Result := ExtractQuote(Pattern);
 end;
 
 {**
@@ -4302,11 +4675,17 @@ end;
   @return TZWildcardsSet type
 }
 function TZAbstractDatabaseMetadata.GetWildcardsSet:TZWildcardsSet;
+{$IFNDEF TSYSCHARSET_IS_DEPRECATED}
 var i:Integer;
+{$ENDIF}
 begin
+  {$IFDEF TSYSCHARSET_IS_DEPRECATED}
+  Result := WildcardsArray;
+  {$ELSE}
   Result:=[];
   for i:=0 to High(WildcardsArray) do
     Result:=Result+[WildcardsArray[i]];
+  {$ENDIF}
 end;
 
 //----------------------------------------------------------------------
@@ -4322,8 +4701,7 @@ end;
 function TZAbstractDatabaseMetadata.GetProceduresCacheKey(const Catalog: string;
   const SchemaPattern: string; const ProcedureNamePattern: string): string;
 begin
-  Result := Format('get-procedures:%s:%s:%s',
-    [Catalog, SchemaPattern, ProcedureNamePattern]);
+  Result := 'get-procedures:'+Catalog+':'+SchemaPattern+':'+ProcedureNamePattern;
 end;
 
 {**
@@ -4338,8 +4716,8 @@ function TZAbstractDatabaseMetadata.GetProcedureColumnsCacheKey(const Catalog: s
   const SchemaPattern: string; const ProcedureNamePattern: string;
   const ColumnNamePattern: string): string;
 begin
-  Result := Format('get-procedure-columns:%s:%s:%s:%s',
-    [Catalog, SchemaPattern, ProcedureNamePattern, ColumnNamePattern]);
+  Result := 'get-procedure-columns:'+Catalog+':'+SchemaPattern+':'+
+    ProcedureNamePattern+':'+ColumnNamePattern;
 end;
 
 {**
@@ -4361,8 +4739,7 @@ begin
   for I := Low(Types) to High(Types) do
     Key := Key + ':' + Types[I];
 
-  Result := Format('get-tables:%s:%s:%s:%s',
-    [Catalog, SchemaPattern, TableNamePattern, Key]);
+  Result := 'get-tables:'+Catalog+':'+SchemaPattern+':'+TableNamePattern+':'+Key;
 end;
 
 {**
@@ -4404,8 +4781,8 @@ function TZAbstractDatabaseMetadata.GetColumnsCacheKey(const Catalog: string;
   const SchemaPattern: string; const TableNamePattern: string;
   const ColumnNamePattern: string): string;
 begin
-  Result := Format('get-columns:%s:%s:%s:%s',
-    [Catalog, SchemaPattern, TableNamePattern, ColumnNamePattern]);
+  Result := 'get-columns:'+Catalog+':'+SchemaPattern+':'+TableNamePattern+':'+
+    ColumnNamePattern;
 end;
 
 {**
@@ -4420,8 +4797,8 @@ function TZAbstractDatabaseMetadata.GetColumnPrivilegesCacheKey(
   const Catalog: string; const Schema: string; const Table: string;
   const ColumnNamePattern: string): string;
 begin
-  Result := Format('get-column-privileges:%s:%s:%s:%s',
-    [Catalog, Schema, Table, ColumnNamePattern]);
+  Result := 'get-column-privileges:'+Catalog+':'+Schema+':'+Table+':'+
+    ColumnNamePattern;
 end;
 
 {**
@@ -4435,8 +4812,8 @@ function TZAbstractDatabaseMetadata.GetTablePrivilegesCacheKey(
   const Catalog: string; const SchemaPattern: string;
   const TableNamePattern: string): string;
 begin
-  Result := Format('get-table-privileges:%s:%s:%s',
-    [Catalog, SchemaPattern, TableNamePattern]);
+  Result := 'get-table-privileges:'+Catalog+':'+SchemaPattern+':'+
+    TableNamePattern;
 end;
 
 {**
@@ -4452,8 +4829,8 @@ function TZAbstractDatabaseMetadata.GetBestRowIdentifierCacheKey(
   const Catalog: string; const Schema: string; const Table: string;
   const Scope: Integer; const Nullable: Boolean): string;
 begin
-  Result := Format('get-best-row-identifier:%s:%s:%s:%d:%s',
-    [Catalog, Schema, Table, Scope, BoolToStr(Nullable)]);
+  Result := 'get-best-row-identifier:'+Catalog+':'+Schema+':'+Table+':'+
+    ZFastCode.IntToStr(Scope)+':'+BoolToStr(Nullable);
 end;
 
 {**
@@ -4466,7 +4843,7 @@ end;
 function TZAbstractDatabaseMetadata.GetVersionColumnsCacheKey(
   const Catalog: string; const Schema: string; const Table: string): string;
 begin
-  Result := Format('get-version-columns:%s:%s:%s', [Catalog, Schema, Table]);
+  Result := 'get-version-columns:'+Catalog+':'+Schema+':'+Table;
 end;
 
 {**
@@ -4479,7 +4856,7 @@ end;
 function TZAbstractDatabaseMetadata.GetPrimaryKeysCacheKey(const Catalog: string;
   const Schema: string; const Table: string): string;
 begin
-  Result := Format('get-primary-keys:%s:%s:%s', [Catalog, Schema, Table]);
+  Result := 'get-primary-keys:'+Catalog+':'+Schema+':'+Table;
 end;
 
 {**
@@ -4492,7 +4869,7 @@ end;
 function TZAbstractDatabaseMetadata.GetImportedKeysCacheKey(const Catalog: string;
   const Schema: string; const Table: string): string;
 begin
-  Result := Format('get-imported-keys:%s:%s:%s', [Catalog, Schema, Table]);
+  Result := 'get-imported-keys:'+Catalog+':'+Schema+':'+Table;
 end;
 
 {**
@@ -4505,7 +4882,7 @@ end;
 function TZAbstractDatabaseMetadata.GetExportedKeysCacheKey(const Catalog: string;
   const Schema: string; const Table: string): string;
 begin
-  Result := Format('get-exported-keys:%s:%s:%s', [Catalog, Schema, Table]);
+  Result := 'get-exported-keys:'+Catalog+':'+Schema+':'+Table;
 end;
 
 {**
@@ -4523,9 +4900,8 @@ function TZAbstractDatabaseMetadata.GetCrossReferenceCacheKey(
   const PrimaryTable: string; const ForeignCatalog: string;
   const ForeignSchema: string; const ForeignTable: string): string;
 begin
-  Result := Format('get-cross-reference:%s:%s:%s:%s:%s:%s',
-    [PrimaryCatalog, PrimarySchema, PrimaryTable, ForeignCatalog,
-    ForeignSchema, ForeignTable]);
+  Result := 'get-cross-reference:'+PrimaryCatalog+':'+PrimarySchema+':'+
+    PrimaryTable+':'+ForeignCatalog+':'+ForeignSchema+':'+ForeignTable;
 end;
 
 {**
@@ -4554,8 +4930,8 @@ function TZAbstractDatabaseMetadata.GetIndexInfoCacheKey(const Catalog: string;
   const Schema: string; const Table: string; const Unique: Boolean;
   const Approximate: Boolean): string;
 begin
-  Result := Format('get-index-info:%s:%s:%s:%s:%s',
-    [Catalog, Schema, Table, BoolToStr(Unique), BoolToStr(Approximate)]);
+  Result := 'get-index-info:'+Catalog+':'+Schema+':'+Table+':'+
+    BoolToStr(Unique)+':'+BoolToStr(Approximate);
 end;
 
 {**
@@ -4568,8 +4944,7 @@ end;
 function TZAbstractDatabaseMetadata.GetSequencesCacheKey(const Catalog: string;
   const SchemaPattern: string; const SequenceNamePattern: string): string;
 begin
-  Result := Format('get-sequences:%s:%s:%s',
-    [Catalog, SchemaPattern, SequenceNamePattern]);
+  Result := 'get-sequences:'+Catalog+':'+SchemaPattern+':'+SequenceNamePattern;
 end;
 
 {**
@@ -4588,9 +4963,8 @@ var
 begin
   Result := '';
   for I := Low(Types) to High(Types) do
-    Result := Result + ':' + IntToStr(Types[I]);
-  Result := Format('get-udts:%s:%s:%s%s',
-    [Catalog, SchemaPattern, TypeNamePattern, Result]);
+    Result := Result + ':' + ZFastCode.IntToStr(Types[I]);
+  Result := 'get-udts:'+Catalog+':'+SchemaPattern+':'+TypeNamePattern+':'+Result;
 end;
 
 {**
@@ -4614,12 +4988,31 @@ end;
 { TZVirtualResultSet }
 
 {**
+  Change Order of one Rows in Resultset
+  Note: First Row = 1, to get RowNo use IZResultSet.GetRow
+  @param CurrentRowNo the curren number of row
+  @param NewRowNo the new number of row
+}
+procedure TZVirtualResultSet.ChangeRowNo(CurrentRowNo, NewRowNo: NativeInt);
+var P: Pointer;
+begin
+  CurrentRowNo := CurrentRowNo -1;
+  NewRowNo := NewRowNo -1;
+  P := RowsList[CurrentRowNo];
+  RowsList.Delete(CurrentRowNo);
+  RowsList.Insert(NewRowNo, P);
+  P := InitialRowsList[CurrentRowNo];
+  InitialRowsList.Delete(CurrentRowNo);
+  InitialRowsList.Insert(NewRowNo, P);
+end;
+
+{**
   Creates this object and assignes the main properties.
   @param Statement an SQL statement object.
   @param SQL an SQL query string.
 }
 constructor TZVirtualResultSet.CreateWithStatement(const SQL: string;
-   Statement: IZStatement; ConSettings: PZConSettings);
+   const Statement: IZStatement; ConSettings: PZConSettings);
 begin
   inherited CreateWithStatement(SQL, Statement, ConSettings);
 end;
@@ -4633,14 +5026,6 @@ constructor TZVirtualResultSet.CreateWithColumns(ColumnsInfo: TObjectList;
   const SQL: string; ConSettings: PZConSettings);
 begin
   inherited CreateWithColumns(ColumnsInfo, SQL, ConSettings);
-end;
-
-{**
-  Destroys this object and cleanups the memory.
-}
-destructor TZVirtualResultSet.Destroy;
-begin
-  inherited Destroy;
 end;
 
 {**
@@ -4669,18 +5054,68 @@ end;
   @param Metadata a database metadata interface.
 }
 constructor TZDefaultIdentifierConvertor.Create(
-  Metadata: IZDatabaseMetadata);
+  const Metadata: IZDatabaseMetadata);
 begin
   inherited Create;
   FMetadata := Pointer(Metadata);
 end;
 
+{** written by FrOsT}
+function TZDefaultIdentifierConvertor.GetIdentifierCase(
+  const Value: String; TestKeyWords: Boolean): TZIdentifierCase;
+var
+  P1: PChar;
+  UpCnt, LoCnt: Integer;
+  S: String;
+begin
+  Result := icNone;
+  if Value = '' then Exit;
+  P1 := Pointer(Value);
+  case P1^ of //don't use damn slow charInSet
+    '0'..'9': begin
+      Result := icSpecial;
+      Exit;
+    end;
+  end;
+  UpCnt := 0; LoCnt := 0;
+  while P1^<> #0 do begin
+    case P1^ of
+      'A'..'Z': Inc(UpCnt);
+      'a'..'z': Inc(LoCnt);
+      '0'..'9','_': ;
+      else begin //stop loop
+        Result := icSpecial; //Exit(caseSpec) is supported since XE2 all older do not compile this
+        Exit;
+      end;
+    end;
+    Inc(P1);
+  end;
+  if (UpCnt > 0) then
+    if (LoCnt = 0)
+    then Result := icUpper
+    else Result := icMixed
+  else if (LoCnt > 0)
+  then Result := icLower
+  else Result := icNone; //this could happen only if table starts with '_' and possible numbers follow
+
+  if TestKeyWords and (Result <> icNone){not (Result in [icNone, icSpecial])} then begin
+    { Checks for reserved keywords. }
+    if Metadata.GetDatabaseInfo.StoresUpperCaseIdentifiers and (Result <> icUpper) then
+      S := UpperCase(Value)
+    else if not Metadata.GetDatabaseInfo.StoresUpperCaseIdentifiers and (Result <> icLower) then
+      s := LowerCase(Value)
+    else S := Value;
+    // With sorted list fast binary search is performed
+    if Metadata.GetDatabaseInfo.GetIdentifierQuoteKeywordsSorted.IndexOf(S) <> -1 then
+      Result := icSpecial;
+  end;
+end;
+
 function TZDefaultIdentifierConvertor.GetMetaData;
 begin
-  if Assigned(FMetadata) then
-    Result := IZDatabaseMetadata(FMetadata)
-  else
-    Result := nil;
+  if Assigned(FMetadata)
+  then Result := IZDatabaseMetadata(FMetadata)
+  else Result := nil;
 end;
 
 {**
@@ -4689,18 +5124,8 @@ end;
   @return <code>True</code> is the identifier string in lower case.
 }
 function TZDefaultIdentifierConvertor.IsLowerCase(const Value: string): Boolean;
-var
-  I: Integer;
 begin
-  Result := True;
-  for I := 1 to Length(Value) do
-  begin
-    if not CharInSet(Value[I], ['a'..'z','0'..'9','_']) then
-    begin
-      Result := False;
-      Break;
-    end;
-  end;
+  Result := GetIdentifierCase(Value, False) = icLower;
 end;
 
 {**
@@ -4709,18 +5134,8 @@ end;
   @return <code>True</code> is the identifier string in upper case.
 }
 function TZDefaultIdentifierConvertor.IsUpperCase(const Value: string): Boolean;
-var
-  I: Integer;
 begin
-  Result := True;
-  for I := 1 to Length(Value) do
-  begin
-    if not CharInSet(Value[I], ['A'..'Z','0'..'9','_']) then
-    begin
-      Result := False;
-      Break;
-    end;
-  end;
+  Result := GetIdentifierCase(Value, False) = icUpper;
 end;
 
 {**
@@ -4729,23 +5144,8 @@ end;
   @return <code>True</code> is the identifier string in mixed case.
 }
 function TZDefaultIdentifierConvertor.IsSpecialCase(const Value: string): Boolean;
-var
-  I: Integer;
 begin
-  Result := False;
-  if CharInSet(Value[1], ['0'..'9']) then
-  begin
-    Result := True;
-    exit;
-  end;
-  for I := 1 to Length(Value) do
-  begin
-    if not CharInSet(Value[I], ['A'..'Z','a'..'z','0'..'9','_']) then
-    begin
-      Result := True;
-      Break;
-    end;
-  end;
+  Result := GetIdentifierCase(Value, True) = icSpecial;
 end;
 
 {**
@@ -4753,31 +5153,13 @@ end;
   @return <code>True</code> if the string case sensitive.
 }
 function TZDefaultIdentifierConvertor.IsCaseSensitive(const Value: string): Boolean;
-const
-  AnsiSQLKeywords = 'insert,update,delete,select,drop,create,from,set,values,'
-    + 'where,order,group,by,having,into,as,table,index,primary,key,on,is,null,'
-    + 'char,varchar,integer,number,alter,column,value,'
-    + 'current,top,login,status,version';
-var
-  Keywords: string;
 begin
-  if Value = '' then
-    Result := False
-  else if IsSpecialCase(Value) then
-    Result := True
-  else if IsLowerCase(Value) then
-    Result := Metadata.GetDatabaseInfo.StoresUpperCaseIdentifiers
-  else if IsUpperCase(Value) then
-    Result := Metadata.GetDatabaseInfo.StoresLowerCaseIdentifiers
-  else
-    Result := not Metadata.GetDatabaseInfo.StoresMixedCaseIdentifiers;
-
-  { Checks for reserved keywords. }
-  if not Result then
-  begin
-    Keywords := ',' + AnsiSQLKeywords + ','
-      + LowerCase(Metadata.GetDatabaseInfo.GetSQLKeywords) + ',';
-    Result := Pos(',' + LowerCase(Value) + ',', Keywords) > 0;
+  case GetIdentifierCase(Value, True) of
+    icLower:   Result := Metadata.GetDatabaseInfo.StoresUpperCaseIdentifiers;
+    icUpper:   Result := Metadata.GetDatabaseInfo.StoresLowerCaseIdentifiers;
+    icSpecial: Result := True;
+    icMixed:   Result := not Metadata.GetDatabaseInfo.StoresMixedCaseIdentifiers;
+    else Result := False;
   end;
 end;
 
@@ -4788,9 +5170,12 @@ end;
 function TZDefaultIdentifierConvertor.IsQuoted(const Value: string): Boolean;
 var
   QuoteDelim: string;
+  PQ: PChar absolute QuoteDelim;
+  PV: PChar absolute Value;
 begin
   QuoteDelim := Metadata.GetDatabaseInfo.GetIdentifierQuoteString;
-  Result := (QuoteDelim <> '') and (Value <> '') and (QuoteDelim[1] = Value[1]);
+  Result := (PV <> nil) and (PQ <> nil) and (PV^ = PQ^) and
+            ((PV+Length(Value)-1)^ = (PQ+Length(QuoteDelim)-1)^);
 end;
 
 {**
@@ -4799,27 +5184,29 @@ end;
   @return a extracted and processed string.
 }
 function TZDefaultIdentifierConvertor.ExtractQuote(const Value: string): string;
+var
+  QuoteDelim: string;
+  PQ: PChar absolute QuoteDelim;
 begin
-  if IsQuoted(Value) then
-  begin
-    Result := Copy(Value, 2, Length(Value) - 2);
-    if not Metadata.GetDatabaseInfo.StoresMixedCaseQuotedIdentifiers then
-    begin
-      if Metadata.GetDatabaseInfo.StoresLowerCaseQuotedIdentifiers then
-        Result := LowerCase(Result)
-      else if Metadata.GetDatabaseInfo.StoresUpperCaseQuotedIdentifiers then
-        Result := UpperCase(Result);
+  if IsQuoted(Value) then begin
+    QuoteDelim := Metadata.GetDatabaseInfo.GetIdentifierQuoteString;
+    case Length(QuoteDelim) of
+      1: Result := SQLDequotedStr(Value, PQ^);
+      2: Result := SQLDequotedStr(Value, PQ^, (PQ+1)^);
+      else Result := Value;
     end;
-  end
-  else
-  begin
+  end else begin
     Result := Value;
-    if not Metadata.GetDatabaseInfo.StoresMixedCaseIdentifiers then
-    begin
-      if Metadata.GetDatabaseInfo.StoresLowerCaseIdentifiers then
-        Result := LowerCase(Result)
-      else if Metadata.GetDatabaseInfo.StoresUpperCaseIdentifiers then
+    case GetIdentifierCase(Value,True) of
+      icMixed:
+        if not Metadata.GetDatabaseInfo.StoresMixedCaseIdentifiers then
+          if Metadata.GetDatabaseInfo.StoresUpperCaseIdentifiers
+          then Result := UpperCase(Result)
+          else Result := LowerCase(Result);
+      icLower: if Metadata.GetDatabaseInfo.StoresUpperCaseIdentifiers then
         Result := UpperCase(Result);
+      icUpper: if Metadata.GetDatabaseInfo.StoresLowerCaseIdentifiers then
+        Result := LowerCase(Result);
     end;
   end;
 end;
@@ -4832,15 +5219,16 @@ end;
 function TZDefaultIdentifierConvertor.Quote(const Value: string): string;
 var
   QuoteDelim: string;
+  PQ: PChar absolute QuoteDelim;
 begin
   Result := Value;
-  if IsCaseSensitive(Value) then
-  begin
+  if IsCaseSensitive(Value) then begin
     QuoteDelim := Metadata.GetDatabaseInfo.GetIdentifierQuoteString;
-    if Length(QuoteDelim) > 1 then
-      Result := QuoteDelim[1] + Result + QuoteDelim[2]
-    else if Length(QuoteDelim) = 1 then
-      Result := QuoteDelim[1] + Result + QuoteDelim[1];
+    case Length(QuoteDelim) of
+      1: Result := SQLQuotedStr(Value, PQ^);
+      2: Result := SQLQuotedStr(Value, PQ^, (PQ+1)^);
+      else Result := Value;
+    end;
   end;
 end;
 
@@ -4869,14 +5257,14 @@ end;
 
 const
   CharacterSetsColumnsCount = 2;
-  CharacterSetsColumns: array[1..CharacterSetsColumnsCount]
+  CharacterSetsColumns: array[FirstDbcIndex..CharacterSetsColumnsCount{$IFDEF GENERIC_INDEX}-1{$ENDIF}]
     of TZMetadataColumnDef =(
     (Name: 'CHARACTER_SET_NAME'; SQLType: stString; Length: 35),
-    (Name: 'CHARACTER_SET_ID'; SQLType: stShort; Length: 0)
+    (Name: 'CHARACTER_SET_ID'; SQLType: stSmall; Length: 0)
   );
 
   CollationCharSetColumnsCount = 8; //EgonHugeist
-  CollationCharSetColumns: array[1..CollationCharSetColumnsCount]
+  CollationCharSetColumns: array[FirstDbcIndex..CollationCharSetColumnsCount {$IFDEF GENERIC_INDEX}-1{$ENDIF}]
     of TZMetadataColumnDef =(
     (Name: 'COLLATION_CATALOG'; SQLType: stString; Length: 35),
     (Name: 'COLLATION_SCHEMA'; SQLType: stString; Length: 35),
@@ -4884,25 +5272,25 @@ const
     (Name: 'COLLATION_COLUMN'; SQLType: stString; Length: 35),
     (Name: 'COLLATION_NAME'; SQLType: stString; Length: 35),
     (Name: 'CHARACTER_SET_NAME'; SQLType: stString; Length: 35),
-    (Name: 'CHARACTER_SET_ID'; SQLType: stShort; Length: 0),
-    (Name: 'CHARACTER_SET_SIZE'; SQLType: stShort; Length: 0)
+    (Name: 'CHARACTER_SET_ID'; SQLType: stSmall; Length: 0),
+    (Name: 'CHARACTER_SET_SIZE'; SQLType: stSmall; Length: 0)
   );
 
-  TriggersColumnCount = 8;  //EgonHugeist
-  TriggersColumns: array[1..TriggersColumnCount]
+  TriggersColumnCount = 8;
+  TriggersColumns: array[FirstDbcIndex..TriggersColumnCount {$IFDEF GENERIC_INDEX}-1{$ENDIF}]
     of TZMetadataColumnDef =(
     (Name: 'TRIGGER_CAT'; SQLType: stString; Length: 255),
     (Name: 'TRIGGER_SCHEM'; SQLType: stString; Length: 255),
     (Name: 'TRIGGER_NAME'; SQLType: stString; Length: 255), //RDB$TRIGGER_NAME
     (Name: 'TRIGGER_RELATION'; SQLType: stString; Length: 255), //RDB$RELATION_NAME
-    (Name: 'TRIGGER_TYPE'; SQLType: stShort; Length: 0),     //RDB$TRIGGER_TYPE
-    (Name: 'TRIGGER_INACTIVE'; SQLType: stShort; Length: 0),     //RDB$TRIGGER_INACTIVE
+    (Name: 'TRIGGER_TYPE'; SQLType: stSmall; Length: 0),     //RDB$TRIGGER_TYPE
+    (Name: 'TRIGGER_INACTIVE'; SQLType: stSmall; Length: 0),     //RDB$TRIGGER_INACTIVE
     (Name: 'TRIGGER_SOURCE'; SQLType: stString; Length: 3000),     //RDB$TRIGGER_SOURCE
     (Name: 'TRIGGER_DESCRIPTION'; SQLType: stString; Length: 255)     //RDB$DESCRIPTION
   );
 
   ProceduresColumnCount = 8;
-  ProceduresColumns: array[1..ProceduresColumnCount]
+  ProceduresColumns: array[FirstDbcIndex..ProceduresColumnCount {$IFDEF GENERIC_INDEX}-1{$ENDIF}]
     of TZMetadataColumnDef =(
     (Name: 'PROCEDURE_CAT'; SQLType: stString; Length: 255),
     (Name: 'PROCEDURE_SCHEM'; SQLType: stString; Length: 255),
@@ -4911,29 +5299,29 @@ const
     (Name: 'RESERVED1'; SQLType: stString; Length: 255),
     (Name: 'RESERVED2'; SQLType: stString; Length: 255),
     (Name: 'REMARKS'; SQLType: stString; Length: 255),
-    (Name: 'PROCEDURE_TYPE'; SQLType: stShort; Length: 0)
+    (Name: 'PROCEDURE_TYPE'; SQLType: stSmall; Length: 0)
   );
 
   ProceduresColColumnCount = 13;
-  ProceduresColColumns: array[1..ProceduresColColumnCount]
+  ProceduresColColumns: array[FirstDbcIndex..ProceduresColColumnCount {$IFDEF GENERIC_INDEX}-1{$ENDIF}]
     of TZMetadataColumnDef =(
     (Name: 'PROCEDURE_CAT'; SQLType: stString; Length: 255),
     (Name: 'PROCEDURE_SCHEM'; SQLType: stString; Length: 255),
     (Name: 'PROCEDURE_NAME'; SQLType: stString; Length: 255),
     (Name: 'COLUMN_NAME'; SQLType: stString; Length: 255),
-    (Name: 'COLUMN_TYPE'; SQLType: stShort; Length: 0),
-    (Name: 'DATA_TYPE'; SQLType: stShort; Length: 0),
+    (Name: 'COLUMN_TYPE'; SQLType: stSmall; Length: 0),
+    (Name: 'DATA_TYPE'; SQLType: stSmall; Length: 0),
     (Name: 'TYPE_NAME'; SQLType: stString; Length: 255),
     (Name: 'PRECISION'; SQLType: stInteger; Length: 0),
     (Name: 'LENGTH'; SQLType: stInteger; Length: 0),
-    (Name: 'SCALE'; SQLType: stShort; Length: 0),
-    (Name: 'RADIX'; SQLType: stShort; Length: 0),
-    (Name: 'NULLABLE'; SQLType: stShort; Length: 0),
+    (Name: 'SCALE'; SQLType: stSmall; Length: 0),
+    (Name: 'RADIX'; SQLType: stSmall; Length: 0),
+    (Name: 'NULLABLE'; SQLType: stSmall; Length: 0),
     (Name: 'REMARKS'; SQLType: stString; Length: 255)
   );
 
   TableColumnCount = 5;
-  TableColumns: array[1..TableColumnCount]
+  TableColumns: array[FirstDbcIndex..TableColumnCount {$IFDEF GENERIC_INDEX}-1{$ENDIF}]
     of TZMetadataColumnDef =(
     (Name: 'TABLE_CAT'; SQLType: stString; Length: 255),
     (Name: 'TABLE_SCHEM'; SQLType: stString; Length: 255),
@@ -4943,37 +5331,37 @@ const
   );
 
   SchemaColumnCount = 1;
-  SchemaColumns: array[1..SchemaColumnCount]
+  SchemaColumns: array[FirstDbcIndex..SchemaColumnCount {$IFDEF GENERIC_INDEX}-1{$ENDIF}]
     of TZMetadataColumnDef =(
     (Name: 'TABLE_SCHEM'; SQLType: stString; Length: 255)
   );
 
   CatalogColumnCount = 1;
-  CatalogColumns: array[1..CatalogColumnCount]
+  CatalogColumns: array[FirstDbcIndex..CatalogColumnCount {$IFDEF GENERIC_INDEX}-1{$ENDIF}]
     of TZMetadataColumnDef =(
     (Name: 'TABLE_CAT'; SQLType: stString; Length: 255)
   );
 
   TableTypeColumnCount = 1;
-  TableTypeColumns: array[1..TableTypeColumnCount]
+  TableTypeColumns: array[FirstDbcIndex..TableTypeColumnCount {$IFDEF GENERIC_INDEX}-1{$ENDIF}]
     of TZMetadataColumnDef =(
     (Name: 'TABLE_TYPE'; SQLType: stString; Length: 255)
   );
 
   TableColColumnCount = 24;
-  TableColColumns: array[1..TableColColumnCount]
+  TableColColumns: array[FirstDbcIndex..TableColColumnCount {$IFDEF GENERIC_INDEX}-1{$ENDIF}]
     of TZMetadataColumnDef =(
     (Name: 'TABLE_CAT'; SQLType: stString; Length: 255),
     (Name: 'TABLE_SCHEM'; SQLType: stString; Length: 255),
     (Name: 'TABLE_NAME'; SQLType: stString; Length: 255),
     (Name: 'COLUMN_NAME'; SQLType: stString; Length: 255),
-    (Name: 'DATA_TYPE'; SQLType: stShort; Length: 0),
+    (Name: 'DATA_TYPE'; SQLType: stSmall; Length: 0),
     (Name: 'TYPE_NAME'; SQLType: stString; Length: 255),
     (Name: 'COLUMN_SIZE'; SQLType: stInteger; Length: 0),
     (Name: 'BUFFER_LENGTH'; SQLType: stInteger; Length: 0),
     (Name: 'DECIMAL_DIGITS'; SQLType: stInteger; Length: 0),
     (Name: 'NUM_PREC_RADIX'; SQLType: stInteger; Length: 0),
-    (Name: 'NULLABLE'; SQLType: stInteger; Length: 0),
+    (Name: 'NULLABLE'; SQLType: stSmall; Length: 0),
     (Name: 'REMARKS'; SQLType: stString; Length: 255),
     (Name: 'COLUMN_DEF'; SQLType: stString; Length: 255),
     (Name: 'SQL_DATA_TYPE'; SQLType: stInteger; Length: 0),
@@ -4990,7 +5378,7 @@ const
   );
 
   TableColPrivColumnCount = 8;
-  TableColPrivColumns: array[1..TableColPrivColumnCount]
+  TableColPrivColumns: array[FirstDbcIndex..TableColPrivColumnCount {$IFDEF GENERIC_INDEX}-1{$ENDIF}]
     of TZMetadataColumnDef =(
     (Name: 'TABLE_CAT'; SQLType: stString; Length: 255),
     (Name: 'TABLE_SCHEM'; SQLType: stString; Length: 255),
@@ -5003,7 +5391,7 @@ const
   );
 
   TablePrivColumnCount = 7;
-  TablePrivColumns: array[1..TablePrivColumnCount]
+  TablePrivColumns: array[FirstDbcIndex..TablePrivColumnCount {$IFDEF GENERIC_INDEX}-1{$ENDIF}]
     of TZMetadataColumnDef =(
     (Name: 'TABLE_CAT'; SQLType: stString; Length: 255),
     (Name: 'TABLE_SCHEM'; SQLType: stString; Length: 255),
@@ -5015,44 +5403,44 @@ const
   );
 
   BestRowIdentColumnCount = 8;
-  BestRowIdentColumns: array[1..BestRowIdentColumnCount]
+  BestRowIdentColumns: array[FirstDbcIndex..BestRowIdentColumnCount {$IFDEF GENERIC_INDEX}-1{$ENDIF}]
     of TZMetadataColumnDef =(
-    (Name: 'SCOPE'; SQLType: stShort; Length: 0),
+    (Name: 'SCOPE'; SQLType: stSmall; Length: 0),
     (Name: 'COLUMN_NAME'; SQLType: stString; Length: 255),
-    (Name: 'DATA_TYPE'; SQLType: stShort; Length: 0),
+    (Name: 'DATA_TYPE'; SQLType: stSmall; Length: 0),
     (Name: 'TYPE_NAME'; SQLType: stString; Length: 255),
     (Name: 'COLUMN_SIZE'; SQLType: stInteger; Length: 0),
     (Name: 'BUFFER_LENGTH'; SQLType: stInteger; Length: 0),
-    (Name: 'DECIMAL_DIGITS'; SQLType: stShort; Length: 0),
-    (Name: 'PSEUDO_COLUMN'; SQLType: stShort; Length: 0)
+    (Name: 'DECIMAL_DIGITS'; SQLType: stSmall; Length: 0),
+    (Name: 'PSEUDO_COLUMN'; SQLType: stSmall; Length: 0)
   );
 
   TableColVerColumnCount = 8;
-  TableColVerColumns: array[1..TableColVerColumnCount]
+  TableColVerColumns: array[FirstDbcIndex..TableColVerColumnCount {$IFDEF GENERIC_INDEX}-1{$ENDIF}]
     of TZMetadataColumnDef =(
-    (Name: 'SCOPE'; SQLType: stShort; Length: 0),
+    (Name: 'SCOPE'; SQLType: stSmall; Length: 0),
     (Name: 'COLUMN_NAME'; SQLType: stString; Length: 255),
-    (Name: 'DATA_TYPE'; SQLType: stShort; Length: 0),
+    (Name: 'DATA_TYPE'; SQLType: stSmall; Length: 0),
     (Name: 'TYPE_NAME'; SQLType: stString; Length: 255),
     (Name: 'COLUMN_SIZE'; SQLType: stInteger; Length: 0),
     (Name: 'BUFFER_LENGTH'; SQLType: stInteger; Length: 0),
-    (Name: 'DECIMAL_DIGITS'; SQLType: stShort; Length: 0),
-    (Name: 'PSEUDO_COLUMN'; SQLType: stShort; Length: 0)
+    (Name: 'DECIMAL_DIGITS'; SQLType: stSmall; Length: 0),
+    (Name: 'PSEUDO_COLUMN'; SQLType: stSmall; Length: 0)
   );
 
   PrimaryKeyColumnCount = 6;
-  PrimaryKeyColumns: array[1..PrimaryKeyColumnCount]
+  PrimaryKeyColumns: array[FirstDbcIndex..PrimaryKeyColumnCount {$IFDEF GENERIC_INDEX}-1{$ENDIF}]
     of TZMetadataColumnDef =(
     (Name: 'TABLE_CAT'; SQLType: stString; Length: 255),
     (Name: 'TABLE_SCHEM'; SQLType: stString; Length: 255),
     (Name: 'TABLE_NAME'; SQLType: stString; Length: 255),
     (Name: 'COLUMN_NAME'; SQLType: stString; Length: 255),
-    (Name: 'KEY_SEQ'; SQLType: stShort; Length: 0),
+    (Name: 'KEY_SEQ'; SQLType: stSmall; Length: 0),
     (Name: 'PK_NAME'; SQLType: stString; Length: 255)
   );
 
   ImportedKeyColumnCount = 14;
-  ImportedKeyColumns: array[1..ImportedKeyColumnCount]
+  ImportedKeyColumns: array[FirstDbcIndex..ImportedKeyColumnCount {$IFDEF GENERIC_INDEX}-1{$ENDIF}]
     of TZMetadataColumnDef =(
     (Name: 'PKTABLE_CAT'; SQLType: stString; Length: 255),
     (Name: 'PKTABLE_SCHEM'; SQLType: stString; Length: 255),
@@ -5062,16 +5450,16 @@ const
     (Name: 'FKTABLE_SCHEM'; SQLType: stString; Length: 255),
     (Name: 'FKTABLE_NAME'; SQLType: stString; Length: 255),
     (Name: 'FKCOLUMN_NAME'; SQLType: stString; Length: 255),
-    (Name: 'KEY_SEQ'; SQLType: stShort; Length: 0),
-    (Name: 'UPDATE_RULE'; SQLType: stShort; Length: 0),
-    (Name: 'DELETE_RULE'; SQLType: stShort; Length: 0),
+    (Name: 'KEY_SEQ'; SQLType: stSmall; Length: 0),
+    (Name: 'UPDATE_RULE'; SQLType: stSmall; Length: 0),
+    (Name: 'DELETE_RULE'; SQLType: stSmall; Length: 0),
     (Name: 'FK_NAME'; SQLType: stString; Length: 255),
     (Name: 'PK_NAME'; SQLType: stString; Length: 255),
-    (Name: 'DEFERRABILITY'; SQLType: stShort; Length: 0)
+    (Name: 'DEFERRABILITY'; SQLType: stSmall; Length: 0)
   );
 
   ExportedKeyColumnCount = 14;
-  ExportedKeyColumns: array[1..ExportedKeyColumnCount]
+  ExportedKeyColumns: array[FirstDbcIndex..ExportedKeyColumnCount {$IFDEF GENERIC_INDEX}-1{$ENDIF}]
     of TZMetadataColumnDef =(
     (Name: 'PKTABLE_CAT'; SQLType: stString; Length: 255),
     (Name: 'PKTABLE_SCHEM'; SQLType: stString; Length: 255),
@@ -5081,16 +5469,16 @@ const
     (Name: 'FKTABLE_SCHEM'; SQLType: stString; Length: 255),
     (Name: 'FKTABLE_NAME'; SQLType: stString; Length: 255),
     (Name: 'FKCOLUMN_NAME'; SQLType: stString; Length: 255),
-    (Name: 'KEY_SEQ'; SQLType: stShort; Length: 0),
-    (Name: 'UPDATE_RULE'; SQLType: stShort; Length: 0),
-    (Name: 'DELETE_RULE'; SQLType: stShort; Length: 0),
+    (Name: 'KEY_SEQ'; SQLType: stSmall; Length: 0),
+    (Name: 'UPDATE_RULE'; SQLType: stSmall; Length: 0),
+    (Name: 'DELETE_RULE'; SQLType: stSmall; Length: 0),
     (Name: 'FK_NAME'; SQLType: stString; Length: 255),
     (Name: 'PK_NAME'; SQLType: stString; Length: 255),
-    (Name: 'DEFERRABILITY'; SQLType: stShort; Length: 0)
+    (Name: 'DEFERRABILITY'; SQLType: stSmall; Length: 0)
   );
 
   CrossRefColumnCount = 14;
-  CrossRefColumns: array[1..CrossRefColumnCount]
+  CrossRefColumns: array[FirstDbcIndex..CrossRefColumnCount {$IFDEF GENERIC_INDEX}-1{$ENDIF}]
     of TZMetadataColumnDef =(
     (Name: 'PKTABLE_CAT'; SQLType: stString; Length: 255),
     (Name: 'PKTABLE_SCHEM'; SQLType: stString; Length: 255),
@@ -5100,39 +5488,39 @@ const
     (Name: 'FKTABLE_SCHEM'; SQLType: stString; Length: 255),
     (Name: 'FKTABLE_NAME'; SQLType: stString; Length: 255),
     (Name: 'FKCOLUMN_NAME'; SQLType: stString; Length: 255),
-    (Name: 'KEY_SEQ'; SQLType: stShort; Length: 0),
-    (Name: 'UPDATE_RULE'; SQLType: stShort; Length: 0),
-    (Name: 'DELETE_RULE'; SQLType: stShort; Length: 0),
+    (Name: 'KEY_SEQ'; SQLType: stSmall; Length: 0),
+    (Name: 'UPDATE_RULE'; SQLType: stSmall; Length: 0),
+    (Name: 'DELETE_RULE'; SQLType: stSmall; Length: 0),
     (Name: 'FK_NAME'; SQLType: stString; Length: 255),
     (Name: 'PK_NAME'; SQLType: stString; Length: 255),
-    (Name: 'DEFERRABILITY'; SQLType: stShort; Length: 0)
+    (Name: 'DEFERRABILITY'; SQLType: stSmall; Length: 0)
   );
 
   TypeInfoColumnCount = 18;
-  TypeInfoColumns: array[1..TypeInfoColumnCount]
+  TypeInfoColumns: array[FirstDbcIndex..TypeInfoColumnCount {$IFDEF GENERIC_INDEX}-1{$ENDIF}]
     of TZMetadataColumnDef =(
     (Name: 'TYPE_NAME'; SQLType: stString; Length: 255),
-    (Name: 'DATA_TYPE'; SQLType: stShort; Length: 0),
+    (Name: 'DATA_TYPE'; SQLType: stSmall; Length: 0),
     (Name: 'PRECISION'; SQLType: stInteger; Length: 0),
     (Name: 'LITERAL_PREFIX'; SQLType: stString; Length: 255),
     (Name: 'LITERAL_SUFFIX'; SQLType: stString; Length: 255),
     (Name: 'CREATE_PARAMS'; SQLType: stString; Length: 255),
-    (Name: 'NULLABLE'; SQLType: stShort; Length: 0),
+    (Name: 'NULLABLE'; SQLType: stSmall; Length: 0),
     (Name: 'CASE_SENSITIVE'; SQLType: stBoolean; Length: 0),
-    (Name: 'SEARCHABLE'; SQLType: stShort; Length: 0),
+    (Name: 'SEARCHABLE'; SQLType: stSmall; Length: 0),
     (Name: 'UNSIGNED_ATTRIBUTE'; SQLType: stBoolean; Length: 0),
     (Name: 'FIXED_PREC_SCALE'; SQLType: stBoolean; Length: 0),
     (Name: 'AUTO_INCREMENT'; SQLType: stBoolean; Length: 0),
     (Name: 'LOCAL_TYPE_NAME'; SQLType: stString; Length: 255),
-    (Name: 'MINIMUM_SCALE'; SQLType: stShort; Length: 0),
-    (Name: 'MAXIMUM_SCALE'; SQLType: stShort; Length: 0),
+    (Name: 'MINIMUM_SCALE'; SQLType: stSmall; Length: 0),
+    (Name: 'MAXIMUM_SCALE'; SQLType: stSmall; Length: 0),
     (Name: 'SQL_DATA_TYPE'; SQLType: stInteger; Length: 0),
     (Name: 'SQL_DATETIME_SUB'; SQLType: stInteger; Length: 0),
     (Name: 'NUM_PREC_RADIX'; SQLType: stInteger; Length: 0)
   );
 
   IndexInfoColumnCount = 13;
-  IndexInfoColumns: array[1..IndexInfoColumnCount]
+  IndexInfoColumns: array[FirstDbcIndex..IndexInfoColumnCount {$IFDEF GENERIC_INDEX}-1{$ENDIF}]
     of TZMetadataColumnDef =(
     (Name: 'TABLE_CAT'; SQLType: stString; Length: 255),
     (Name: 'TABLE_SCHEM'; SQLType: stString; Length: 255),
@@ -5140,8 +5528,8 @@ const
     (Name: 'NON_UNIQUE'; SQLType: stBoolean; Length: 0),
     (Name: 'INDEX_QUALIFIER'; SQLType: stString; Length: 255),
     (Name: 'INDEX_NAME'; SQLType: stString; Length: 255),
-    (Name: 'TYPE'; SQLType: stShort; Length: 0),
-    (Name: 'ORDINAL_POSITION'; SQLType: stShort; Length: 0),
+    (Name: 'TYPE'; SQLType: stSmall; Length: 0),
+    (Name: 'ORDINAL_POSITION'; SQLType: stSmall; Length: 0),
     (Name: 'COLUMN_NAME'; SQLType: stString; Length: 255),
     (Name: 'ASC_OR_DESC'; SQLType: stString; Length: 255),
     (Name: 'CARDINALITY'; SQLType: stInteger; Length: 0),
@@ -5150,7 +5538,7 @@ const
   );
 
   SequenceColumnCount = 3;
-  SequenceColumns: array[1..SequenceColumnCount]
+  SequenceColumns: array[FirstDbcIndex..SequenceColumnCount {$IFDEF GENERIC_INDEX}-1{$ENDIF}]
     of TZMetadataColumnDef = (
     (Name: 'SEQUENCE_CAT'; SQLType: stString; Length: 255),
     (Name: 'SEQUENCE_SCHEM'; SQLType: stString; Length: 255),
@@ -5158,105 +5546,125 @@ const
   );
 
   UDTColumnCount = 6;
-  UDTColumns: array[1..UDTColumnCount]
+  UDTColumns: array[FirstDbcIndex..UDTColumnCount {$IFDEF GENERIC_INDEX}-1{$ENDIF}]
     of TZMetadataColumnDef =(
     (Name: 'TYPE_CAT'; SQLType: stString; Length: 255),
     (Name: 'TYPE_SCHEM'; SQLType: stString; Length: 255),
     (Name: 'TYPE_NAME'; SQLType: stString; Length: 255),
     (Name: 'CLASS_NAME'; SQLType: stString; Length: 255),
-    (Name: 'DATA_TYPE'; SQLType: stShort; Length: 0),
+    (Name: 'DATA_TYPE'; SQLType: stSmall; Length: 0),
     (Name: 'REMARKS'; SQLType: stString; Length: 255)
   );
 
 var
   I: Integer;
 
+{ TZUnCloseableResultSet }
+
+procedure TZUnCloseableResultSet.Close;
+begin
+  if fDoClose then
+    inherited Close;
+end;
+
+destructor TZUnCloseableResultSet.Destroy;
+begin
+  fDoClose := True;
+  inherited Destroy;
+end;
+
+procedure TZUnCloseableResultSet.ResetCursor;
+begin
+  if not fDoClose then
+    BeforeFirst;
+end;
+
 initialization
   SetLength(CharacterSetsColumnsDynArray, CharacterSetsColumnsCount);
-  for I := 1 to CharacterSetsColumnsCount do
-    CharacterSetsColumnsDynArray[I - 1] := CharacterSetsColumns[I];
+  for I := FirstDbcIndex to CharacterSetsColumnsCount {$IFDEF GENERIC_INDEX}-1{$ENDIF} do
+    CharacterSetsColumnsDynArray[I{$IFNDEF GENERIC_INDEX}-1{$ENDIF}] := CharacterSetsColumns[I];
 
   SetLength(CollationCharSetColumnsDynArray, CollationCharSetColumnsCount);
-  for I := 1 to CollationCharSetColumnsCount do
-    CollationCharSetColumnsDynArray[I - 1] := CollationCharSetColumns[I];
+  for I := FirstDbcIndex to CollationCharSetColumnsCount {$IFDEF GENERIC_INDEX}-1{$ENDIF} do
+    CollationCharSetColumnsDynArray[I{$IFNDEF GENERIC_INDEX}-1{$ENDIF}] := CollationCharSetColumns[I];
 
   SetLength(TriggersColumnsDynArray, TriggersColumnCount);
-  for I := 1 to TriggersColumnCount do
-    TriggersColumnsDynArray[I - 1] := TriggersColumns[I];
+  for I := FirstDbcIndex to TriggersColumnCount {$IFDEF GENERIC_INDEX}-1{$ENDIF} do
+    TriggersColumnsDynArray[I{$IFNDEF GENERIC_INDEX}-1{$ENDIF}] := TriggersColumns[I];
 
   SetLength(ProceduresColumnsDynArray, ProceduresColumnCount);
-  for I := 1 to ProceduresColumnCount do
-    ProceduresColumnsDynArray[I - 1] := ProceduresColumns[I];
+  for I := FirstDbcIndex to ProceduresColumnCount {$IFDEF GENERIC_INDEX}-1{$ENDIF} do
+    ProceduresColumnsDynArray[I{$IFNDEF GENERIC_INDEX}-1{$ENDIF}] := ProceduresColumns[I];
 
   SetLength(ProceduresColColumnsDynArray, ProceduresColColumnCount);
-  for I := 1 to ProceduresColColumnCount do
-    ProceduresColColumnsDynArray[I - 1] := ProceduresColColumns[I];
+  for I := FirstDbcIndex to ProceduresColColumnCount {$IFDEF GENERIC_INDEX}-1{$ENDIF} do
+    ProceduresColColumnsDynArray[I{$IFNDEF GENERIC_INDEX}-1{$ENDIF}] := ProceduresColColumns[I];
 
   SetLength(TableColumnsDynArray, TableColumnCount);
-  for I := 1 to TableColumnCount do
-    TableColumnsDynArray[I - 1] := TableColumns[I];
+  for I := FirstDbcIndex to TableColumnCount {$IFDEF GENERIC_INDEX}-1{$ENDIF} do
+    TableColumnsDynArray[I{$IFNDEF GENERIC_INDEX}-1{$ENDIF}] := TableColumns[I];
 
   SetLength(SchemaColumnsDynArray, SchemaColumnCount);
-  for I := 1 to SchemaColumnCount do
-    SchemaColumnsDynArray[I - 1] := SchemaColumns[I];
+  for I := FirstDbcIndex to SchemaColumnCount {$IFDEF GENERIC_INDEX}-1{$ENDIF} do
+    SchemaColumnsDynArray[I{$IFNDEF GENERIC_INDEX}-1{$ENDIF}] := SchemaColumns[I];
 
   SetLength(CatalogColumnsDynArray, CatalogColumnCount);
-  for I := 1 to CatalogColumnCount do
-    CatalogColumnsDynArray[I - 1] := CatalogColumns[I];
+  for I := FirstDbcIndex to CatalogColumnCount {$IFDEF GENERIC_INDEX}-1{$ENDIF} do
+    CatalogColumnsDynArray[I{$IFNDEF GENERIC_INDEX}-1{$ENDIF}] := CatalogColumns[I];
 
   SetLength(TableTypeColumnsDynArray, TableTypeColumnCount);
-  for I := 1 to TableTypeColumnCount do
-    TableTypeColumnsDynArray[I - 1] := TableTypeColumns[I];
+  for I := FirstDbcIndex to TableTypeColumnCount {$IFDEF GENERIC_INDEX}-1{$ENDIF} do
+    TableTypeColumnsDynArray[I{$IFNDEF GENERIC_INDEX}-1{$ENDIF}] := TableTypeColumns[I];
 
   SetLength(TableColColumnsDynArray, TableColColumnCount);
-  for I := 1 to TableColColumnCount do
-    TableColColumnsDynArray[I - 1] := TableColColumns[I];
+  for I := FirstDbcIndex to TableColColumnCount {$IFDEF GENERIC_INDEX}-1{$ENDIF} do
+    TableColColumnsDynArray[I{$IFNDEF GENERIC_INDEX}-1{$ENDIF}] := TableColColumns[I];
 
   SetLength(TableColPrivColumnsDynArray, TableColPrivColumnCount);
-  for I := 1 to TableColPrivColumnCount do
-    TableColPrivColumnsDynArray[I - 1] := TableColPrivColumns[I];
+  for I := FirstDbcIndex to TableColPrivColumnCount {$IFDEF GENERIC_INDEX}-1{$ENDIF} do
+    TableColPrivColumnsDynArray[I{$IFNDEF GENERIC_INDEX}-1{$ENDIF}] := TableColPrivColumns[I];
 
   SetLength(TablePrivColumnsDynArray, TablePrivColumnCount);
-  for I := 1 to TablePrivColumnCount do
-    TablePrivColumnsDynArray[I - 1] := TablePrivColumns[I];
+  for I := FirstDbcIndex to TablePrivColumnCount {$IFDEF GENERIC_INDEX}-1{$ENDIF} do
+    TablePrivColumnsDynArray[I{$IFNDEF GENERIC_INDEX}-1{$ENDIF}] := TablePrivColumns[I];
 
   SetLength(BestRowIdentColumnsDynArray, BestRowIdentColumnCount);
-  for I := 1 to BestRowIdentColumnCount do
-    BestRowIdentColumnsDynArray[I - 1] := BestRowIdentColumns[I];
+  for I := FirstDbcIndex to BestRowIdentColumnCount {$IFDEF GENERIC_INDEX}-1{$ENDIF} do
+    BestRowIdentColumnsDynArray[I{$IFNDEF GENERIC_INDEX}-1{$ENDIF}] := BestRowIdentColumns[I];
 
   SetLength(TableColVerColumnsDynArray, TableColVerColumnCount);
-  for I := 1 to TableColVerColumnCount do
-    TableColVerColumnsDynArray[I - 1] := TableColVerColumns[I];
+  for I := FirstDbcIndex to TableColVerColumnCount {$IFDEF GENERIC_INDEX}-1{$ENDIF} do
+    TableColVerColumnsDynArray[I{$IFNDEF GENERIC_INDEX}-1{$ENDIF}] := TableColVerColumns[I];
 
   SetLength(PrimaryKeyColumnsDynArray, PrimaryKeyColumnCount);
-  for I := 1 to PrimaryKeyColumnCount do
-    PrimaryKeyColumnsDynArray[I - 1] := PrimaryKeyColumns[I];
+  for I := FirstDbcIndex to PrimaryKeyColumnCount {$IFDEF GENERIC_INDEX}-1{$ENDIF} do
+    PrimaryKeyColumnsDynArray[I{$IFNDEF GENERIC_INDEX}-1{$ENDIF}] := PrimaryKeyColumns[I];
 
   SetLength(ImportedKeyColumnsDynArray, ImportedKeyColumnCount);
-  for I := 1 to ImportedKeyColumnCount do
-    ImportedKeyColumnsDynArray[I - 1] := ImportedKeyColumns[I];
+  for I := FirstDbcIndex to ImportedKeyColumnCount {$IFDEF GENERIC_INDEX}-1{$ENDIF} do
+    ImportedKeyColumnsDynArray[I{$IFNDEF GENERIC_INDEX}-1{$ENDIF}] := ImportedKeyColumns[I];
 
   SetLength(ExportedKeyColumnsDynArray, ExportedKeyColumnCount);
-  for I := 1 to ExportedKeyColumnCount do
-    ExportedKeyColumnsDynArray[I - 1] := ExportedKeyColumns[I];
+  for I := FirstDbcIndex to ExportedKeyColumnCount {$IFDEF GENERIC_INDEX}-1{$ENDIF} do
+    ExportedKeyColumnsDynArray[I{$IFNDEF GENERIC_INDEX}-1{$ENDIF}] := ExportedKeyColumns[I];
 
   SetLength(CrossRefColumnsDynArray, CrossRefColumnCount);
-  for I := 1 to CrossRefColumnCount do
-    CrossRefColumnsDynArray[I - 1] := CrossRefColumns[I];
+  for I := FirstDbcIndex to CrossRefColumnCount {$IFDEF GENERIC_INDEX}-1{$ENDIF} do
+    CrossRefColumnsDynArray[I{$IFNDEF GENERIC_INDEX}-1{$ENDIF}] := CrossRefColumns[I];
 
   SetLength(TypeInfoColumnsDynArray, TypeInfoColumnCount);
-  for I := 1 to TypeInfoColumnCount do
-    TypeInfoColumnsDynArray[I - 1] := TypeInfoColumns[I];
+  for I := FirstDbcIndex to TypeInfoColumnCount {$IFDEF GENERIC_INDEX}-1{$ENDIF} do
+    TypeInfoColumnsDynArray[I{$IFNDEF GENERIC_INDEX}-1{$ENDIF}] := TypeInfoColumns[I];
 
   SetLength(IndexInfoColumnsDynArray, IndexInfoColumnCount);
-  for I := 1 to IndexInfoColumnCount do
-    IndexInfoColumnsDynArray[I - 1] := IndexInfoColumns[I];
+  for I := FirstDbcIndex to IndexInfoColumnCount {$IFDEF GENERIC_INDEX}-1{$ENDIF} do
+    IndexInfoColumnsDynArray[I{$IFNDEF GENERIC_INDEX}-1{$ENDIF}] := IndexInfoColumns[I];
 
   SetLength(SequenceColumnsDynArray, SequenceColumnCount);
-  for I := 1 to SequenceColumnCount do
-    SequenceColumnsDynArray[I - 1] := SequenceColumns[I];
+  for I := FirstDbcIndex to SequenceColumnCount {$IFDEF GENERIC_INDEX}-1{$ENDIF} do
+    SequenceColumnsDynArray[I{$IFNDEF GENERIC_INDEX}-1{$ENDIF}] := SequenceColumns[I];
 
   SetLength(UDTColumnsDynArray, UDTColumnCount);
-  for I := 1 to UDTColumnCount do
-    UDTColumnsDynArray[I - 1] := UDTColumns[I];
+  for I := FirstDbcIndex to UDTColumnCount {$IFDEF GENERIC_INDEX}-1{$ENDIF} do
+    UDTColumnsDynArray[I{$IFNDEF GENERIC_INDEX}-1{$ENDIF}] := UDTColumns[I];
 end.

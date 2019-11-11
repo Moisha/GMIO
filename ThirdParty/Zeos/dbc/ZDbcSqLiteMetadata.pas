@@ -55,9 +55,10 @@ interface
 
 {$I ZDbc.inc}
 
+{$IFNDEF ZEOS_DISABLE_SQLITE} //if set we have an empty unit
 uses
   Types, Classes, SysUtils, ZSysUtils, ZDbcIntfs, ZDbcMetadata,
-  ZCompatibility, ZDbcSQLiteUtils, ZDbcConnection;
+  ZCompatibility, ZDbcSQLiteUtils;
 
 type
 
@@ -134,13 +135,13 @@ type
     function SupportsOpenStatementsAcrossCommit: Boolean; override;
     function SupportsOpenStatementsAcrossRollback: Boolean; override;
     function SupportsTransactions: Boolean; override;
-    function SupportsTransactionIsolationLevel(Level: TZTransactIsolationLevel):
+    function SupportsTransactionIsolationLevel(const {%H-}Level: TZTransactIsolationLevel):
       Boolean; override;
     function SupportsDataDefinitionAndDataManipulationTransactions: Boolean; override;
     function SupportsDataManipulationTransactionsOnly: Boolean; override;
-    function SupportsResultSetType(_Type: TZResultSetType): Boolean; override;
-    function SupportsResultSetConcurrency(_Type: TZResultSetType;
-      Concurrency: TZResultSetConcurrency): Boolean; override;
+    function SupportsResultSetType(const _Type: TZResultSetType): Boolean; override;
+    function SupportsResultSetConcurrency(const _Type: TZResultSetType;
+      const Concurrency: TZResultSetConcurrency): Boolean; override;
 //    function SupportsBatchUpdates: Boolean; override; -> Not implemented
 
     // maxima:
@@ -204,10 +205,9 @@ type
   {** Implements SQLite Database Metadata. }
   TZSQLiteDatabaseMetadata = class(TZAbstractDatabaseMetadata)
   protected
-    function DeComposeObjectString(const S: String): String; reintroduce;
     function CreateDatabaseInfo: IZDatabaseInfo; override; // technobot 2008-06-28
 
-    function UncachedGetTables(const Catalog: string; const SchemaPattern: string;
+    function UncachedGetTables(const Catalog: string; const {%H-}SchemaPattern: string;
       const TableNamePattern: string; const Types: TStringDynArray): IZResultSet; override;
 //    function UncachedGetSchemas: IZResultSet; override;  -> not implemented
 //    function UncachedGetCatalogs: IZResultSet; override;  -> not implemented
@@ -240,14 +240,14 @@ type
 //      const Table: string): IZResultSet; override;
     function UncachedGetTypeInfo: IZResultSet; override;
     function UncachedGetCharacterSets: IZResultSet; override; //EgonHugeist
-  public
-    destructor Destroy; override;
   end;
 
+{$ENDIF ZEOS_DISABLE_SQLITE} //if set we have an empty unit
 implementation
+{$IFNDEF ZEOS_DISABLE_SQLITE} //if set we have an empty unit
 
 uses
-  ZDbcUtils;
+  ZDbcUtils, ZDbcSqLite, ZFastCode, ZSelectSchema, ZClasses;
 
 { TZSQLiteDatabaseInfo }
 
@@ -336,7 +336,7 @@ end;
 }
 function TZSQLiteDatabaseInfo.StoresLowerCaseIdentifiers: Boolean;
 begin
-  Result := False;
+  Result := True;
 end;
 
 {**
@@ -346,7 +346,7 @@ end;
 }
 function TZSQLiteDatabaseInfo.StoresMixedCaseIdentifiers: Boolean;
 begin
-  Result := True;
+  Result := False;
 end;
 
 {**
@@ -397,14 +397,14 @@ end;
 }
 function TZSQLiteDatabaseInfo.GetSQLKeywords: string;
 begin
-  Result := 'ALL,AND,AS,BETWEEN,BY,CASE,CHECK,COLLATE,COMMIT,CONSTRAINT,CREATE,'
-    + 'DEFAULT,DEFERRABLE,DELETE,DISTINCT,DROP,ELSE,EXCEPT,FOREIGN,FROM,GLOB,'
-    + 'GROUP,HAVING,IN,INDEX,INSERT,INTERSECT,INTO,IS,ISNULL,JOIN,LIKE,LIMIT,'
-    + 'NOT,NOTNULL,NULL,ON,OR,ORDER,PRIMARY,REFERENCES,ROLLBACK,SELECT,SET,'
-    + 'TABLE,THEN,TRANSACTION,UNION,UNIQUE,UPDATE,USING,VALUES,WHEN,WHERE,'
+  Result := 'ALL,AND,BETWEEN,CASE,CHECK,COLLATE,COMMIT,CONSTRAINT,'
+    + 'DEFAULT,DEFERRABLE,DISTINCT,ELSE,EXCEPT,FOREIGN,GLOB,'
+    + 'IN,INTERSECT,ISNULL,LIMIT,'
+    + 'NOT,NOTNULL,REFERENCES,ROLLBACK,'
+    + 'THEN,TRANSACTION,UNION,UNIQUE,USING,WHEN,'
     + 'ABORT,AFTER,ASC,ATTACH,BEFORE,BEGIN,DEFERRED,CASCADE,CLUSTER,CONFLICT,'
-    + 'COPY,CROSS,DATABASE,DELIMITERS,DESC,DETACH,EACH,END,EXPLAIN,FAIL,FOR,'
-    + 'FULL,IGNORE,IMMEDIATE,INITIALLY,INNER,INSTEAD,KEY,LEFT,MATCH,NATURAL,'
+    + 'COPY,CROSS,DATABASE,DELIMITERS,DESC,DETACH,EACH,END,EXPLAIN,FAIL,'
+    + 'FULL,IGNORE,IMMEDIATE,INITIALLY,INNER,INSTEAD,LEFT,MATCH,NATURAL,'
     + 'OF,OFFSET,OUTER,PRAGMA,RAISE,REPLACE,RESTRICT,RIGHT,ROW,STATEMENT,'
     + 'TEMP,TEMPORARY,TRIGGER,VACUUM,VIEW';
 end;
@@ -464,7 +464,7 @@ end;
 }
 function TZSQLiteDatabaseInfo.GetSearchStringEscape: string;
 begin
-  Result := '//';
+  Result := '/';
 end;
 
 {**
@@ -1036,7 +1036,8 @@ end;
 function TZSQLiteDatabaseInfo.GetDefaultTransactionIsolation:
   TZTransactIsolationLevel;
 begin
-  Result := tiNone;
+  //https://sqlite.org/pragma.html#pragma_read_uncommitted
+  Result := tiSerializable;
 end;
 
 {**
@@ -1056,9 +1057,10 @@ end;
   @see Connection
 }
 function TZSQLiteDatabaseInfo.SupportsTransactionIsolationLevel(
-  Level: TZTransactIsolationLevel): Boolean;
+  const Level: TZTransactIsolationLevel): Boolean;
 begin
-  Result := True;
+  //https://sqlite.org/pragma.html#pragma_read_uncommitted
+  Result := Level in [tiSerializable, tiReadUncommitted];
 end;
 
 {**
@@ -1108,7 +1110,7 @@ end;
   @return <code>true</code> if so; <code>false</code> otherwise
 }
 function TZSQLiteDatabaseInfo.SupportsResultSetType(
-  _Type: TZResultSetType): Boolean;
+  const _Type: TZResultSetType): Boolean;
 begin
   Result := _Type = rtForwardOnly;
 end;
@@ -1122,37 +1124,13 @@ end;
   @return <code>true</code> if so; <code>false</code> otherwise
 }
 function TZSQLiteDatabaseInfo.SupportsResultSetConcurrency(
-  _Type: TZResultSetType; Concurrency: TZResultSetConcurrency): Boolean;
+  const _Type: TZResultSetType; const Concurrency: TZResultSetConcurrency): Boolean;
 begin
   Result := (_Type = rtForwardOnly) and (Concurrency = rcReadOnly);
 end;
 
 
 { TZSQLiteDatabaseMetadata }
-
-{**
-  Decomposes a object name, AnsiQuotedStr or NullText
-  @param S the object string
-  @return a non-quoted string
-}
-function TZSQLiteDatabaseMetadata.DecomposeObjectString(const S: String): String;
-begin
-  if S = '' then
-    Result := S
-  else
-    if IC.IsQuoted(S) then
-       Result := IC.ExtractQuote(S)
-    else
-      Result := s;
-end;
-
-{**
-  Destroys this object and cleanups the memory.
-}
-destructor TZSQLiteDatabaseMetadata.Destroy;
-begin
-  inherited Destroy;
-end;
 
 {**
   Constructs a database information object and returns the interface to it. Used
@@ -1200,7 +1178,7 @@ function TZSQLiteDatabaseMetadata.UncachedGetTables(const Catalog: string;
 var
   WhereClause, SQL: string;
 
-  function IncludedType(TypeName: string): Boolean;
+  function IncludedType(const TypeName: string): Boolean;
   var I: Integer;
   begin
     Result := False;
@@ -1210,27 +1188,27 @@ var
   end;
 
 begin
-    WhereClause := '';
-    if IncludedType('TABLE') then
-      WhereClause := 'TYPE=''table''';
-    if IncludedType('VIEW') then
-    begin
-      if WhereClause <> '' then
-        WhereClause := '(' + WhereClause + ' OR TYPE=''view'')'
-      else WhereClause := 'TYPE=''view''';
-    end;
+  WhereClause := '';
+  if IncludedType('TABLE') then
+    WhereClause := 'TYPE=''table''';
+  if IncludedType('VIEW') then
+  begin
+    if WhereClause <> '' then
+      WhereClause := '(' + WhereClause + ' OR TYPE=''view'')'
+    else WhereClause := 'TYPE=''view''';
+  end;
 
-    SQL := 'SELECT ''' + Catalog + ''' AS TABLE_CAT, NULL AS TABLE_SCHEM,'
-      + ' TBL_NAME AS TABLE_NAME, UPPER(TYPE) AS TABLE_TYPE, NULL AS REMARKS'
-      + ' FROM ';
-    if Catalog <> '' then
-      SQL := SQL + Catalog + '.';
-    SQL := SQL + 'SQLITE_MASTER WHERE ' + WhereClause
-      + ' AND TBL_NAME LIKE ''' + ToLikeString(TableNamePattern) + '''';
+  SQL := 'SELECT ''' + Catalog + ''' AS TABLE_CAT, NULL AS TABLE_SCHEM,'
+    + ' TBL_NAME AS TABLE_NAME, UPPER(TYPE) AS TABLE_TYPE, NULL AS REMARKS'
+    + ' FROM ';
+  if Catalog <> '' then
+    SQL := SQL + Catalog + '.';
+  SQL := SQL + 'SQLITE_MASTER WHERE ' + WhereClause
+    + ' AND TBL_NAME LIKE ''' + ToLikeString(TableNamePattern) + '''';
 
-    Result := CopyToVirtualResultSet(
-      GetConnection.CreateStatement.ExecuteQuery(SQL),
-      ConstructVirtualResultSet(TableColumnsDynArray));
+  Result := CopyToVirtualResultSet(
+    GetConnection.CreateStatement.ExecuteQuery(SQL),
+    ConstructVirtualResultSet(TableColumnsDynArray));
 end;
 
 {**
@@ -1250,7 +1228,7 @@ end;
 function TZSQLiteDatabaseMetadata.UncachedGetTableTypes: IZResultSet;
 const
   TableTypeCount = 2;
-  Types: array [1..TableTypeCount] of string = ('TABLE', 'VIEW');
+  Types: array [1..TableTypeCount] of UTF8String = ('TABLE', 'VIEW');
 var
   I: Integer;
 begin
@@ -1259,7 +1237,7 @@ begin
   for I := 1 to TableTypeCount do
     begin
       Result.MoveToInsertRow;
-      Result.UpdateString(1, Types[I]);
+      Result.UpdateUTF8String(TableTypeColumnTableTypeIndex, Types[I]);
       Result.InsertRow;
     end;
 end;
@@ -1318,82 +1296,96 @@ end;
 function TZSQLiteDatabaseMetadata.UncachedGetColumns(const Catalog: string;
   const SchemaPattern: string; const TableNamePattern: string;
   const ColumnNamePattern: string): IZResultSet;
+const
+  cid_index = FirstDbcIndex;
+  name_index = cid_index+1;
+  type_index = name_index+1;
+  notnull_index = type_index+1;
+  dflt_value_index = notnull_index+1;
+  pk_index = dflt_value_index+1;
 var
-  Temp: string;
-  Precision, Decimals: Integer;
-  Temp_scheme: string;
+  Len: NativeUInt;
+  Temp_scheme, TempTableNamePattern: String;
+  Precision, Decimals, UndefinedVarcharAsStringLength: Integer;
   ResSet: IZResultSet;
-  TempTableNamePattern: String;
+  RawTmp: RawByteString;
+  SQLType: TZSQLType;
+  P: PAnsiChar;
 begin
-  Result:=inherited UncachedGetColumns(Catalog, SchemaPattern, TableNamePattern, ColumnNamePattern);
+  if not HasNoWildcards(SchemaPattern) then raise EZSQLException.Create('UncachedGetColumns for SQLite can not do schema wildcard searches currently. Please provide a schema name.');
+  if not HasNoWildcards(TableNamePattern) then raise EZSQLException.Create('UncachedGetColumns for SQLite can not do table wildcard searches currently. Please provide a table name.');
+  if (ColumnNamePattern <> '') and (ColumnNamePattern <> '%') then raise EZSQLException.Create('UncachedGetColumns for SQLite cannot limit the returned columns by a pattern.');
+  Temp_scheme := StripEscape(SchemaPattern);
+  TempTableNamePattern := StripEscape(TableNamePattern);
 
-  if SchemaPattern = '' then
-    Temp_scheme := '' // OR  'main.'
-  else
-    Temp_scheme := SchemaPattern +'.';
+  Result:=inherited UncachedGetColumns(Catalog, Temp_scheme, TempTableNamePattern, ColumnNamePattern);
 
-  TempTableNamePattern := NormalizePatternCase(TableNamePattern);
-  ResSet := GetConnection.CreateStatement.ExecuteQuery(
-    Format('PRAGMA %s table_info(''%s'')', [Temp_scheme, TempTableNamePattern]));
+  UndefinedVarcharAsStringLength := (GetConnection as IZSQLiteConnection).GetUndefinedVarcharAsStringLength;
+  TempTableNamePattern := NormalizePatternCase(TempTableNamePattern);
+
+  if Temp_scheme <> '' then
+    RawTmp := ConSettings.ConvFuncs.ZStringToRaw(Temp_scheme, ConSettings^.CTRL_CP, 65001)+'.'
+  else RawTmp := '';
+  ResSet := GetStatement.ExecuteQuery('PRAGMA '+RawTmp+'table_info('''+ConSettings.ConvFuncs.ZStringToRaw(TempTableNamePattern, ConSettings^.CTRL_CP, 65001)+''')');
   if ResSet <> nil then
-    with ResSet do
-  begin
-    while Next do
-    begin
-      Result.MoveToInsertRow;
-      if SchemaPattern <> '' then
-        Result.UpdateString(1, SchemaPattern)
-      else Result.UpdateNull(1);
-      Result.UpdateNull(2);
-      Result.UpdateString(3, TempTableNamePattern);
-      Result.UpdateString(4, GetString(2));
-      Result.UpdateInt(5, Ord(ConvertSQLiteTypeToSQLType(GetString(3),
-        Precision, Decimals, ConSettings.CPType)));
-
-      { Defines a table name. }
-      Temp := UpperCase(GetString(3));
-      if Pos('(', Temp) > 0 then
-        Temp := Copy(Temp, 1, Pos('(', Temp) - 1);
-      Result.UpdateString(6, Temp);
-
-      Result.UpdateInt(7, Precision);  //Precision will be converted higher up
-      Result.UpdateNull(8);
-      Result.UpdateInt(9, Decimals);
-      Result.UpdateInt(10, 0);
-
-      if GetInt(4) <> 0 then
+    with ResSet do begin
+      while Next do
       begin
-        Result.UpdateInt(11, Ord(ntNoNulls));
-        Result.UpdateString(18, 'NO');
-      end
-      else
-      begin
-        Result.UpdateInt(11, Ord(ntNullable));
-        Result.UpdateString(18, 'YES');
+        Result.MoveToInsertRow;
+        if SchemaPattern <> '' then
+          Result.UpdateString(CatalogNameIndex, SchemaPattern);
+        Result.UpdateString(TableNameIndex, TempTableNamePattern);
+        Result.UpdatePAnsiChar(ColumnNameIndex, GetPAnsiChar(name_index, Len), @Len);
+        RawTmp := GetRawByteString(type_index);
+        SQLType := ConvertSQLiteTypeToSQLType(RawTmp, UndefinedVarcharAsStringLength,
+          Precision, Decimals, ConSettings.CPType);
+        Result.UpdateSmall(TableColColumnTypeIndex, Ord(SQLType));
+
+        Len := Length(RawTmp);
+        Result.UpdatePAnsiChar(TableColColumnTypeNameIndex, Pointer(RawTmp), @Len);
+
+        Result.UpdateInt(TableColColumnSizeIndex, Precision);  //Precision will be converted higher up
+        if SQLType = stString then begin
+          Result.UpdateInt(TableColColumnBufLengthIndex, (Precision shl 2) +1);
+          Result.UpdateInt(TableColColumnCharOctetLengthIndex, Precision shl 2);
+        end else if SQLType = stUnicodeString then begin
+          Result.UpdateInt(TableColColumnBufLengthIndex, (Precision+1) shl 1);
+          Result.UpdateInt(TableColColumnCharOctetLengthIndex, Precision shl 1);
+        end else if SQLType = stBytes then
+          Result.UpdateInt(TableColColumnBufLengthIndex, Precision)
+        else if not (SQLType in [stAsciiStream, stUnicodeStream, stBinaryStream]) then
+          Result.UpdateInt(TableColColumnBufLengthIndex, ZSQLTypeToBuffSize(SQLType));
+
+        Result.UpdateInt(TableColColumnDecimalDigitsIndex, Decimals);
+        Result.UpdateInt(TableColColumnNumPrecRadixIndex, 0);
+
+        if GetInt(notnull_index) <> 0 then
+        begin
+          Result.UpdateInt(TableColColumnNullableIndex, Ord(ntNoNulls));
+          Result.UpdateRawByteString(TableColColumnIsNullableIndex, 'NO');
+        end
+        else
+        begin
+          Result.UpdateInt(TableColColumnNullableIndex, Ord(ntNullable));
+          Result.UpdateRawByteString(TableColColumnIsNullableIndex, 'YES');
+        end;
+
+        P := GetPAnsiChar(dflt_value_index, Len);
+        if Len > 0 then
+          Result.UpdatePAnsiChar(TableColColumnColDefIndex, P, @Len);
+
+        Result.UpdateInt(TableColColumnOrdPosIndex, GetInt(cid_index) +1);
+        Result.UpdateBoolean(TableColColumnAutoIncIndex, (GetInt(pk_index) = 1) and (Ord(SQLType) > ord(stBoolean)) and (Ord(SQLType) < Ord(stFloat)));
+        Result.UpdateBoolean(TableColColumnCaseSensitiveIndex, IC.IsCaseSensitive(GetString(name_index)));
+        Result.UpdateBoolean(TableColColumnSearchableIndex, True);
+        Result.UpdateBoolean(TableColColumnWritableIndex, True);
+        Result.UpdateBoolean(TableColColumnDefinitelyWritableIndex, True);
+        Result.UpdateBoolean(TableColColumnReadonlyIndex, False);
+
+        Result.InsertRow;
       end;
-
-      Result.UpdateNull(12);
-      if Trim(GetString(5)) <> '' then
-        Result.UpdateString(13, GetString(5))
-  //          Result.UpdateString(13, '''' + GetString(5) + '''')
-      else Result.UpdateNull(13);
-      Result.UpdateNull(14);
-      Result.UpdateNull(15);
-      Result.UpdateNull(16);
-      Result.UpdateInt(17, GetInt(1) + 1);
-
-      Result.UpdateBooleanByName('AUTO_INCREMENT',
-        (GetInt(6) = 1) and (Temp = 'INTEGER'));
-      Result.UpdateBooleanByName('CASE_SENSITIVE', False);
-      Result.UpdateBooleanByName('SEARCHABLE', True);
-      Result.UpdateBooleanByName('WRITABLE', True);
-      Result.UpdateBooleanByName('DEFINITELYWRITABLE', True);
-      Result.UpdateBooleanByName('READONLY', False);
-
-      Result.InsertRow;
+      Close;
     end;
-    Close;
-  end;
 end;
 
 {**
@@ -1420,42 +1412,52 @@ end;
 }
 function TZSQLiteDatabaseMetadata.UncachedGetPrimaryKeys(const Catalog: string;
   const Schema: string; const Table: string): IZResultSet;
+const
+  cid_index = FirstDbcIndex;
+  name_index = cid_index+1;
+  {%H-}type_index = name_index+1;
+  {%H-}notnull_index = type_index+1;
+  {%H-}dflt_value_index = notnull_index+1;
+  pk_index = dflt_value_index+1;
 var
-  Index: Integer;
+  Len: NativeUInt;
   Temp_scheme: string;
+  RS: IZResultSet;
 begin
-    Result:=inherited UncachedGetPrimaryKeys(Catalog, Schema, Table);
+  Result:=inherited UncachedGetPrimaryKeys(Catalog, Schema, Table);
 
-    if Schema = '' then
-      Temp_scheme := '' // OR  'main.'
-    else
-      Temp_scheme := Schema +'.';
+  if Schema = '' then
+    Temp_scheme := '' // OR  'main.'
+  else
+    Temp_scheme := Schema +'.';
 
-    with GetConnection.CreateStatement.ExecuteQuery(
-      Format('PRAGMA %s table_info(''%s'')', [Temp_scheme,Table])) do
+  RS := GetConnection.CreateStatement.ExecuteQuery(
+    Format('PRAGMA %s table_info(''%s'')', [Temp_scheme,Self.NormalizePatternCase(Table)]));
+  if RS <> nil then with RS do begin
+    while Next do
     begin
-      Index := 1;
-      while Next do
-      begin
-        if GetInt(6) = 0 then
-          Continue;
+      if GetInt(pk_index) = 0 then
+        Continue;
 
-        Result.MoveToInsertRow;
-        if Schema <> '' then
-          Result.UpdateString(1, Schema)
-        else Result.UpdateNull(1);
-        Result.UpdateNull(2);
-        Result.UpdateString(3, Table);
-        Result.UpdateString(4, GetString(2));
-        Result.UpdateInt(5, Index);
-        Result.UpdateNull(6);
-
-        Inc(Index);
-
-        Result.InsertRow;
-      end;
-      Close;
+      Result.MoveToInsertRow;
+      if Schema <> '' then
+        Result.UpdateString(CatalogNameIndex, Schema);
+      Result.UpdateString(TableNameIndex, Table);
+      Result.UpdatePAnsiChar(PrimaryKeyColumnNameIndex, GetPAnsiChar(name_index, Len), @Len);
+      Result.UpdateInt(PrimaryKeyKeySeqIndex, GetInt(cid_index)+1);
+      Result.InsertRow;
     end;
+    Close;
+  end;
+  if Result.IsBeforeFirst then begin
+    Result.MoveToInsertRow;
+    if Schema <> '' then
+      Result.UpdateString(CatalogNameIndex, Schema);
+    Result.UpdateString(TableNameIndex, Table);
+    Result.UpdateRawByteString(PrimaryKeyColumnNameIndex, 'rowid');
+    Result.UpdateInt(PrimaryKeyKeySeqIndex, 0);
+    Result.InsertRow;
+  end;
 end;
 
 {**
@@ -1506,13 +1508,13 @@ end;
 function TZSQLiteDatabaseMetadata.UncachedGetTypeInfo: IZResultSet;
 const
   MaxTypeCount = 22;
-  TypeNames: array[1..MaxTypeCount] of string = (
+  TypeNames: array[1..MaxTypeCount] of UTF8String = (
     'BOOLEAN', 'TINYINT', 'SMALLINT', 'MEDIUMINT', 'INTEGER',
     'BIGINT', 'REAL', 'FLOAT', 'NUMERIC', 'DECIMAL', 'NUMBER',
     'DOUBLE', 'CHAR', 'VARCHAR', 'BINARY', 'VARBINARY', 'DATE',
     'TIME', 'DATETIME', 'TIMESTAMP', 'BLOB', 'TEXT');
   TypeCodes: array[1..MaxTypeCount] of TZSQLType = (
-    stBoolean, stByte, stShort, stInteger, stInteger, stLong,
+    stBoolean, stByte, stSmall, stInteger, stInteger, stLong,
     stFloat, stFloat, stDouble, stDouble, stDouble, stDouble,
     stString, {$IFDEF UNICODE}stUnicodeString{$ELSE}stString{$ENDIF},
     stBytes, stBytes, stDate, stTime, stTimestamp,
@@ -1529,35 +1531,24 @@ begin
     begin
       Result.MoveToInsertRow;
 
-      Result.UpdateString(1, TypeNames[I]);
-      Result.UpdateInt(2, Ord(TypeCodes[I]));
+      Result.UpdateUTF8String(TypeInfoTypeNameIndex, TypeNames[I]);
+      Result.UpdateInt(TypeInfoDataTypeIndex, Ord(TypeCodes[I]));
       if TypePrecision[I] >= 0 then
-        Result.UpdateInt(3, TypePrecision[I])
-      else Result.UpdateNull(3);
+        Result.UpdateInt(TypeInfoPecisionIndex, TypePrecision[I]);
+      //else Result.UpdateNull(TypeInfoPecisionIndex);
       if TypeCodes[I] in [stString, stBytes, stDate, stTime,
         stTimeStamp, stBinaryStream, stAsciiStream, stUnicodeString] then
       begin
-        Result.UpdateString(4, '''');
-        Result.UpdateString(5, '''');
-      end
-      else
-      begin
-        Result.UpdateNull(4);
-        Result.UpdateNull(5);
+        Result.UpdateString(TypeInfoLiteralPrefixIndex, '''');
+        Result.UpdateString(TypeInfoLiteralSuffixIndex, '''');
       end;
-      Result.UpdateNull(6);
-      Result.UpdateInt(7, Ord(ntNullable));
-      Result.UpdateBoolean(8, False);
-      Result.UpdateBoolean(9, False);
-      Result.UpdateBoolean(11, False);
-      Result.UpdateBoolean(12, False);
-      Result.UpdateBoolean(12, TypeNames[I] = 'INTEGER');
-      Result.UpdateNull(13);
-      Result.UpdateNull(14);
-      Result.UpdateNull(15);
-      Result.UpdateNull(16);
-      Result.UpdateNull(17);
-      Result.UpdateInt(18, 10);
+      Result.UpdateInt(TypeInfoNullAbleIndex, Ord(ntNullable));
+      Result.UpdateBoolean(TypeInfoCaseSensitiveIndex, False);
+      Result.UpdateBoolean(TypeInfoSearchableIndex, False);
+      Result.UpdateBoolean(TypeInfoUnsignedAttributeIndex, False);
+      Result.UpdateBoolean(TypeInfoFixedPrecScaleIndex, False);
+      Result.UpdateBoolean(TypeInfoAutoIncrementIndex, TypeNames[I] = 'INTEGER');
+      Result.UpdateInt(TypeInfoNumPrecRadix, 10);
 
       Result.InsertRow;
     end;
@@ -1617,7 +1608,16 @@ end;
 function TZSQLiteDatabaseMetadata.UncachedGetIndexInfo(const Catalog: string;
   const Schema: string; const Table: string; Unique: Boolean;
   Approximate: Boolean): IZResultSet;
+const
+  {%H-}main_seq_field_index = FirstDbcIndex;
+  main_name_field_index = main_seq_field_index+1;
+  main_unique_field_index = main_name_field_index+1;
+
+  sub_seqno_field_index = FirstDbcIndex;
+  {%H-}sub_cid_field_index = sub_seqno_field_index+1;
+  sub_name_field_index = sub_cid_field_index+1;
 var
+  Len: NativeUInt;
   MainResultSet, ResultSet: IZResultSet;
   Temp_scheme: string;
 begin
@@ -1634,31 +1634,24 @@ begin
     begin
       while MainResultSet.Next do
       begin
-        if (Pos(' autoindex ', String(MainResultSet.GetString(2))) = 0)
-          and ((Unique = False) or (MainResultSet.GetInt(3) = 0)) then
+        if (ZFastCode.Pos({$IFDEF NO_ANSISTRING}RawByteString{$ELSE}AnsiString{$ENDIF}(' autoindex '), MainResultSet.GetRawByteString(main_name_field_index)) = 0)
+          and ((Unique = False) or (MainResultSet.GetInt(main_unique_field_index) = 0)) then
         begin
           ResultSet := GetConnection.CreateStatement.ExecuteQuery(
-            Format('PRAGMA %s index_info(''%s'')', [Temp_scheme,MainResultSet.GetString(2)]));
+            Format('PRAGMA %s index_info(''%s'')', [Temp_scheme,MainResultSet.GetString(main_name_field_index)]));
           while ResultSet.Next do
           begin
             Result.MoveToInsertRow;
-
             if Schema <> '' then
-              Result.UpdateString(1, Schema)
-            else Result.UpdateNull(1);
-            Result.UpdateNull(2);
-            Result.UpdateString(3, Table);
-            Result.UpdateBoolean(4, MainResultSet.GetInt(3) = 0);
-            Result.UpdateNull(5);
-            Result.UpdateString(6, MainResultSet.GetString(2));
-            Result.UpdateNull(7);
-            Result.UpdateInt(8, ResultSet.GetInt(1) + 1);
-            Result.UpdateString(9, ResultSet.GetString(3));
-            Result.UpdateString(10, 'A');
-            Result.UpdateInt(11, 0);
-            Result.UpdateInt(12, 0);
-            Result.UpdateNull(13);
-
+              Result.UpdateString(CatalogNameIndex, Schema);
+            Result.UpdateString(TableNameIndex, Table);
+            Result.UpdateBoolean(IndexInfoColNonUniqueIndex, MainResultSet.GetInt(main_unique_field_index) = 0);
+            Result.UpdatePAnsiChar(IndexInfoColIndexNameIndex, MainResultSet.GetPAnsiChar(main_name_field_index, Len), @Len);
+            Result.UpdateInt(IndexInfoColOrdPositionIndex, ResultSet.GetInt(sub_seqno_field_index)+FirstDbcIndex);
+            Result.UpdatePAnsiChar(IndexInfoColColumnNameIndex, ResultSet.GetPAnsiChar(sub_name_field_index, Len), @Len);
+            Result.UpdateRawByteString(IndexInfoColAscOrDescIndex, 'A');
+            Result.UpdateInt(IndexInfoColCardinalityIndex, 0);
+            Result.UpdateInt(IndexInfoColPagesIndex, 0);
             Result.InsertRow;
           end;
           ResultSet.Close;
@@ -1703,13 +1696,15 @@ These constant define integer codes that represent the various text encodings su
 
   Result:=inherited UncachedGetCharacterSets;
 
-  for i := 0 to high(Encodings) do
+  for i := Low(Encodings) to High(Encodings) do
   begin
     Result.MoveToInsertRow;
-    Result.UpdateString(1, Encodings[i].CP); //CHARACTER_SET_NAME
-    Result.UpdateShort(2, Encodings[i].ID); //CHARACTER_SET_ID
+    Result.UpdateString(CharacterSetsNameIndex, Encodings[i].CP); //CHARACTER_SET_NAME
+    Result.UpdateSmall(CharacterSetsIDIndex, Encodings[i].ID); //CHARACTER_SET_ID
     Result.InsertRow;
   end;
 end;
 
+{$ENDIF ZEOS_DISABLE_SQLITE} //if set we have an empty unit
 end.
+

@@ -55,14 +55,13 @@ interface
 
 {$I ZPlain.inc}
 
-uses ZClasses, ZPlainLoader, ZCompatibility, Types, ZTokenizer;
+uses ZClasses, ZPlainLoader, ZCompatibility, Types;
 
 type
 
   {** Represents a generic interface to plain driver. }
   IZPlainDriver = interface (IZInterface)
     ['{2A0CC600-B3C4-43AF-92F5-C22A3BB1BB7D}']
-    function IsAnsiDriver: Boolean;
     function GetProtocol: string;
     function GetDescription: string;
     {EgonHugeist:
@@ -72,43 +71,27 @@ type
       CtrlsCPType: TZControlsCodePage = cCP_UTF16): TStringDynArray;
     function ValidateCharEncoding(const CharacterSetName: String; const DoArrange: Boolean = False): PZCodePage; overload;
     function ValidateCharEncoding(const CharacterSetID: Integer; const DoArrange: Boolean = False): PZCodePage; overload;
-    function ZDbcString(const Ansi: RawByteString; ConSettings: PZConSettings): String;
-    function ZPlainString(const AStr: String; ConSettings: PZConSettings): RawByteString; overload;
-    function ZPlainString(const AStr: WideString; ConSettings: PZConSettings): RawByteString; overload;
-    function ZPlainString(const AStr: String; ConSettings: PZConSettings; const ToCP: Word): RawByteString; overload;
-    function ZDbcUnicodeString(const AStr: RawByteString; const FromCP: Word): ZWideString; overload;
-    function GetPrepreparedSQL(Handle: Pointer; const SQL: String;
-    ConSettings: PZConSettings; out LogSQL: String): RawByteString;
-    function EscapeString(Handle: Pointer; const Value: ZWideString;
-      ConSettings: PZConSettings): ZWideString; overload;
-    function EscapeString(Handle: Pointer; const Value: RawByteString;
-      ConSettings: PZConSettings; WasEncoded: Boolean = False): RawByteString; overload;
     procedure Initialize(const Location: String = '');
     function Clone: IZPlainDriver;
+    procedure AddCodePage(const Name: String; const ID:  Integer;
+      Encoding: TZCharEncoding = ceAnsi; const CP: Word = $ffff;
+      const ZAlias: String = ''; CharWidth: Integer = 1;
+      const ConsistentCP: Boolean = True);
   end;
 
   {ADDED by fduenas 15-06-2006}
   {** Base class of a generic plain driver with TZNativeLibraryLoader-object. }
 
-  TZAbstractPlainDriver = class(TZCodePagedObject, IZPlainDriver)
+  TZAbstractPlainDriver = class(TInterfacedObject, IZPlainDriver)
   protected
     FCodePages: array of TZCodePage;
-    FTokenizer: IZTokenizer;
     FLoader: TZNativeLibraryLoader;
     procedure LoadApi; virtual;
-    function IsAnsiDriver: Boolean; virtual;
     function Clone: IZPlainDriver; reintroduce; virtual; abstract;
     procedure LoadCodePages; virtual; abstract;
     function GetUnicodeCodePageName: String; virtual;
     function ValidateCharEncoding(const CharacterSetName: String; const DoArrange: Boolean = False): PZCodePage; overload;
     function ValidateCharEncoding(const CharacterSetID: Integer; const DoArrange: Boolean = False): PZCodePage; overload;
-    function GetPrepreparedSQL(Handle: Pointer; const SQL: String;
-      ConSettings: PZConSettings; out LogSQL: String): RawByteString; virtual;
-    function EscapeString(Handle: Pointer; const Value: ZWideString;
-      ConSettings: PZConSettings): ZWideString; overload;
-    function EscapeString(Handle: Pointer; const Value: RawByteString;
-      ConSettings: PZConSettings; WasEncoded: Boolean = False): RawByteString; overload; virtual;
-    function GetTokenizer: IZTokenizer;
   public
     constructor Create;
     constructor CreateWithLibrary(const LibName : String);
@@ -138,11 +121,6 @@ uses SysUtils, ZEncoding{$IFDEF WITH_UNITANSISTRINGS}, AnsiStrings{$ENDIF};
 
 
 {TZAbstractPlainDriver}
-
-function TZAbstractPlainDriver.IsAnsiDriver: Boolean;
-begin
-  Result := True;
-end;
 
 function TZAbstractPlainDriver.GetUnicodeCodePageName: String;
 begin
@@ -221,69 +199,6 @@ begin
     ValidateCharEncoding(Result^.ZAlias); //recalls em selves
 end;
 
-function TZAbstractPlainDriver.GetPrepreparedSQL(Handle: Pointer;
-  const SQL: String; ConSettings: PZConSettings; out LogSQL: String): RawByteString;
-var
-  SQLTokens: TZTokenDynArray;
-  i: Integer;
-begin
-  Result := '';
-  if ConSettings.AutoEncode then
-  begin
-    SQLTokens := FTokenizer.TokenizeBuffer(SQL, [toSkipEOF]); //Disassembles the Query
-    for i := Low(SQLTokens) to high(SQLTokens) do  //Assembles the Query
-    begin
-      case (SQLTokens[i].TokenType) of
-        ttEscape:
-          Result := Result + {$IFDEF UNICODE}ZPlainString(SQLTokens[i].Value,
-            ConSettings){$ELSE}SQLTokens[i].Value{$ENDIF};
-        ttQuoted,  ttWord, ttQuotedIdentifier, ttKeyword:
-          Result := Result + ZPlainString(SQLTokens[i].Value, ConSettings)
-        else
-          Result := Result + RawByteString(SQLTokens[i].Value);
-      end;
-    end;
-  end
-  else
-    {$IFDEF UNICODE}
-    Result := ZPlainString(SQL, ConSettings);
-    {$ELSE}
-    Result := SQL;
-    {$ENDIF}
-  LogSQL := String(Result);
-end;
-
-{$IFDEF FPC}
-  {$HINTS OFF}
-{$ENDIF}
-function TZAbstractPlainDriver.EscapeString(Handle: Pointer;
-  const Value: ZWideString; ConSettings: PZConSettings): ZWideString;
-var
-  StrFrom: RawByteString;
-  Outbuffer: RawByteString;
-begin
-  StrFrom := ZPlainString(Value, ConSettings);
-  Outbuffer := EscapeString(Handle, StrFrom, ConSettings, True);
-  {$IFDEF UNICODE}
-  Result := ZDbcString(OutBuffer, ConSettings);
-  {$ELSE}
-  Result := ZDbcUnicodeString(Outbuffer, ConSettings.ClientCodePage.CP);
-  {$ENDIF}
-end;
-function TZAbstractPlainDriver.EscapeString(Handle: Pointer;
-  const Value: RawByteString; ConSettings: PZConSettings; WasEncoded: Boolean = False): RawByteString;
-begin
-  Result := {$IFDEF WITH_UNITANSISTRINGS}AnsiStrings.{$ENDIF}AnsiQuotedStr(Value, #39);
-end;
-{$IFDEF FPC}
-  {$HINTS ON}
-{$ENDIF}
-
-function TZAbstractPlainDriver.GetTokenizer: IZTokenizer;
-begin
-  Result := FTokenizer;
-end;
-
 procedure TZAbstractPlainDriver.AddCodePage(const Name: String;
       const ID:  Integer; Encoding: TZCharEncoding = ceAnsi;
       const CP: Word = $ffff; const ZAlias: String = '';
@@ -350,7 +265,7 @@ begin
           {$IFDEF UNICODE}
           AddCurrent; //result are ?valid? but does that makes sence for all if not CP_UTF8?
           {$ELSE}
-          if ( FCodePages[i].CP = ZDefaultSystemCodePage ) then
+          if ( FCodePages[i].CP = ZOSCodePage ) then
             AddCurrent
           else
             if AutoEncode then
@@ -388,10 +303,10 @@ begin
             {$IFDEF WITH_LCONVENCODING} //Lazarus only
             if ( IsLConvEncodingCodePage(FCodePages[i].CP) ) or //Lazarus can convert to UTF8 then we convert to wide (double En/Decoding!)
                ( FCodePages[i].Encoding = ceUTF8 ) or //decode the strings to wide
-               ( FCodePages[i].CP = ZDefaultSystemCodePage ) then //to allow a valid cast
+               ( FCodePages[i].CP = ZOSCodePage ) then //to allow a valid cast
               AddCurrent; //all these charset can be converted to wide
             {$ELSE}
-            if ( FCodePages[i].CP = ZDefaultSystemCodePage ) or //to allow a valid cast
+            if ( FCodePages[i].CP = ZOSCodePage ) or //to allow a valid cast
                ( FCodePages[i].Encoding = ceUTF8 ) then //decode the strings to wide
               AddCurrent;
             {$ENDIF}
@@ -402,13 +317,11 @@ end;
 constructor TZAbstractPlainDriver.Create;
 begin
   inherited Create;
-  FTokenizer := TZTokenizer.Create;
 end;
 
 destructor TZAbstractPlainDriver.Destroy;
 begin
   SetLength(FCodePages, 0);
-  FTokenizer := nil;
   if Assigned(FLoader) then
     FreeAndNil(FLoader);
   inherited Destroy;
@@ -430,7 +343,7 @@ begin
   end;
 end;
 
-procedure TZAbstractPlainDriver.Initialize(const Location: String = '');
+procedure TZAbstractPlainDriver.Initialize(const Location: String);
 begin
   If Assigned(Loader) then
     if not Loader.Loaded then

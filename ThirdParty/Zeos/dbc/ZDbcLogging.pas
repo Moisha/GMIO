@@ -55,7 +55,7 @@ interface
 
 {$I ZDbc.inc}
 
-uses SysUtils, ZClasses;
+uses SysUtils, ZClasses, ZCompatibility;
 
 type
 
@@ -69,75 +69,97 @@ type
   {** Defines an interface to format logging events. }
   IZLoggingFormatter = interface (IZInterface)
 //    ['{53559F5F-AC22-4DDC-B2EA-45D21ADDD2D5}']
-    function Format(LoggingEvent: TZLoggingEvent) : string;
+    function Format(LoggingEvent: TZLoggingEvent) : RawByteString;
   end;
 
   { TZLoggingFormatter }
   {** Defines a object for logging event. }
   TZLoggingFormatter = class (TInterfacedObject, IZLoggingFormatter)
-  private
   public
-    function Format(LoggingEvent: TZLoggingEvent) : string; virtual;
+    function Format(LoggingEvent: TZLoggingEvent) : RawByteString; virtual;
   end;
 
   {** Defines a object for logging event. }
   TZLoggingEvent = class (TObject)
   private
     FCategory: TZLoggingCategory;
-    FProtocol: string;
-    FMessage: string;
+    FProtocol: RawByteString;
+    FMessage: RawByteString;
     FErrorCode: Integer;
-    FError: string;
+    FError: RawByteString;
     FTimestamp: TDateTime;
   public
-    constructor Create(Category: TZLoggingCategory; Protocol: string;
-      Msg: string; ErrorCode: Integer; Error: string);
+    constructor Create(Category: TZLoggingCategory; const Protocol: RawByteString;
+      const Msg: RawByteString; ErrorCode: Integer; const Error: RawByteString);
 
-    function AsString(LoggingFormatter:IZLoggingFormatter = nil): string;
+    function AsString(const LoggingFormatter: IZLoggingFormatter = nil): RawByteString;
 
     property Category: TZLoggingCategory read FCategory;
-    property Protocol: string read FProtocol;
-    property Message: string read FMessage;
+    property Protocol: RawByteString read FProtocol;
+    property Message: RawByteString read FMessage;
     property ErrorCode: Integer read FErrorCode;
-    property Error: string read FError;
+    property Error: RawByteString read FError;
     property Timestamp: TDateTime read FTimestamp;
   end;
 
   {** Defines an interface to accept logging events. }
   IZLoggingListener = interface (IZInterface)
     ['{53559F5F-AC22-4DDC-B2EA-45D21ADDD2D4}']
-
     procedure LogEvent(Event: TZLoggingEvent);
   end;
 
+  IZLoggingObject = interface (IZInterface)
+    ['{67681CC9-53D4-4350-B6C0-423ECFD88B48}']
+    function CreateLogEvent(const Category: TZLoggingCategory): TZLoggingEvent;
+  end;
+
+
 implementation
+
+uses {$IFDEF WITH_UNITANSISTRINGS}AnsiStrings, {$ENDIF}
+  ZFastCode, ZSysUtils, ZDbcUtils;
+
 var DefaultLoggingFormatter: TZLoggingFormatter;
 
+{$IFDEF WITH_TBYTES_AS_RAWBYTESTRING}
+procedure ToBuff(const Value: String; var Buf: TRawBuff; var Result: RawByteString); overload;
+begin
+  ZDbcUtils.ToBuff(UnicodeStringToAscii7(Value), Buf, Result);
+end;
+{$ENDIF}
 { TZLoggingFormatter }
 
-function TZLoggingFormatter.Format(LoggingEvent: TZLoggingEvent): string;
+function TZLoggingFormatter.Format(LoggingEvent: TZLoggingEvent): RawByteString;
+var Buf: TRawBuff;
 begin
-  Result := FormatDateTime('yyyy-mm-dd hh:mm:ss', LoggingEvent.Timestamp) + ' cat: ';
+  Result := {$IFDEF UNICODE}UnicodeStringToAscii7{$ENDIF}(FormatDateTime('yyyy-mm-dd hh:mm:ss', LoggingEvent.Timestamp));
+  Buf.Pos := 0;
+  ToBuff(' cat: ', Buf, Result);
   case LoggingEvent.Category of
-    lcConnect: Result := Result + 'Connect';
-    lcDisconnect: Result := Result + 'Disconnect';
-    lcTransaction: Result := Result + 'Transaction';
-    lcExecute: Result := Result + 'Execute';
-    lcPrepStmt: Result := Result + 'Prepare';
-    lcBindPrepStmt: Result := Result + 'Bind prepared';
-    lcExecPrepStmt: Result := Result + 'Execute prepared';
-    lcUnprepStmt: Result := Result + 'Unprepare prepared';
+    lcConnect: ToBuff('Connect', Buf, Result);
+    lcDisconnect: ToBuff('Disconnect', Buf, Result);
+    lcTransaction: ToBuff('Transaction', Buf, Result);
+    lcExecute: ToBuff('Execute', Buf, Result);
+    lcPrepStmt: ToBuff('Prepare', Buf, Result);
+    lcBindPrepStmt: ToBuff('Bind prepared', Buf, Result);
+    lcExecPrepStmt: ToBuff('Execute prepared', Buf, Result);
+    lcUnprepStmt: ToBuff('Unprepare prepared', Buf, Result);
   else
-    Result := Result + 'Other';
+    ToBuff('Other', Buf, Result);
   end;
-  if LoggingEvent.Protocol <> '' then
-    Result := Result + ', proto: ' + LoggingEvent.Protocol;
-  Result := Result + ', msg: ' + LoggingEvent.Message;
-  if (LoggingEvent.ErrorCode <> 0) or (LoggingEvent.Error <> '') then
-  begin
-    Result := Result + ', errcode: ' + IntToStr(LoggingEvent.ErrorCode)
-      + ', error: ' + LoggingEvent.Error;
+  if LoggingEvent.Protocol <> EmptyRaw then begin
+    ToBuff(', proto: ', Buf, Result);
+    ToBuff(LoggingEvent.Protocol, Buf, Result);
   end;
+  ToBuff(', msg: ', Buf, Result);
+  ToBuff(LoggingEvent.Message, Buf, Result);
+  if (LoggingEvent.ErrorCode <> 0) or (LoggingEvent.Error <> EmptyRaw) then begin
+    ToBuff(', errcode: ', Buf, Result);
+    ToBuff(IntToRaw(LoggingEvent.ErrorCode), Buf, Result);
+    ToBuff(', error: ', Buf, Result);
+    ToBuff(LoggingEvent.Error, Buf, Result);
+  end;
+  FlushBuff(Buf, Result);
 end;
 
 { TZLoggingEvent }
@@ -150,7 +172,7 @@ end;
   @param Error an error message.
 }
 constructor TZLoggingEvent.Create(Category: TZLoggingCategory;
-  Protocol: string; Msg: string; ErrorCode: Integer; Error: string);
+  const Protocol: RawByteString; const Msg: RawByteString; ErrorCode: Integer; const Error: RawByteString);
 begin
   FCategory := Category;
   FProtocol := Protocol;
@@ -164,7 +186,7 @@ end;
   Gets a string representation for this event.
   @returns a string representation.
 }
-function TZLoggingEvent.AsString(LoggingFormatter:IZLoggingFormatter = nil): string;
+function TZLoggingEvent.AsString(const LoggingFormatter: IZLoggingFormatter = nil): RawByteString;
 begin
   If Assigned(LoggingFormatter) then
     Result := LoggingFormatter.Format(Self)

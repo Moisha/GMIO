@@ -54,11 +54,11 @@ unit ZDbcOracleMetadata;
 interface
 
 {$I ZDbc.inc}
+{$IFNDEF ZEOS_DISABLE_ORACLE}
 
 uses
   Types, Classes, SysUtils, ZSysUtils, ZDbcIntfs, ZDbcMetadata,
-  ZCompatibility, ZDbcOracleUtils, ZDbcConnection, ZURL,
-  ZDbcCachedResultSet, ZDbcCache;
+  ZCompatibility, ZDbcOracleUtils;
 
 type
 
@@ -135,15 +135,16 @@ type
     function SupportsOpenStatementsAcrossCommit: Boolean; override;
     function SupportsOpenStatementsAcrossRollback: Boolean; override;
     function SupportsTransactions: Boolean; override;
-    function SupportsTransactionIsolationLevel(Level: TZTransactIsolationLevel):
+    function SupportsTransactionIsolationLevel(const {%H-}Level: TZTransactIsolationLevel):
       Boolean; override;
     function SupportsDataDefinitionAndDataManipulationTransactions: Boolean; override;
     function SupportsDataManipulationTransactionsOnly: Boolean; override;
-    function SupportsResultSetType(_Type: TZResultSetType): Boolean; override;
-    function SupportsResultSetConcurrency(_Type: TZResultSetType;
-      Concurrency: TZResultSetConcurrency): Boolean; override;
+    function SupportsResultSetType(const _Type: TZResultSetType): Boolean; override;
+    function SupportsResultSetConcurrency(const _Type: TZResultSetType;
+      const Concurrency: TZResultSetConcurrency): Boolean; override;
 //    function SupportsBatchUpdates: Boolean; override; -> Not implemented
     function SupportsNonEscapedSearchStrings: Boolean; override;
+    function SupportsArrayBindings: Boolean; override;
 
     // maxima:
     function GetMaxBinaryLiteralLength: Integer; override;
@@ -204,29 +205,33 @@ type
 
   {** Implements Oracle Database Metadata. }
   TZOracleDatabaseMetadata = class(TZAbstractDatabaseMetadata)
+  private
+    function InternalGetCrossReference(const PrimarySchema, PrimaryTable,
+      ForeignSchema, ForeignTable, OrderBy: string;
+      const ColumnsDefs: TZMetadataColumnDefs): IZResultSet;
   protected
     function CreateDatabaseInfo: IZDatabaseInfo; override; // technobot 2008-06-28
 
-    function UncachedGetTables(const Catalog: string; const SchemaPattern: string;
+    function UncachedGetTables(const {%H-}Catalog: string; const SchemaPattern: string;
       const TableNamePattern: string; const Types: TStringDynArray): IZResultSet; override;
     function UncachedGetSchemas: IZResultSet; override;
 //    function UncachedGetCatalogs: IZResultSet; override; -> Not implemented
     function UncachedGetTableTypes: IZResultSet; override;
     function UncachedGetColumns(const Catalog: string; const SchemaPattern: string;
       const TableNamePattern: string; const ColumnNamePattern: string): IZResultSet; override;
-    function UncachedGetTablePrivileges(const Catalog: string; const SchemaPattern: string;
+    function UncachedGetTablePrivileges(const {%H-}Catalog: string; const SchemaPattern: string;
       const TableNamePattern: string): IZResultSet; override;
-    function UncachedGetColumnPrivileges(const Catalog: string; const Schema: string;
+    function UncachedGetColumnPrivileges(const {%H-}Catalog: string; const Schema: string;
       const Table: string; const ColumnNamePattern: string): IZResultSet; override;
-    function UncachedGetPrimaryKeys(const Catalog: string; const Schema: string;
+    function UncachedGetPrimaryKeys(const {%H-}Catalog: string; const Schema: string;
       const Table: string): IZResultSet; override;
-//    function UncachedGetImportedKeys(const Catalog: string; const Schema: string;
-//      const Table: string): IZResultSet; override;
-//    function UncachedGetExportedKeys(const Catalog: string; const Schema: string;
-//      const Table: string): IZResultSet; override;
-//    function UncachedGetCrossReference(const PrimaryCatalog: string; const PrimarySchema: string;
-//      const PrimaryTable: string; const ForeignCatalog: string; const ForeignSchema: string;
-//      const ForeignTable: string): IZResultSet; override;
+    function UncachedGetImportedKeys(const Catalog: string; const Schema: string;
+      const Table: string): IZResultSet; override;
+    function UncachedGetExportedKeys(const Catalog: string; const Schema: string;
+      const Table: string): IZResultSet; override;
+    function UncachedGetCrossReference(const PrimaryCatalog: string; const PrimarySchema: string;
+      const PrimaryTable: string; const ForeignCatalog: string; const ForeignSchema: string;
+      const ForeignTable: string): IZResultSet; override;
     function UncachedGetIndexInfo(const Catalog: string; const Schema: string; const Table: string;
       Unique: Boolean; Approximate: Boolean): IZResultSet; override;
 //     function UncachedGetSequences(const Catalog: string; const SchemaPattern: string;
@@ -240,13 +245,14 @@ type
 //      const Table: string): IZResultSet; override;
 //    function UncachedGetTypeInfo: IZResultSet; override;
   public
-    destructor Destroy; override;
   end;
 
+{$ENDIF ZEOS_DISABLE_ORACLE}
 implementation
+{$IFNDEF ZEOS_DISABLE_ORACLE}
 
 uses
-  ZDbcUtils;
+  ZFastCode, ZDbcUtils, ZSelectSchema;
 
 { TZOracleDatabaseInfo }
 
@@ -396,10 +402,10 @@ end;
 }
 function TZOracleDatabaseInfo.GetSQLKeywords: string;
 begin
-  Result := 'ACCESS,ADD,ALTER,AUDIT,CLUSTER,COLUMN,COMMENT,COMPRESS,CONNECT,'
-    + 'DATE,DROP,EXCLUSIVE,FILE,IDENTIFIED,IMMEDIATE,INCREMENT,INDEX,INITIAL,'
+  Result := 'ACCESS,ADD,AUDIT,CLUSTER,COMMENT,COMPRESS,CONNECT,'
+    + 'DATE,EXCLUSIVE,FILE,IDENTIFIED,IMMEDIATE,INCREMENT,INITIAL,'
     + 'INTERSECT,LEVEL,LOCK,LONG,MAXEXTENTS,MINUS,MODE,NOAUDIT,NOCOMPRESS,'
-    + 'NOWAIT,NUMBER,OFFLINE,ONLINE,PCTFREE,PRIOR';
+    + 'NOWAIT,OFFLINE,ONLINE,PCTFREE,PRIOR';
 end;
 
 {**
@@ -1051,7 +1057,7 @@ end;
   @see Connection
 }
 function TZOracleDatabaseInfo.SupportsTransactionIsolationLevel(
-  Level: TZTransactIsolationLevel): Boolean;
+  const Level: TZTransactIsolationLevel): Boolean;
 begin
   Result := True;
 end;
@@ -1103,7 +1109,7 @@ end;
   @return <code>true</code> if so; <code>false</code> otherwise
 }
 function TZOracleDatabaseInfo.SupportsResultSetType(
-  _Type: TZResultSetType): Boolean;
+  const _Type: TZResultSetType): Boolean;
 begin
   Result := _Type = rtForwardOnly;
 end;
@@ -1117,7 +1123,7 @@ end;
   @return <code>true</code> if so; <code>false</code> otherwise
 }
 function TZOracleDatabaseInfo.SupportsResultSetConcurrency(
-  _Type: TZResultSetType; Concurrency: TZResultSetConcurrency): Boolean;
+  const _Type: TZResultSetType; const Concurrency: TZResultSetConcurrency): Boolean;
 begin
   Result := (_Type = rtForwardOnly) and (Concurrency = rcReadOnly);
 end;
@@ -1132,15 +1138,16 @@ begin
   Result := MetaData.GetConnection.GetClientVersion > 10000000;
 end;
 
-{ TZOracleDatabaseMetadata }
-
 {**
-  Destroys this object and cleanups the memory.
+  Does the Database support binding arrays? Is the ZDbc ready for this?
+  @return <code>true</code> if the DataBase allows it.
 }
-destructor TZOracleDatabaseMetadata.Destroy;
+function TZOracleDatabaseInfo.SupportsArrayBindings: Boolean;
 begin
-  inherited Destroy;
+  Result := True;
 end;
+
+{ TZOracleDatabaseMetadata }
 
 {**
   Constructs a database information object and returns the interface to it. Used
@@ -1292,72 +1299,71 @@ var
     end
     else
       for N := 1 to MaxInt do
-        if Names.IndexOf(NewName+IntToStr(N)) = -1 then
+        if Names.IndexOf(NewName+ZFastCode.IntToStr(N)) = -1 then
         begin
-          Result := NewName+IntToStr(N);
+          Result := NewName+ZFastCode.IntToStr(N);
           Names.Add(Result);
           Break;
         end;
   end;
 
-  procedure InsertProcedureColumnValues(Source: IZResultSet; IsResultParam: Boolean = False);
+  procedure InsertProcedureColumnValues(const Source: IZResultSet; IsResultParam: Boolean = False);
   var
-    TypeName, SubTypeName: string;
+    TypeName{, SubTypeName}: string;
   begin
     TypeName := Source.GetString(ColumnIndexes[4]);
-    SubTypeName := Source.GetString(ColumnIndexes[5]);
+    //SubTypeName := Source.GetString(ColumnIndexes[5]);
     PackageName := Source.GetString(ColumnIndexes[8]);
     ProcName := Source.GetString(ColumnIndexes[9]);
 
     Result.MoveToInsertRow;
-    Result.UpdateNull(1);    //PROCEDURE_CAT
-    Result.UpdateNull(2);    //PROCEDURE_SCHEM
-    Result.UpdateString(3, Source.GetString(ColumnIndexes[1]));    //TABLE_NAME
+    //Result.UpdateNull(CatalogNameIndex);    //PROCEDURE_CAT
+    //Result.UpdateNull(SchemaNameIndex);    //PROCEDURE_SCHEM
+    Result.UpdateString(ProcColProcedureNameIndex, Source.GetString(ColumnIndexes[1]));
+    ColName := Source.GetString(ColumnIndexes[2]);
+
     if IsResultParam then
-      Result.UpdateInt(5, Ord(pctReturn))
+      Result.UpdateString(ProcColColumnNameIndex, GetNextName('ReturnValue', False))
+    else
+      Result.UpdateString(ProcColColumnNameIndex, GetNextName(ColName, Length(ColName) = 0));
+
+    if IsResultParam then
+      Result.UpdateInt(ProcColColumnTypeIndex, Ord(pctReturn))
     else
       if Source.GetString(ColumnIndexes[3]) = 'IN' then
-        Result.UpdateInt(5, Ord(pctIn))
+        Result.UpdateInt(ProcColColumnTypeIndex, Ord(pctIn))
       else
         if Source.GetString(ColumnIndexes[3]) = 'OUT' then
-          Result.UpdateInt(5, Ord(pctOut))
+          Result.UpdateInt(ProcColColumnTypeIndex, Ord(pctOut))
         else
           if ( Source.GetString(ColumnIndexes[3]) = 'IN/OUT') then
-            Result.UpdateInt(5, Ord(pctInOut))
+            Result.UpdateInt(ProcColColumnTypeIndex, Ord(pctInOut))
           else
-            Result.UpdateInt(5, Ord(pctUnknown));
+            Result.UpdateInt(ProcColColumnTypeIndex, Ord(pctUnknown));
 
-    ColName := Source.GetString(ColumnIndexes[2]);
-    if IsResultParam then
-      Result.UpdateString(4, GetNextName('ReturnValue', False))    //COLUMN_NAME
-    else
-      Result.UpdateString(4, GetNextName(ColName, Length(ColName) = 0));    //COLUMN_NAME
-
-    Result.UpdateInt(6, Ord(ConvertOracleTypeToSQLType(TypeName,
+    Result.UpdateInt(ProcColDataTypeIndex, Ord(ConvertOracleTypeToSQLType(TypeName,
       Source.GetInt(ColumnIndexes[6]),Source.GetInt(ColumnIndexes[7]),
-      ConSettings.CPType))); //DATA_TYPE
-    Result.UpdateString(7,TypeName);    //TYPE_NAME
-    Result.UpdateInt(10, Source.GetInt(ColumnIndexes[6])); //PRECISION
-    Result.UpdateNull(9);    //BUFFER_LENGTH
-    Result.UpdateInt(10, Source.GetInt(ColumnIndexes[7]));
-    Result.UpdateInt(11, 10);
-    //Result.UpdateInt(12, GetInt(ColumnIndexes[8]));
-    Result.UpdateNull(12);
-    Result.UpdateString(12, Source.GetString(ColumnIndexes[6]));
+      ConSettings.CPType)));
+    Result.UpdateString(ProcColTypeNameIndex,TypeName);    //TYPE_NAME
+    Result.UpdateInt(ProcColPrecisionIndex, Source.GetInt(ColumnIndexes[6])); //PRECISION
+    Result.UpdateNull(ProcColLengthIndex);
+    Result.UpdateInt(ProcColScaleIndex, Source.GetInt(ColumnIndexes[7]));
+    Result.UpdateInt(ProcColRadixIndex, 10);
+    Result.UpdateString(ProcColNullableIndex, Source.GetString(ColumnIndexes[6]));
     Result.InsertRow;
   end;
 
-  function GetColumnSQL(PosChar: String; Package: String = ''): String;
+  function GetColumnSQL(const PosChar: String; const Package: String = ''): String;
   var
     OwnerCondition, PackageNameCondition, PackageAsProcCondition, PackageProcNameCondition: string;
 
-    procedure SplitPackageAndProc(Value: String);
+    procedure SplitPackageAndProc(const Value: String);
     var
       iPos: Integer;
     begin
       PackageName := '';
       ProcName := 'Value';
-      iPos := Pos('.', Value);
+      iPos := ZFastCode.Pos('.', Value);
         if (iPos > 0) then
         begin
           PackageNameCondition := ConstructNameCondition(Copy(Value, 1, iPos-1),'package_name');
@@ -1418,7 +1424,7 @@ var
     TempSet := IZStmt.ExecuteQuery('select object_name from user_arguments '
                + PackageNameCondition + ' GROUP BY object_name order by object_name');
     while TempSet.Next do
-      Procs.Add(TempSet.GetString(1));
+      Procs.Add(TempSet.GetString(FirstDbcIndex));
     TempSet.Close;
     for i := 0 to Procs.Count -1 do
     begin
@@ -1436,7 +1442,7 @@ var
       with GetConnection.CreateStatement.ExecuteQuery('SELECT COUNT(*) FROM ALL_USERS WHERE '+ConstructNameCondition(TmpSchemaPattern,'username')) do
       begin
         Next;
-        Result := GetInt(1) > 0;
+        Result := GetInt(FirstDbcIndex) > 0;
         Close;
       end;
   end;
@@ -1508,7 +1514,15 @@ end;
 
 function TZOracleDatabaseMetadata.UncachedGetProcedures(const Catalog: string;
   const SchemaPattern: string; const ProcedureNamePattern: string): IZResultSet;
+const
+  //PROCEDURE_CAT_Index      = FirstDbcIndex + 0; unused
+  PROCEDURE_SCHEM_Index    = FirstDbcIndex + 1;
+  OBJECT_NAME_Index        = FirstDbcIndex + 2;
+  PROCEDURE_NAME_Index     = FirstDbcIndex + 3;
+  PROCEDURE_OVERLOAD_Index = FirstDbcIndex + 4;
+  PROCEDURE_TYPE_Index     = FirstDbcIndex + 5;
 var
+  Len: NativeUInt;
   SQL: string;
   LProcedureNamePattern, LSchemaNamePattern: string;
   sName:string;
@@ -1531,23 +1545,20 @@ begin
   begin
     while Next do
     begin
-      sName := IC.Quote(GetString(3));
-      if GetString(4) <> '' then
-        sName :=  sName+'.'+IC.Quote(GetString(4));
+      sName := IC.Quote(GetString(OBJECT_NAME_Index));
+      if GetString(PROCEDURE_NAME_Index) <> '' then
+        sName :=  sName+'.'+IC.Quote(GetString(PROCEDURE_NAME_Index));
       Result.MoveToInsertRow;
-      Result.UpdateNull(1);
-      Result.UpdateString(2, GetString(2));
-      Result.UpdateString(3, sName); //PROCEDURE_NAME
-      Result.UpdateString(4, GetString(5)); //PROCEDURE_OVERLOAD
-      Result.UpdateNull(5);
-      Result.UpdateNull(6);
-      Result.UpdateNull(7);
-      if GetString(6) = 'FUNCTION' then
-          Result.UpdateInt(8, Ord(prtReturnsResult))
-        else if GetString(6) = 'PROCDEURE' then
-          Result.UpdateInt(8, Ord(prtNoResult))
+      //Result.UpdateNull(CatalogNameIndex);
+      Result.UpdatePAnsiChar(SchemaNameIndex, GetPAnsiChar(PROCEDURE_SCHEM_Index, Len), @Len);
+      Result.UpdateString(ProcedureNameIndex, sName);
+      Result.UpdatePAnsiChar(ProcedureOverloadIndex, GetPAnsiChar(PROCEDURE_OVERLOAD_Index, Len), @Len);
+      if GetString(PROCEDURE_TYPE_Index) = 'FUNCTION' then
+          Result.UpdateByte(ProcedureTypeIndex, Ord(prtReturnsResult))
+        else if GetString(PROCEDURE_TYPE_Index) = 'PROCDEURE' then
+          Result.UpdateByte(ProcedureTypeIndex, Ord(prtNoResult))
         else
-          Result.UpdateInt(8, Ord(prtUnknown)); //Package
+          Result.UpdateByte(ProcedureTypeIndex, Ord(prtUnknown)); //Package
       Result.InsertRow;
     end;
     Close;
@@ -1603,7 +1614,7 @@ begin
   for I := 1 to TableTypeCount do
     begin
       Result.MoveToInsertRow;
-      Result.UpdateString(1, Types[I]);
+      Result.UpdateString(TableTypeColumnTableTypeIndex, Types[I]);
       Result.InsertRow;
     end;
 end;
@@ -1662,10 +1673,23 @@ end;
 function TZOracleDatabaseMetadata.UncachedGetColumns(const Catalog: string;
   const SchemaPattern: string; const TableNamePattern: string;
   const ColumnNamePattern: string): IZResultSet;
+const
+  OWNER_Index          = FirstDbcIndex + 0;
+  TABLE_NAME_Index     = FirstDbcIndex + 1;
+  COLUMN_NAME_Index    = FirstDbcIndex + 2;
+  DATA_TYPE_Index      = FirstDbcIndex + 3;
+  DATA_LENGTH_Index    = FirstDbcIndex + 4;
+  DATA_PRECISION_Index = FirstDbcIndex + 5;
+  DATA_SCALE_Index     = FirstDbcIndex + 6;
+  NULLABLE_Index       = FirstDbcIndex + 7;
+  DATA_DEFAULT_Index   = FirstDbcIndex + 8;
+  COLUMN_ID_Index      = FirstDbcIndex + 9;
 var
-  SQL: string;
+  Len: NativeUInt;
+  SQL, oDataType: string;
   SQLType: TZSQLType;
   OwnerCondition,TableCondition,ColumnCondition: String;
+  FieldSize, Precision: Integer;
 
   function CreateWhere: String;
   begin
@@ -1692,60 +1716,226 @@ begin
   ColumnCondition := ConstructNameCondition(ColumnNamePattern,'COLUMN_NAME');
   Result:=inherited UncachedGetColumns(Catalog, SchemaPattern, TableNamePattern, ColumnNamePattern);
 
-  SQL := 'SELECT NULL, OWNER, TABLE_NAME, COLUMN_NAME, NULL, DATA_TYPE,'
-    + ' DATA_LENGTH, NULL, DATA_PRECISION, DATA_SCALE, NULLABLE, NULL,'
-    + ' DATA_DEFAULT, NULL, NULL, NULL, COLUMN_ID, NULLABLE'
-    + ' FROM SYS.ALL_TAB_COLUMNS'
-    + CreateWhere;
+  SQL := 'SELECT OWNER, TABLE_NAME, COLUMN_NAME, DATA_TYPE,'
+    + ' DATA_LENGTH, DATA_PRECISION, DATA_SCALE, NULLABLE, '
+    + ' DATA_DEFAULT, COLUMN_ID FROM SYS.ALL_TAB_COLUMNS'
+    + CreateWhere+' order by COLUMN_ID';
 
   with GetConnection.CreateStatement.ExecuteQuery(SQL) do
   begin
     while Next do
     begin
       Result.MoveToInsertRow;
-      Result.UpdateNull(1);
-      Result.UpdateString(2, GetString(2));
-      Result.UpdateString(3, GetString(3));
-      Result.UpdateString(4, GetString(4));
-      SQLType := ConvertOracleTypeToSQLType(GetString(6), GetInt(9),
-        GetInt(10), ConSettings.CPType);
-      Result.UpdateInt(5, Ord(SQLType));
-      Result.UpdateString(6, GetString(6));
-      Result.UpdateInt(7, GetFieldSize(SQLType, ConSettings, GetInt(7), ConSettings.ClientCodePage.CharWidth)); //FIELD_SIZE
-      Result.UpdateNull(8);
-      Result.UpdateInt(9, GetInt(9));
-      Result.UpdateInt(10, GetInt(10));
+      Result.UpdatePAnsiChar(SchemaNameIndex, GetPAnsiChar(OWNER_Index, Len), @Len);
+      Result.UpdatePAnsiChar(TableNameIndex, GetPAnsiChar(TABLE_NAME_Index, Len), @Len);
+      Result.UpdatePAnsiChar(ColumnNameIndex, GetPAnsiChar(COLUMN_NAME_Index, Len), @Len);
+      oDataType := GetString(DATA_TYPE_Index);
+      Precision := GetInt(DATA_PRECISION_Index);
+      SQLType := ConvertOracleTypeToSQLType(oDataType,
+        Precision, GetInt(DATA_SCALE_Index), ConSettings.CPType);
+      Result.UpdateByte(TableColColumnTypeIndex, Ord(SQLType));
+      Result.UpdatePAnsiChar(TableColColumnTypeNameIndex, GetPAnsiChar(DATA_TYPE_Index, Len), @Len);
+      FieldSize := GetInt(DATA_LENGTH_Index);
+      if SQLType = stString then begin
+        Result.UpdateInt(TableColColumnBufLengthIndex, FieldSize * ConSettings^.ClientCodePage^.CharWidth +1);
+        Result.UpdateInt(TableColColumnCharOctetLengthIndex, FieldSize * ConSettings^.ClientCodePage^.CharWidth);
+        Result.UpdateInt(TableColColumnSizeIndex, FieldSize);
+      end else if SQLType = stUnicodeString then begin
+        Result.UpdateInt(TableColColumnBufLengthIndex, (FieldSize+1) shl 1);
+        Result.UpdateInt(TableColColumnCharOctetLengthIndex, FieldSize shl 1);
+        Result.UpdateInt(TableColColumnSizeIndex, FieldSize);
+      end else if SQLType = stBytes then begin
+        Result.UpdateInt(TableColColumnBufLengthIndex, FieldSize);
+        Result.UpdateInt(TableColColumnSizeIndex, FieldSize);
+        Result.UpdateInt(TableColColumnCharOctetLengthIndex, FieldSize);
+      end else begin
+        Result.UpdateInt(TableColColumnBufLengthIndex, ZSQLTypeToBuffSize(SQLType));
+        Result.UpdateInt(TableColColumnSizeIndex, Precision);
+        Result.UpdateInt(TableColColumnDecimalDigitsIndex, GetInt(DATA_SCALE_Index));
+      end;
 
-      if UpperCase(GetString(11)) = 'N' then
+      if UpperCase(GetString(NULLABLE_Index)) = 'N' then
       begin
-        Result.UpdateInt(11, Ord(ntNoNulls));
-        Result.UpdateString(18, 'NO');
+        Result.UpdateInt(TableColColumnNullableIndex, Ord(ntNoNulls));
+        Result.UpdateString(TableColColumnIsNullableIndex, 'NO');
       end
       else
       begin
-        Result.UpdateInt(11, Ord(ntNullable));
-        Result.UpdateString(18, 'YES');
+        Result.UpdateInt(TableColColumnNullableIndex, Ord(ntNullable));
+        Result.UpdateString(TableColColumnIsNullableIndex, 'YES');
       end;
 
-      Result.UpdateNull(12);
-      Result.UpdateString(13, GetString(13));
-      Result.UpdateNull(14);
-      Result.UpdateNull(15);
-      Result.UpdateNull(16);
-      Result.UpdateInt(17, GetInt(17));
+      Result.UpdatePAnsiChar(TableColColumnColDefIndex, GetPAnsiChar(DATA_DEFAULT_Index, Len), @Len);
+      Result.UpdateInt(TableColColumnOrdPosIndex, GetInt(COLUMN_ID_Index));
 
-      Result.UpdateNull(19);   //AUTO_INCREMENT
-      Result.UpdateBoolean(20, //CASE_SENSITIVE
-        IC.IsCaseSensitive(GetString(4)));
-      Result.UpdateBoolean(21, True);  //SEARCHABLE
-      Result.UpdateBoolean(22, not (GetString(6) = 'BFILE'));  //WRITABLE
-      Result.UpdateBoolean(23, True);  //DEFINITELYWRITABLE
-      Result.UpdateBoolean(24, (GetString(6) = 'BFILE')); //READONLY
+      Result.UpdateBoolean(TableColColumnCaseSensitiveIndex,
+        IC.IsCaseSensitive(GetString(COLUMN_NAME_Index)));
+      Result.UpdateBoolean(TableColColumnSearchableIndex, True);
+      Result.UpdateBoolean(TableColColumnWritableIndex, not (oDataType = 'BFILE'));
+      Result.UpdateBoolean(TableColColumnDefinitelyWritableIndex, True);
+      Result.UpdateBoolean(TableColColumnReadonlyIndex, (oDataType = 'BFILE'));
 
       Result.InsertRow;
     end;
     Close;
   end;
+end;
+
+{**
+  Gets a description of the foreign key columns in the foreign key
+  table that reference the primary key columns of the primary key
+  table (describe how one table imports another's key.) This
+  should normally return a single foreign key/primary key pair
+  (most tables only import a foreign key from a table once.)  They
+  are ordered by FKTABLE_CAT, FKTABLE_SCHEM, FKTABLE_NAME, and
+  KEY_SEQ.
+
+  <P>Each foreign key column description has the following columns:
+   <OL>
+ 	<LI><B>PKTABLE_CAT</B> String => primary key table catalog (may be null)
+ 	<LI><B>PKTABLE_SCHEM</B> String => primary key table schema (may be null)
+ 	<LI><B>PKTABLE_NAME</B> String => primary key table name
+ 	<LI><B>PKCOLUMN_NAME</B> String => primary key column name
+ 	<LI><B>FKTABLE_CAT</B> String => foreign key table catalog (may be null)
+       being exported (may be null)
+ 	<LI><B>FKTABLE_SCHEM</B> String => foreign key table schema (may be null)
+       being exported (may be null)
+ 	<LI><B>FKTABLE_NAME</B> String => foreign key table name
+       being exported
+ 	<LI><B>FKCOLUMN_NAME</B> String => foreign key column name
+       being exported
+ 	<LI><B>KEY_SEQ</B> short => sequence number within foreign key
+ 	<LI><B>UPDATE_RULE</B> short => What happens to
+        foreign key when primary is updated:
+       <UL>
+       <LI> importedNoAction - do not allow update of primary
+                key if it has been imported
+       <LI> importedKeyCascade - change imported key to agree
+                with primary key update
+       <LI> importedKeySetNull - change imported key to NULL if
+                its primary key has been updated
+       <LI> importedKeySetDefault - change imported key to default values
+                if its primary key has been updated
+       <LI> importedKeyRestrict - same as importedKeyNoAction
+                                  (for ODBC 2.x compatibility)
+       </UL>
+ 	<LI><B>DELETE_RULE</B> short => What happens to
+       the foreign key when primary is deleted.
+       <UL>
+       <LI> importedKeyNoAction - do not allow delete of primary
+                key if it has been imported
+       <LI> importedKeyCascade - delete rows that import a deleted key
+       <LI> importedKeySetNull - change imported key to NULL if
+                its primary key has been deleted
+       <LI> importedKeyRestrict - same as importedKeyNoAction
+                                  (for ODBC 2.x compatibility)
+       <LI> importedKeySetDefault - change imported key to default if
+                its primary key has been deleted
+       </UL>
+ 	<LI><B>FK_NAME</B> String => foreign key name (may be null)
+ 	<LI><B>PK_NAME</B> String => primary key name (may be null)
+ 	<LI><B>DEFERRABILITY</B> short => can the evaluation of foreign key
+       constraints be deferred until commit
+       <UL>
+       <LI> importedKeyInitiallyDeferred - see SQL92 for definition
+       <LI> importedKeyInitiallyImmediate - see SQL92 for definition
+       <LI> importedKeyNotDeferrable - see SQL92 for definition
+       </UL>
+   </OL>
+
+  @param primaryCatalog a catalog name; "" retrieves those without a
+  catalog; null means drop catalog name from the selection criteria
+  @param primarySchema a schema name; "" retrieves those
+  without a schema
+  @param primaryTable the table name that exports the key
+  @param foreignCatalog a catalog name; "" retrieves those without a
+  catalog; null means drop catalog name from the selection criteria
+  @param foreignSchema a schema name; "" retrieves those
+  without a schema
+  @param foreignTable the table name that imports the key
+  @return <code>ResultSet</code> - each row is a foreign key column description
+  @see #getImportedKeys
+}
+function TZOracleDatabaseMetadata.UncachedGetCrossReference(
+  const PrimaryCatalog, PrimarySchema, PrimaryTable, ForeignCatalog,
+  ForeignSchema, ForeignTable: string): IZResultSet;
+begin
+  Result := InternalGetCrossReference(PrimarySchema, PrimaryTable, ForeignSchema, ForeignTable,
+    'order by ACFK.OWNER, ACFK.TABLE_NAME, CCFK.POSITION', CrossRefColumnsDynArray);
+end;
+
+{**
+  Gets a description of the foreign key columns that reference a
+  table's primary key columns (the foreign keys exported by a
+  table).  They are ordered by FKTABLE_CAT, FKTABLE_SCHEM,
+  FKTABLE_NAME, and KEY_SEQ.
+
+  <P>Each foreign key column description has the following columns:
+   <OL>
+ 	<LI><B>PKTABLE_CAT</B> String => primary key table catalog (may be null)
+ 	<LI><B>PKTABLE_SCHEM</B> String => primary key table schema (may be null)
+ 	<LI><B>PKTABLE_NAME</B> String => primary key table name
+ 	<LI><B>PKCOLUMN_NAME</B> String => primary key column name
+ 	<LI><B>FKTABLE_CAT</B> String => foreign key table catalog (may be null)
+       being exported (may be null)
+ 	<LI><B>FKTABLE_SCHEM</B> String => foreign key table schema (may be null)
+       being exported (may be null)
+ 	<LI><B>FKTABLE_NAME</B> String => foreign key table name
+       being exported
+ 	<LI><B>FKCOLUMN_NAME</B> String => foreign key column name
+       being exported
+ 	<LI><B>KEY_SEQ</B> short => sequence number within foreign key
+ 	<LI><B>UPDATE_RULE</B> short => What happens to
+        foreign key when primary is updated:
+       <UL>
+       <LI> importedNoAction - do not allow update of primary
+                key if it has been imported
+       <LI> importedKeyCascade - change imported key to agree
+                with primary key update
+       <LI> importedKeySetNull - change imported key to NULL if
+                its primary key has been updated
+       <LI> importedKeySetDefault - change imported key to default values
+                if its primary key has been updated
+       <LI> importedKeyRestrict - same as importedKeyNoAction
+                                  (for ODBC 2.x compatibility)
+       </UL>
+ 	<LI><B>DELETE_RULE</B> short => What happens to
+       the foreign key when primary is deleted.
+       <UL>
+       <LI> importedKeyNoAction - do not allow delete of primary
+                key if it has been imported
+       <LI> importedKeyCascade - delete rows that import a deleted key
+       <LI> importedKeySetNull - change imported key to NULL if
+                its primary key has been deleted
+       <LI> importedKeyRestrict - same as importedKeyNoAction
+                                  (for ODBC 2.x compatibility)
+       <LI> importedKeySetDefault - change imported key to default if
+                its primary key has been deleted
+       </UL>
+ 	<LI><B>FK_NAME</B> String => foreign key name (may be null)
+ 	<LI><B>PK_NAME</B> String => primary key name (may be null)
+ 	<LI><B>DEFERRABILITY</B> short => can the evaluation of foreign key
+       constraints be deferred until commit
+       <UL>
+       <LI> importedKeyInitiallyDeferred - see SQL92 for definition
+       <LI> importedKeyInitiallyImmediate - see SQL92 for definition
+       <LI> importedKeyNotDeferrable - see SQL92 for definition
+       </UL>
+   </OL>
+
+  @param catalog a catalog name; "" retrieves those without a
+  catalog; null means drop catalog name from the selection criteria
+  @param schema a schema name; "" retrieves those
+  without a schema
+  @param table a table name
+  @return <code>ResultSet</code> - each row is a foreign key column description
+  @see #getImportedKeys
+}
+function TZOracleDatabaseMetadata.UncachedGetExportedKeys(const Catalog, Schema,
+  Table: string): IZResultSet;
+begin
+  Result := InternalGetCrossReference(Schema, Table, '', '',
+    'order by ACFK.OWNER, ACFK.TABLE_NAME, CCFK.POSITION', ExportedKeyColumnsDynArray);
 end;
 
 {**
@@ -1776,6 +1966,51 @@ end;
   @return <code>ResultSet</code> - each row is a column privilege description
   @see #getSearchStringEscape
 }
+function TZOracleDatabaseMetadata.InternalGetCrossReference(const PrimarySchema,
+  PrimaryTable, ForeignSchema, ForeignTable, OrderBy: string;
+  const ColumnsDefs: TZMetadataColumnDefs): IZResultSet;
+var
+  SQL: String;
+  procedure Append(const Condition: String; var SQL: String);
+  begin
+    if Condition <> ''
+      then SQL := SQL + ' and '+Condition;
+  end;
+begin
+  //EH: dead slow but first approach avg~3sec
+  //So we should go away from using the giant views of oracle ....
+  SQL := 'select'
+    + ' null as PKTABLE_CAT, ACPK.OWNER as PKTABLE_SCHEM, ACPK.TABLE_NAME as PKTABLE_NAME, CCPK.COLUMN_NAME as PKCOLUMN_NAME,'
+    + ' null as FKTABLE_CAT, ACFK.OWNER as FKTABLE_SCHEM, ACFK.TABLE_NAME as FKTABLE_NAME, CCFK.COLUMN_NAME as FKCOLUMN_NAME,'
+    + ' CCFK.POSITION as KEY_SEQ,'
+    + ' null as UPDATE_RULE,' //is not given or correct me
+    + ' case ACFK.DELETE_RULE '
+    + '  when ''RESTRICT'' then '+ZFastCode.IntToStr(Ord(ikRestrict))
+    + '  when ''NO ACTION'' then '+ZFastCode.IntToStr(Ord(ikNoAction))
+    + '  when ''CASCADE'' then '+ZFastCode.IntToStr(Ord(ikCascade))
+    + '  when ''SET DEFAULT'' then '+ZFastCode.IntToStr(Ord(ikSetDefault))
+    + '  when ''SET NULL'' then '+ZFastCode.IntToStr(Ord(ikSetNull))
+    + '  else '+ZFastCode.IntToStr(Ord(ikNotDeferrable))+' end as DELETE_RULE,'
+    + ' ACFK.CONSTRAINT_NAME as FK_NAME, ACPK.CONSTRAINT_NAME as PK_NAME,'
+    + ' case ACFK.DEFERRABLE'
+    + '  when ''NOT DEFERRABLE'' then '+ZFastCode.IntToStr(Ord(ikNotDeferrable))
+    + '  else '+ZFastCode.IntToStr(Ord(ikInitiallyDeferred))+' end as DEFERRABILITY'
+    + ' from ALL_CONS_COLUMNS CCFK'
+    + ' join ALL_CONSTRAINTS ACFK on ACFK.OWNER = CCFK.OWNER and ACFK.CONSTRAINT_NAME = CCFK.CONSTRAINT_NAME'
+    + ' join ALL_CONSTRAINTS ACPK on ACPK.OWNER = ACFK.R_OWNER and ACPK.CONSTRAINT_NAME = ACFK.R_CONSTRAINT_NAME'
+    + ' join ALL_CONS_COLUMNS CCPK ON CCPK.OWNER = ACPK.OWNER and CCPK.CONSTRAINT_NAME = ACPK.CONSTRAINT_NAME'
+    + ' where ACFK.CONSTRAINT_TYPE=''R'' and ACPK.CONSTRAINT_TYPE=''P''';
+  Append(ConstructNameCondition(AddEscapeCharToWildcards(PrimarySchema), 'ACPK.OWNER'), SQL);
+  Append(ConstructNameCondition(AddEscapeCharToWildcards(PrimaryTable), 'ACPK.TABLE_NAME'), SQL);
+  Append(ConstructNameCondition(AddEscapeCharToWildcards(ForeignSchema), 'ACFK.OWNER'), SQL);
+  Append(ConstructNameCondition(AddEscapeCharToWildcards(ForeignTable), 'ACFK.TABLE_NAME'), SQL);
+  SQL := SQL+OrderBy;
+
+  Result := CopyToVirtualResultSet(
+    GetConnection.CreateStatement.ExecuteQuery(SQL),
+    ConstructVirtualResultSet(ColumnsDefs));
+end;
+
 function TZOracleDatabaseMetadata.UncachedGetColumnPrivileges(const Catalog: string;
   const Schema: string; const Table: string; const ColumnNamePattern: string): IZResultSet;
 var
@@ -1926,18 +2161,91 @@ begin
   OwnerCondition := ConstructNameCondition(Schema,'A.OWNER');
   TableCondition := ConstructNameCondition(Table,'A.TABLE_NAME');
   SQL := 'SELECT NULL AS TABLE_CAT, A.OWNER AS TABLE_SCHEM, A.TABLE_NAME,'
-    + ' B.COLUMN_NAME, B.COLUMN_POSITION AS KEY_SEQ, A.INDEX_NAME AS PK_NAME'
-    + ' FROM ALL_INDEXES A, ALL_IND_COLUMNS B'
-    + ' WHERE A.OWNER=B.INDEX_OWNER AND A.INDEX_NAME=B.INDEX_NAME'
-    + ' AND A.TABLE_OWNER=B.TABLE_OWNER AND A.TABLE_NAME=B.TABLE_NAME'
-    + ' AND A.UNIQUENESS=''UNIQUE'' AND A.GENERATED=''Y'''
-    + ' AND A.INDEX_NAME LIKE ''SYS_%'''
-    + CreateExtraWhere
-    + ' ORDER BY A.INDEX_NAME, B.COLUMN_POSITION';
+        + ' B.COLUMN_NAME, B.POSITION AS KEY_SEQ, A.INDEX_NAME AS PK_NAME'
+        + ' FROM ALL_CONSTRAINTS A, ALL_CONS_COLUMNS B'
+        + ' WHERE A.CONSTRAINT_TYPE = ''P'''
+        + ' AND A.CONSTRAINT_NAME = B.CONSTRAINT_NAME'
+        + ' AND A.OWNER = B.OWNER'
+        + CreateExtraWhere
+        + ' ORDER BY A.INDEX_NAME, B.POSITION';
 
   Result := CopyToVirtualResultSet(
     GetConnection.CreateStatement.ExecuteQuery(SQL),
     ConstructVirtualResultSet(PrimaryKeyColumnsDynArray));
+end;
+
+{**
+  Gets a description of the primary key columns that are
+  referenced by a table's foreign key columns (the primary keys
+  imported by a table).  They are ordered by PKTABLE_CAT,
+  PKTABLE_SCHEM, PKTABLE_NAME, and KEY_SEQ.
+
+  <P>Each primary key column description has the following columns:
+   <OL>
+ 	<LI><B>PKTABLE_CAT</B> String => primary key table catalog
+       being imported (may be null)
+ 	<LI><B>PKTABLE_SCHEM</B> String => primary key table schema
+       being imported (may be null)
+ 	<LI><B>PKTABLE_NAME</B> String => primary key table name
+       being imported
+ 	<LI><B>PKCOLUMN_NAME</B> String => primary key column name
+       being imported
+ 	<LI><B>FKTABLE_CAT</B> String => foreign key table catalog (may be null)
+ 	<LI><B>FKTABLE_SCHEM</B> String => foreign key table schema (may be null)
+ 	<LI><B>FKTABLE_NAME</B> String => foreign key table name
+ 	<LI><B>FKCOLUMN_NAME</B> String => foreign key column name
+ 	<LI><B>KEY_SEQ</B> short => sequence number within foreign key
+ 	<LI><B>UPDATE_RULE</B> short => What happens to
+        foreign key when primary is updated:
+       <UL>
+       <LI> importedNoAction - do not allow update of primary
+                key if it has been imported
+       <LI> importedKeyCascade - change imported key to agree
+                with primary key update
+       <LI> importedKeySetNull - change imported key to NULL if
+                its primary key has been updated
+       <LI> importedKeySetDefault - change imported key to default values
+                if its primary key has been updated
+       <LI> importedKeyRestrict - same as importedKeyNoAction
+                                  (for ODBC 2.x compatibility)
+       </UL>
+ 	<LI><B>DELETE_RULE</B> short => What happens to
+       the foreign key when primary is deleted.
+       <UL>
+       <LI> importedKeyNoAction - do not allow delete of primary
+                key if it has been imported
+       <LI> importedKeyCascade - delete rows that import a deleted key
+       <LI> importedKeySetNull - change imported key to NULL if
+                its primary key has been deleted
+       <LI> importedKeyRestrict - same as importedKeyNoAction
+                                  (for ODBC 2.x compatibility)
+       <LI> importedKeySetDefault - change imported key to default if
+                its primary key has been deleted
+       </UL>
+ 	<LI><B>FK_NAME</B> String => foreign key name (may be null)
+ 	<LI><B>PK_NAME</B> String => primary key name (may be null)
+ 	<LI><B>DEFERRABILITY</B> short => can the evaluation of foreign key
+       constraints be deferred until commit
+       <UL>
+       <LI> importedKeyInitiallyDeferred - see SQL92 for definition
+       <LI> importedKeyInitiallyImmediate - see SQL92 for definition
+       <LI> importedKeyNotDeferrable - see SQL92 for definition
+       </UL>
+   </OL>
+
+  @param catalog a catalog name; "" retrieves those without a
+  catalog; null means drop catalog name from the selection criteria
+  @param schema a schema name; "" retrieves those
+  without a schema
+  @param table a table name
+  @return <code>ResultSet</code> - each row is a primary key column description
+  @see #getExportedKeys
+}
+function TZOracleDatabaseMetadata.UncachedGetImportedKeys(const Catalog, Schema,
+  Table: string): IZResultSet;
+begin
+  Result := InternalGetCrossReference('', '', Schema, Table,
+    'order by ACPK.OWNER, ACPK.TABLE_NAME, CCPK.POSITION', ExportedKeyColumnsDynArray);
 end;
 
 {**
@@ -1994,7 +2302,16 @@ end;
 function TZOracleDatabaseMetadata.UncachedGetIndexInfo(const Catalog: string;
   const Schema: string; const Table: string; Unique: Boolean;
   Approximate: Boolean): IZResultSet;
+const
+  OWNER_Index           = FirstDbcIndex + 0;
+  TABLE_NAME_Index      = FirstDbcIndex + 1;
+  UNIQUENESS_Index      = FirstDbcIndex + 2;
+  INDEX_NAME_Index      = FirstDbcIndex + 3;
+  COLUMN_POSITION_Index = FirstDbcIndex + 4;
+  COLUMN_NAME_Index     = FirstDbcIndex + 5;
+  DESCEND_Index         = FirstDbcIndex + 6;
 var
+  Len: NativeUint;
   SQL: string;
   OwnerCondition,TableCondition: String;
 
@@ -2017,9 +2334,9 @@ begin
   TableCondition := ConstructNameCondition(Table,'A.TABLE_NAME');
   Result:=inherited UncachedGetIndexInfo(Catalog, Schema, Table, Unique, Approximate);
 
-  SQL := 'SELECT NULL, A.OWNER, A.TABLE_NAME, A.UNIQUENESS, NULL,'
-    + ' A.INDEX_NAME, 3, B.COLUMN_POSITION, B.COLUMN_NAME, B.DESCEND,'
-    + ' 0, 0, NULL FROM ALL_INDEXES A, ALL_IND_COLUMNS B'
+  SQL := 'SELECT A.OWNER, A.TABLE_NAME, A.UNIQUENESS, '
+    + ' A.INDEX_NAME, B.COLUMN_POSITION, B.COLUMN_NAME, B.DESCEND'
+    + ' FROM ALL_INDEXES A, ALL_IND_COLUMNS B'
     + ' WHERE A.OWNER=B.INDEX_OWNER AND A.INDEX_NAME=B.INDEX_NAME'
     + ' AND A.TABLE_OWNER=B.TABLE_OWNER AND A.TABLE_NAME=B.TABLE_NAME'
     + CreateExtraWhere;
@@ -2032,28 +2349,28 @@ begin
     while Next do
     begin
       Result.MoveToInsertRow;
-
-      Result.UpdateNull(1);
-      Result.UpdateString(2, GetString(2));
-      Result.UpdateString(3, GetString(3));
-      Result.UpdateBoolean(4,
-        UpperCase(GetString(4)) <> 'UNIQUE');
-      Result.UpdateNull(5);
-      Result.UpdateString(6, GetString(6));
-      Result.UpdateInt(7, GetInt(7));
-      Result.UpdateInt(8, GetInt(8));
-      Result.UpdateString(9, GetString(9));
-      if GetString(10) = 'ASC' then
-        Result.UpdateString(10, 'A')
-      else Result.UpdateString(10, 'D');
-      Result.UpdateInt(11, GetInt(11));
-      Result.UpdateInt(12, GetInt(12));
-      Result.UpdateNull(13);
+      Result.UpdatePAnsiChar(SchemaNameIndex, GetPAnsiChar(OWNER_Index, Len), @Len);
+      Result.UpdatePAnsiChar(TableNameIndex, GetPAnsiChar(TABLE_NAME_Index, Len), @Len);
+      Result.UpdateBoolean(IndexInfoColNonUniqueIndex,
+        UpperCase(GetString(UNIQUENESS_Index)) <> 'UNIQUE');
+      //Result.UpdateNull(IndexInfoColIndexQualifierIndex);
+      Result.UpdatePAnsiChar(IndexInfoColIndexNameIndex, GetPAnsiChar(INDEX_NAME_Index, Len), @Len);
+      Result.UpdateInt(IndexInfoColTypeIndex, 3);
+      Result.UpdateInt(IndexInfoColOrdPositionIndex, GetInt(COLUMN_POSITION_Index));
+      Result.UpdatePAnsiChar(IndexInfoColColumnNameIndex, GetPAnsiChar(COLUMN_NAME_Index, Len), @Len);
+      if GetString(DESCEND_Index) = 'ASC' then
+        Result.UpdateString(IndexInfoColAscOrDescIndex, 'A')
+      else Result.UpdateString(IndexInfoColAscOrDescIndex, 'D');
+      Result.UpdateInt(IndexInfoColCardinalityIndex, 0);
+      Result.UpdateInt(IndexInfoColPagesIndex, 0);
+      //Result.UpdateNull(IndexInfoColFilterConditionIndex);
 
       Result.InsertRow;
     end;
     Close;
   end;
 end;
+
+{$ENDIF ZEOS_DISABLE_ORACLE}
 
 end.

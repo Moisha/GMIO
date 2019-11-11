@@ -68,15 +68,15 @@ type
   private
     FFunctions: IZCollection;
     FCapacity : Integer;
-    FKeys     : Array of LongInt;
+    FKeys     : Array of Cardinal;
 
     procedure SetKeyCapacity(const NewCapacity : Integer);
-    procedure SetKey(const aKey : LongInt; const aPosition : Integer);
+    procedure SetKey(const aKey : Cardinal; const aPosition : Integer);
     procedure RegenerateKey(const aPosition : Integer);
     procedure RegenerateKeys;
   protected
     property Functions: IZCollection read FFunctions write FFunctions;
-    function FindByKeyAndName(const aKey : LongInt; const aName: string): Integer;
+    function FindByKeyAndName(const aKey : Cardinal; const aName: string): Integer;
   public
     constructor Create;
     destructor Destroy; override;
@@ -85,7 +85,7 @@ type
     function GetName(Index: Integer): string;
     function GetFunction(Index: Integer): IZFunction;
 
-    procedure Add(Func: IZFunction);
+    procedure Add(const Func: IZFunction);
     procedure Remove(const Name: string);
     function FindByName(const Name: string): Integer;
 
@@ -104,9 +104,9 @@ type
     function CheckParamsCount(Stack: TZExecutionStack;
       ExpectedCount: Integer): Integer;
   public
-    constructor Create(aName : string);
+    constructor Create(const aName : string);
     function Execute(Stack: TZExecutionStack;
-      VariantManager: IZVariantManager): TZVariant; virtual; abstract;
+      const VariantManager: IZVariantManager): TZVariant; virtual; abstract;
 
     property Name: string read GetName;
   end;
@@ -158,7 +158,7 @@ end;
 {**
   Sets a key to the Keystorage
 }
-procedure TZFunctionsList.SetKey(const aKey : LongInt; const aPosition : Integer);
+procedure TZFunctionsList.SetKey(const aKey : Cardinal; const aPosition : Integer);
 begin
   if aPosition >= FCapacity then
     SetKeyCapacity(FCapacity+16);
@@ -171,7 +171,7 @@ end;
 procedure TZFunctionsList.RegenerateKey(const aPosition : Integer);
 
 begin
-  SetKey(Hash({$IFDEF UNICODE}AnsiString{$ENDIF}((FFunctions[aPosition] as IZFunction).Name)), aPosition);
+  SetKey(Hash({$IFDEF UNICODE}RawByteString{$ENDIF}((FFunctions[aPosition] as IZFunction).Name)), aPosition);
 end;
 
 {**
@@ -191,11 +191,10 @@ end;
 {**
   Finds a function reference by its Name and Hashkey
 }
-function TZFunctionsList.FindByKeyAndName(const aKey : LongInt; const aName: string): Integer;
+function TZFunctionsList.FindByKeyAndName(const aKey : Cardinal; const aName: string): Integer;
 
 var
   I: Integer;
-
 begin
   Result := -1;
   for I := 0 to FFunctions.Count - 1 do
@@ -220,22 +219,21 @@ var
 
 begin
   aName := Uppercase(Name);
-  Result := FindByKeyAndName(Hash({$IFDEF UNICODE}AnsiString{$ENDIF}(aName)), aName);
+  Result := FindByKeyAndName(Hash({$IFDEF UNICODE}RawByteString{$ENDIF}(aName)), aName);
 end;
 
 {**
   Adds a new function to this list.
   @param Func a function reference.
 }
-procedure TZFunctionsList.Add(Func: IZFunction);
+procedure TZFunctionsList.Add(const Func: IZFunction);
 var
   Index: Integer;
-  aKey : LongInt;
+  aKey : Cardinal;
   aName: string;
-
 begin
   aName := Uppercase(Func.Name);
-  aKey  := Hash({$IFDEF UNICODE}AnsiString{$ENDIF}(aName));
+  aKey  := Hash({$IFDEF UNICODE}RawByteString{$ENDIF}(aName));
   Index := FindByKeyAndName(aKey, aName);
   if Index < 0 then
   begin
@@ -321,7 +319,7 @@ end;
 {**
   Creates the function with a user defined name.
 }
-constructor TZAbstractFunction.Create(aName : string);
+constructor TZAbstractFunction.Create(const aName : string);
 begin
   inherited Create;
   FName := UpperCase(aName);
@@ -345,7 +343,7 @@ end;
 function TZAbstractFunction.CheckParamsCount(Stack: TZExecutionStack;
   ExpectedCount: Integer): Integer;
 begin
-  Result := DefVarManager.GetAsInteger(Stack.GetParameter(0));
+  Result := SoftVarManager.GetAsInteger(Stack.GetParameter(0));
   if Result <> ExpectedCount then
   begin
     raise TZExpressionError.Create(Format(SParametersError,

@@ -54,9 +54,11 @@ unit ZDbcOracle;
 interface
 
 {$I ZDbc.inc}
+{$IFNDEF ZEOS_DISABLE_ORACLE}
 
 uses
-  Types, Classes, {$IFDEF MSEgui}mclasses,{$ENDIF} SysUtils, Contnrs,
+  Classes, {$IFDEF MSEgui}mclasses,{$ENDIF} SysUtils,
+  {$IFNDEF NO_UNIT_CONTNRS}Contnrs{$ELSE}ZClasses{$ENDIF},
   ZCompatibility, ZDbcIntfs, ZDbcConnection, ZPlainOracleDriver, ZDbcLogging,
   ZTokenizer, ZDbcGenericResolver, ZURL, ZGenericSqlAnalyser,
   ZPlainOracleConstants;
@@ -64,7 +66,6 @@ uses
 type
 
   {** Implements Oracle Database Driver. }
-  {$WARNINGS OFF}
   TZOracleDriver = class(TZAbstractDriver)
   public
     constructor Create; override;
@@ -75,7 +76,6 @@ type
     function GetTokenizer: IZTokenizer; override;
     function GetStatementAnalyser: IZStatementAnalyser; override;
   end;
-  {$WARNINGS ON}
 
   {** Represents a Oracle specific connection interface. }
   IZOracleConnection = interface (IZConnection)
@@ -102,6 +102,10 @@ type
     FSessionHandle: POCISession;
     FTransHandle: POCITrans;
     FDescibeHandle: POCIDescribe;
+    FStatementPrefetchSize: Integer;
+    FBlobPrefetchSize: Integer;
+    FStmtMode: ub4;
+    FPlainDriver: IZOraclePlainDriver;
   protected
     procedure InternalCreate; override;
     procedure StartTransactionSupport;
@@ -122,7 +126,7 @@ type
     function PingServer: Integer; override;
 
     procedure Open; override;
-    procedure Close; override;
+    procedure InternalClose; override;
 
     procedure SetCatalog(const Catalog: string); override;
     function GetCatalog: string; override;
@@ -140,7 +144,7 @@ type
     function GetDescribeHandle: POCIDescribe;
     function GetClientVersion: Integer; override;
     function GetHostVersion: Integer; override;
-    function GetBinaryEscapeString(const Value: TByteDynArray): String; overload; override;
+    function GetBinaryEscapeString(const Value: TBytes): String; overload; override;
     function GetBinaryEscapeString(const Value: RawByteString): String; overload; override;
   end;
 
@@ -162,11 +166,14 @@ var
   {** The common driver manager object. }
   OracleDriver: IZDriver;
 
+{$ENDIF ZEOS_DISABLE_ORACLE}
 implementation
+{$IFNDEF ZEOS_DISABLE_ORACLE}
 
 uses
-  ZMessages, ZGenericSqlToken, ZDbcOracleStatement, ZSysUtils, ZDbcUtils,
-  ZDbcOracleUtils, ZDbcOracleMetadata, ZOracleToken, ZOracleAnalyser;
+  ZMessages, ZGenericSqlToken, ZDbcOracleStatement, ZSysUtils, ZFastCode,
+  ZDbcOracleUtils, ZDbcOracleMetadata, ZOracleToken, ZOracleAnalyser
+  {$IFNDEF NO_UNIT_CONTNRS}, ZClasses{$ENDIF};
 
 { TZOracleDriver }
 
@@ -203,12 +210,10 @@ end;
   @return a <code>Connection</code> object that represents a
     connection to the URL
 }
-{$WARNINGS OFF}
 function TZOracleDriver.Connect(const Url: TZURL): IZConnection;
 begin
   Result := TZOracleConnection.Create(Url);
 end;
-{$WARNINGS ON}
 
 {**
   Gets the driver's major version number. Initially this should be 1.
@@ -234,9 +239,7 @@ end;
 }
 function TZOracleDriver.GetTokenizer: IZTokenizer;
 begin
-  if Tokenizer = nil then
-    Tokenizer := TZOracleTokenizer.Create;
-  Result := Tokenizer;
+  Result := TZOracleTokenizer.Create; { thread save! Allways return a new Tokenizer! }
 end;
 
 {**
@@ -245,9 +248,7 @@ end;
 }
 function TZOracleDriver.GetStatementAnalyser: IZStatementAnalyser;
 begin
-  if Analyser = nil then
-    Analyser := TZOracleStatementAnalyser.Create;
-  Result := Analyser;
+  Result := TZOracleStatementAnalyser.Create; { thread save! Allways return a new Analyser! }
 end;
 
 { TZOracleConnection }
@@ -258,14 +259,20 @@ end;
 procedure TZOracleConnection.InternalCreate;
 begin
   FMetaData := TZOracleDatabaseMetadata.Create(Self, URL);
-  FHandle := nil;
 
   { Sets a default properties }
   if Self.Port = 0 then
       Self.Port := 1521;
-  AutoCommit := True;
-  TransactIsolationLevel := tiNone;
-  Open;
+
+  if Info.Values['ServerCachedStmts'] = '' then
+    FStmtMode := OCI_STMT_CACHE //use by default
+  else
+    if StrToBoolEx(Info.Values['ServerCachedStmts'], False) then
+      FStmtMode := OCI_STMT_CACHE //use by default
+    else
+      FStmtMode := OCI_DEFAULT;
+  FStatementPrefetchSize := {$IFDEF UNICODE}UnicodeToIntDef{$ELSE}RawToIntDef{$ENDIF}(Info.Values['StatementCache'], 30); //default = 20
+  FBlobPrefetchSize := FChunkSize;
 end;
 
 function TZOracleConnection.CreateCallableStatement(const SQL: string;
@@ -300,7 +307,7 @@ end;
 procedure TZOracleConnection.Open;
 var
   Status: Integer;
-  LogMessage: string;
+  LogMessage: RawByteString;
   OCI_CLIENT_CHARSET_ID,  OCI_CLIENT_NCHARSET_ID: ub2;
 
   procedure CleanupOnFail;
@@ -319,7 +326,7 @@ begin
   if not Closed then
      Exit;
 
-  LogMessage := Format('CONNECT TO "%s" AS USER "%s"', [Database, User]);
+  LogMessage := 'CONNECT TO "'+ConSettings^.Database+'" AS USER "'+ConSettings^.User+'"';
 
   { Sets a default port number. }
   if Port = 0 then
@@ -333,7 +340,7 @@ begin
       FErrorHandle := nil;
       Status := GetPlainDriver.EnvNlsCreate(FHandle, OCI_OBJECT, nil, nil, nil, nil, 0, nil,
         OCI_CLIENT_CHARSET_ID, OCI_CLIENT_CHARSET_ID);
-      CheckOracleError(GetPlainDriver, FErrorHandle, Status, lcOther, 'EnvNlsCreate failed.');
+      CheckOracleError(GetPlainDriver, FErrorHandle, Status, lcOther, 'EnvNlsCreate failed.', ConSettings);
     except
       raise;
     end;
@@ -347,9 +354,9 @@ begin
   GetPlainDriver.HandleAlloc(FHandle, FDescibeHandle, OCI_HTYPE_DESCRIBE, 0, nil);
 
   Status := GetPlainDriver.ServerAttach(FServerHandle, FErrorHandle,
-      PAnsiChar(ansistring(Database)), Length(AnsiString(Database)), 0);
+      PAnsiChar(ConSettings^.Database), Length(ConSettings^.Database), 0);
   try
-    CheckOracleError(GetPlainDriver, FErrorHandle, Status, lcConnect, LogMessage);
+    CheckOracleError(GetPlainDriver, FErrorHandle, Status, lcConnect, LogMessage, ConSettings);
   except
     CleanupOnFail;
     raise;
@@ -368,27 +375,31 @@ begin
       Exit;
     end;
   end;
-  if GetPlainDriver.GetEnvCharsetByteWidth(FHandle, FErrorHandle, ConSettings.ClientCodePage^.CharWidth) <> OCI_SUCCESS then
-    CheckOracleError(GetPlainDriver, FErrorHandle, Status, lcConnect, LogMessage);
+  CheckOracleError(GetPlainDriver, FErrorHandle,
+    GetPlainDriver.NlsNumericInfoGet(FHandle, FErrorHandle,
+      @ConSettings^.ClientCodePage^.CharWidth, OCI_NLS_CHARSET_MAXBYTESZ),
+    lcConnect, LogMessage, ConSettings);
 
   GetPlainDriver.AttrSet(FContextHandle, OCI_HTYPE_SVCCTX, FServerHandle, 0,
     OCI_ATTR_SERVER, FErrorHandle);
   GetPlainDriver.HandleAlloc(FHandle, FSessionHandle, OCI_HTYPE_SESSION, 0, nil);
-  GetPlainDriver.AttrSet(FSessionHandle, OCI_HTYPE_SESSION, PAnsiChar(AnsiString(User)),
-    Length(User), OCI_ATTR_USERNAME, FErrorHandle);
-  GetPlainDriver.AttrSet(FSessionHandle, OCI_HTYPE_SESSION, PAnsiChar(AnsiString(Password)),
+  GetPlainDriver.AttrSet(FSessionHandle, OCI_HTYPE_SESSION, PAnsiChar(ConSettings^.User),
+    Length(ConSettings^.User), OCI_ATTR_USERNAME, FErrorHandle);
+  GetPlainDriver.AttrSet(FSessionHandle, OCI_HTYPE_SESSION, PAnsiChar({$IFDEF UNICODE}UnicodeStringToAscii7{$ENDIF}(Password)),
     Length(Password), OCI_ATTR_PASSWORD, FErrorHandle);
+  GetPlainDriver.AttrSet(FSessionHandle,OCI_HTYPE_SESSION,@fBlobPrefetchSize,0,
+    OCI_ATTR_DEFAULT_LOBPREFETCH_SIZE,FErrorHandle);
   Status := GetPlainDriver.SessionBegin(FContextHandle, FErrorHandle,
     FSessionHandle, OCI_CRED_RDBMS, OCI_DEFAULT);
   try
-    CheckOracleError(GetPlainDriver, FErrorHandle, Status, lcConnect, LogMessage);
+    CheckOracleError(GetPlainDriver, FErrorHandle, Status, lcConnect, LogMessage, ConSettings);
   except
     CleanupOnFail;
     raise;
   end;
   GetPlainDriver.AttrSet(FContextHandle, OCI_HTYPE_SVCCTX, FSessionHandle, 0,
     OCI_ATTR_SESSION, FErrorHandle);
-  DriverManager.LogMessage(lcConnect, PlainDriver.GetProtocol, LogMessage);
+  DriverManager.LogMessage(lcConnect, ConSettings^.Protocol, LogMessage);
 
   StartTransactionSupport;
 
@@ -400,7 +411,7 @@ end;
 }
 procedure TZOracleConnection.StartTransactionSupport;
 var
-  SQL: PChar;
+  SQL: RawByteString;
   Status: Integer;
   Isolation: Integer;
 begin
@@ -438,9 +449,16 @@ begin
     OCI_ATTR_TRANS, FErrorHandle);
 
   Status := GetPlainDriver.TransStart(FContextHandle, FErrorHandle, 0, Isolation);
-  CheckOracleError(GetPlainDriver, FErrorHandle, Status, lcExecute, SQL);
+  CheckOracleError(GetPlainDriver, FErrorHandle, Status, lcExecute, SQL, ConSettings);
 
-  DriverManager.LogMessage(lcExecute, PlainDriver.GetProtocol, SQL);
+  if FStmtMode = OCI_STMT_CACHE  then
+  begin
+    Status := GetPlainDriver.AttrSet(FContextHandle,OCI_HTYPE_SVCCTX,@FStatementPrefetchSize,0,
+        OCI_ATTR_STMTCACHESIZE,FErrorHandle);
+    CheckOracleError(GetPlainDriver, FErrorHandle, Status, lcExecute, SQL, ConSettings);
+  end;
+
+  DriverManager.LogMessage(lcExecute, ConSettings^.Protocol, SQL);
 end;
 
 {**
@@ -462,7 +480,7 @@ function TZOracleConnection.CreateRegularStatement(Info: TStrings):
 begin
   if IsClosed then
      Open;
-  Result := TZOracleStatement.Create(GetPlainDriver, Self, Info);
+  Result := TZOraclePreparedStatement.Create(GetPlainDriver, Self, '', Info);
 end;
 
 {**
@@ -511,7 +529,7 @@ end;
 procedure TZOracleConnection.Commit;
 var
   Status: Integer;
-  SQL: PChar;
+  SQL: RawByteString;
 begin
   if not Closed then
   begin
@@ -519,9 +537,9 @@ begin
 
     Status := GetPlainDriver.TransCommit(FContextHandle, FErrorHandle,
       OCI_DEFAULT);
-    CheckOracleError(GetPlainDriver, FErrorHandle, Status, lcExecute, SQL);
+    CheckOracleError(GetPlainDriver, FErrorHandle, Status, lcExecute, SQL, ConSettings);
 
-    DriverManager.LogMessage(lcExecute, PlainDriver.GetProtocol, SQL);
+    DriverManager.LogMessage(lcExecute, ConSettings^.Protocol, SQL);
   end;
 end;
 
@@ -535,7 +553,7 @@ end;
 procedure TZOracleConnection.Rollback;
 var
   Status: Integer;
-  SQL: PChar;
+  SQL: RawByteString;
 begin
   if not Closed then
   begin
@@ -543,9 +561,9 @@ begin
 
     Status := GetPlainDriver.TransRollback(FContextHandle, FErrorHandle,
       OCI_DEFAULT);
-    CheckOracleError(GetPlainDriver, FErrorHandle, Status, lcExecute, SQL);
+    CheckOracleError(GetPlainDriver, FErrorHandle, Status, lcExecute, SQL, ConSettings);
 
-    DriverManager.LogMessage(lcExecute, PlainDriver.GetProtocol, SQL);
+    DriverManager.LogMessage(lcExecute, ConSettings^.Protocol, SQL);
   end;
 end;
 
@@ -557,7 +575,7 @@ end;
 function TZOracleConnection.PingServer: Integer;
 begin
   Result := GetPlainDriver.Ping(FContextHandle, FErrorHandle);
-  CheckOracleError(GetPlainDriver, FErrorHandle, Result, lcExecute, 'Ping Server');
+  CheckOracleError(GetPlainDriver, FErrorHandle, Result, lcExecute, 'Ping Server', ConSettings);
   Result := 0; //only possible if CheckOracleError dosn't raise an exception
 end;
 
@@ -570,50 +588,43 @@ end;
   garbage collected. Certain fatal errors also result in a closed
   Connection.
 }
-procedure TZOracleConnection.Close;
+procedure TZOracleConnection.InternalClose;
 var
-  Status: Integer;
-  LogMessage: string;
+  LogMessage: RawByteString;
 begin
-  if not Closed then
-  begin
-    LogMessage := Format('DISCONNECT FROM "%s"', [Database]);
+  if Closed or not Assigned(PlainDriver) then
+    Exit;
+  LogMessage := 'DISCONNECT FROM "'+ConSettings^.Database+'"';
+  { Closes started transaction }
+  CheckOracleError(GetPlainDriver, FErrorHandle,
+    GetPlainDriver.TransRollback(FContextHandle, FErrorHandle, OCI_DEFAULT),
+    lcDisconnect, LogMessage, ConSettings);
+  GetPlainDriver.HandleFree(FTransHandle, OCI_HTYPE_TRANS);
+  FTransHandle := nil;
 
-    { Closes started transaction }
-    Status := GetPlainDriver.TransRollback(FContextHandle, FErrorHandle,
-      OCI_DEFAULT);
-    CheckOracleError(GetPlainDriver, FErrorHandle, Status, lcDisconnect,
-      LogMessage);
-    GetPlainDriver.HandleFree(FTransHandle, OCI_HTYPE_TRANS);
-    FTransHandle := nil;
+  { Closes the session }
+  CheckOracleError(GetPlainDriver, FErrorHandle,
+    GetPlainDriver.SessionEnd(FContextHandle, FErrorHandle, FSessionHandle,
+    OCI_DEFAULT), lcDisconnect, LogMessage, ConSettings);
 
-    { Closes the session }
-    Status := GetPlainDriver.SessionEnd(FContextHandle, FErrorHandle,
-      FSessionHandle, OCI_DEFAULT);
-    CheckOracleError(GetPlainDriver, FErrorHandle, Status, lcDisconnect,
-      LogMessage);
+  { Detaches from the server }
+  CheckOracleError(GetPlainDriver, FErrorHandle,
+    GetPlainDriver.ServerDetach(FServerHandle, FErrorHandle, OCI_DEFAULT),
+    lcDisconnect, LogMessage, ConSettings);
 
-    { Detaches from the server }
-    Status := GetPlainDriver.ServerDetach(FServerHandle, FErrorHandle,
-      OCI_DEFAULT);
-    CheckOracleError(GetPlainDriver, FErrorHandle, Status, lcDisconnect,
-      LogMessage);
+  { Frees all handlers }
+  GetPlainDriver.HandleFree(FDescibeHandle, OCI_HTYPE_DESCRIBE);
+  FDescibeHandle := nil;
+  GetPlainDriver.HandleFree(FSessionHandle, OCI_HTYPE_SESSION);
+  FSessionHandle := nil;
+  GetPlainDriver.HandleFree(FContextHandle, OCI_HTYPE_SVCCTX);
+  FContextHandle := nil;
+  GetPlainDriver.HandleFree(FServerHandle, OCI_HTYPE_SERVER);
+  FServerHandle := nil;
+  GetPlainDriver.HandleFree(FErrorHandle, OCI_HTYPE_ERROR);
+  FErrorHandle := nil;
 
-    { Frees all handlers }
-    GetPlainDriver.HandleFree(FDescibeHandle, OCI_HTYPE_DESCRIBE);
-    FDescibeHandle := nil;
-    GetPlainDriver.HandleFree(FSessionHandle, OCI_HTYPE_SESSION);
-    FSessionHandle := nil;
-    GetPlainDriver.HandleFree(FContextHandle, OCI_HTYPE_SVCCTX);
-    FContextHandle := nil;
-    GetPlainDriver.HandleFree(FServerHandle, OCI_HTYPE_SERVER);
-    FServerHandle := nil;
-    GetPlainDriver.HandleFree(FErrorHandle, OCI_HTYPE_ERROR);
-    FErrorHandle := nil;
-
-    DriverManager.LogMessage(lcDisconnect, PlainDriver.GetProtocol, LogMessage);
-  end;
-  inherited Close;
+  DriverManager.LogMessage(lcDisconnect, ConSettings^.Protocol, LogMessage);
 end;
 
 {**
@@ -641,8 +652,7 @@ end;
 procedure TZOracleConnection.SetTransactionIsolation(
   Level: TZTransactIsolationLevel);
 var
-  Status: Integer;
-  SQL: PChar;
+  SQL: RawByteString;
 begin
   if TransactIsolationLevel <> Level then
   begin
@@ -651,12 +661,12 @@ begin
     if not Closed then
     begin
       SQL := 'END TRANSACTION';
-      Status := GetPlainDriver.TransRollback(FContextHandle, FErrorHandle,
-        OCI_DEFAULT);
-      CheckOracleError(GetPlainDriver, FErrorHandle, Status, lcExecute, SQL);
+      CheckOracleError(GetPlainDriver, FErrorHandle,
+        GetPlainDriver.TransRollback(FContextHandle, FErrorHandle, OCI_DEFAULT),
+          lcExecute, SQL, ConSettings);
       GetPlainDriver.HandleFree(FTransHandle, OCI_HTYPE_TRANS);
       FTransHandle := nil;
-      DriverManager.LogMessage(lcExecute, PlainDriver.GetProtocol, SQL);
+      DriverManager.LogMessage(lcExecute, ConSettings^.Protocol, SQL);
 
       StartTransactionSupport;
     end;
@@ -679,7 +689,9 @@ end;
 }
 function TZOracleConnection.GetPlainDriver: IZOraclePlainDriver;
 begin
-  Result := PlainDriver as IZOraclePlainDriver;
+  if fPlainDriver = nil then
+    fPlainDriver := PlainDriver as IZOraclePlainDriver;
+  Result := fPlainDriver;
 end;
 
 {**
@@ -767,29 +779,32 @@ begin
   freemem(buf);
 end;
 
-function TZOracleConnection.GetBinaryEscapeString(const Value: TByteDynArray): String;
+function TZOracleConnection.GetBinaryEscapeString(const Value: TBytes): String;
 var
-  tmp: RawByteString;
   L: Integer;
+  P: PChar;
 begin
   L := Length(Value);
-  SetLength(tmp, L*2);
-  BinToHex(PAnsiChar(Value), PAnsiChar(tmp), L);
-  Result := #39+String(tmp)+#39;
-  if GetAutoEncodeStrings then
-    Result := GetDriver.GetTokenizer.GetEscapeString(Result)
+  SetLength(Result, L*2+2);
+  P := PChar(Result);
+  P^ := #39;
+  Inc(p);
+  ZBinToHex(PAnsiChar(Value), P, L);
+  (P+L)^ := #39;
 end;
 
 function TZOracleConnection.GetBinaryEscapeString(const Value: RawByteString): String;
 var
-  tmp: RawByteString;
   L: Integer;
+  P: PChar;
 begin
   L := Length(Value);
-  SetLength(tmp, L*2);
-  BinToHex(PAnsiChar(Value), PAnsiChar(tmp), L);
-  if GetAutoEncodeStrings then
-    Result := GetDriver.GetTokenizer.GetEscapeString(Result)
+  SetLength(Result, L*2+2);
+  P := PChar(Result);
+  P^ := #39;
+  Inc(p);
+  ZBinToHex(PAnsiChar(Value), P, L);
+  (P+L)^ := #39;
 end;
 
 { TZOracleSequence }
@@ -805,9 +820,9 @@ var
 begin
   Statement := Connection.CreateStatement;
   ResultSet := Statement.ExecuteQuery(
-    Format('SELECT %s.CURRVAL FROM DUAL', [Name]));
+    GetCurrentValueSQL);
   if ResultSet.Next then
-    Result := ResultSet.GetLong(1)
+    Result := ResultSet.GetLong(FirstDbcIndex)
   else
     Result := inherited GetCurrentValue;
   ResultSet.Close;
@@ -816,7 +831,7 @@ end;
 
 function TZOracleSequence.GetCurrentValueSQL: String;
 begin
- result:=Format('SELECT %s.CURRVAL FROM DUAL', [Name]);
+  Result := Format('SELECT %s.CURRVAL FROM DUAL', [Name]);
 end;
 
 {**
@@ -830,9 +845,9 @@ var
 begin
   Statement := Connection.CreateStatement;
   ResultSet := Statement.ExecuteQuery(
-    Format('SELECT %s.NEXTVAL FROM DUAL', [Name]));
+    GetNextValueSQL);
   if ResultSet.Next then
-    Result := ResultSet.GetLong(1)
+    Result := ResultSet.GetLong(FirstDbcIndex)
   else
     Result := inherited GetNextValue;
   ResultSet.Close;
@@ -842,7 +857,7 @@ end;
 
 function TZOracleSequence.GetNextValueSQL: String;
 begin
- result:=Format('SELECT %s.NEXTVAL FROM DUAL', [Name]);
+  Result := Format('SELECT %s.NEXTVAL FROM DUAL', [Name]);
 end;
 
 { TZOracleCachedResolver }
@@ -860,7 +875,7 @@ begin
   Result := inherited FormCalculateStatement(Columns);
   if Result <> '' then
   begin
-    iPos := pos('FROM', uppercase(Result));
+    iPos := ZFastCode.pos('FROM', uppercase(Result));
     if iPos > 0 then
     begin
       Result := copy(Result, 1, iPos+3) + ' DUAL';
@@ -879,5 +894,6 @@ finalization
   if DriverManager <> nil then
     DriverManager.DeregisterDriver(OracleDriver);
   OracleDriver := nil;
+{$ENDIF ZEOS_DISABLE_ORACLE}
 end.
 

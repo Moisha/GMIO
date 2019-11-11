@@ -59,10 +59,58 @@ interface
 
 {$I ZCore.inc}
 
+uses ZCompatibility;
+
 procedure loadmessages();
+
+const
+{$IFDEF FRENCH}
+  cCodePage = 1252; {Microsoft Windows Codepage 1252 (ANSI), USASCCI}
+{$ELSE !FRENCH}
+{$IFDEF PORTUGUESE}
+  cCodePage = 1252; {Microsoft Windows Codepage 1252 (ANSI), USASCCI}
+{$ELSE !PORTUGUESE}
+{$IFDEF DUTCH}
+  cCodePage = 1252; {Microsoft Windows Codepage 1252 (ANSI), USASCCI}
+{$ELSE !DUTCH}
+{$IFDEF GERMAN}
+  cCodePage = 1252; {Microsoft Windows Codepage 1252 (ANSI), USASCCI}
+{$ELSE !GERMAN}
+{$IFDEF SPANISH}
+  cCodePage = 1252; {Microsoft Windows Codepage 1252 (ANSI), USASCCI}
+{$ELSE !SPANISH}
+{$IFDEF ROMANA}
+  cCodePage = 1252; {Microsoft Windows Codepage 1252 (ANSI), USASCCI}
+{$ELSE !ROMANA}
+{$IFDEF INDONESIAN}
+  cCodePage = 20127; {US-ASCII (7-bit)}
+{$ELSE !INDONESIAN}
+{$IFDEF RUSSIAN}
+  cCodePage = 1251; {Microsoft Windows Codepage 1251 (Cyrl)}
+{$ELSE !RUSSIAN}
+{$IFDEF CZECH}
+  cCodePage = 1250; {Microsoft Windows Codepage 1250 (East European)}
+{$ELSE !CZECH}
+{$IFDEF POLISH}
+  cCodePage = 1250; {Microsoft Windows Codepage 1250 (East European)}
+{$ELSE !POLISH}
+cCodePage = 20127; {US-ASCII (7-bit)}
+{$ENDIF POLISH} // POLISH
+{$ENDIF CZECH} // CZECH
+{$ENDIF RUSSIAN}
+{$ENDIF INDONESIAN}
+{$ENDIF ROMANA}
+{$ENDIF SPANISH}
+{$ENDIF GERMAN}
+{$ENDIF DUTCH}
+{$ENDIF PORTUGUESE}
+{$ENDIF FRENCH}
 
 resourcestring
 
+  {$IFNDEF WITH_RTLCONSTS_SInvalidGuidArray}
+    SInvalidGuidArray = 'Byte-Array or Buffer for GUID must have exact %s Bytes';
+  {$ENDIF}
   cSLibraryNotCompatible = 'Client-Library %s found but could not be loaded. Check compile-target and library compatibility!';
 //--- added by Serge Girard --------------------------------------------------------
 {$IFDEF FRENCH}
@@ -87,6 +135,7 @@ resourcestring
   cSUnexpectedExprEnd = 'Fin d''expression imprévue';
   cSRightBraceExpected = ') attendue';
   cSParametersError = '%d paramètres attendus mais %d ont été trouvés';
+  cSParamValueExceeded = 'value of param %d exceeded';
   cSExpectedMoreParams = 'Plus de deux paramètres sont attendus';
   cSInvalidVarByteArray = 'Tableau de VarByte non valide';
   cSVariableAlreadyExists = 'La variable "%s" existe déjà';
@@ -228,6 +277,9 @@ resourcestring
   cSInvalidUpdateCount     = '%d enregistrement(s) mis à jour. Un seul urait du l''être.';
 
   cSRowBufferWidthExceeded ='La taille du buffer de lignes a été dépassée. Essayez d''utiliser moins ou de plus longues colonnes dans la requête SQL.';
+  cSPreviousResultStillOpen = 'L''ensemble de données résultat précédent de cette instruction est encore ouvert';
+
+  csCantFilterOnComputedColumns = 'Translate: Filtering a data set on computed fields and lookup fields is not supported.';
 //--- end added by Serge Girard ------------------------------------
 {$ELSE !FRENCH}
 // -> ms, 09/05/2005
@@ -253,6 +305,7 @@ resourcestring
   cSUnexpectedExprEnd = 'Final inesperado de expressão';
   cSRightBraceExpected = ') esperado';
   cSParametersError = 'Esperado %d parâmetros mas foi encontrado %d';
+  cSParamValueExceeded = 'value of param %d exceeded';
   cSExpectedMoreParams = 'Esperado mais que 2 parâmetros';
   cSInvalidVarByteArray = 'VarByte array inválido';
   cSVariableAlreadyExists = 'Variável "%s" já existe';
@@ -383,7 +436,7 @@ resourcestring
   cSBoundVarStrIndexMissing = 'Índice de texto "%s" da variável de limite não existe';
   cSBindVarOutOfRange      = 'Índice da variável de limite fora de alcance: %d';
   cSFailedToBindResults    = 'A Aplicação falhou ao tratar o result set';
-  
+  cSPreviousResultStillOpen = 'Previous resultset of this statement is still open';
 
   cSRefreshRowOnlySupportedWithUpdateObject = 'O método RefreshRow somente é suportado com um update object';
   cSMustBeInBrowseMode = 'A Operação é permitida somente no modo dsBrowse';
@@ -393,6 +446,8 @@ resourcestring
   cSInvalidUpdateCount   = '%d registro(s) atualizados. Apenas um registro deveria ter sido atualizado.';
 
   cSRowBufferWidthExceeded ='O tamanho do buffer para linhas (Rows) foi excedido. Tente usar menos ou mais colunas na query SQL';
+
+  csCantFilterOnComputedColumns = 'Translate: Filtering a data set on computed fields and lookup fields is not supported.';
 {$ELSE}
 
 {$IFDEF DUTCH}
@@ -417,6 +472,7 @@ resourcestring
   cSUnexpectedExprEnd = 'Onverwacht einde van de expressie';
   cSRightBraceExpected = ') verwacht';
   cSParametersError = 'Verwacht worden %d parameters maar er zijn er %d gevonden';
+  cSParamValueExceeded = 'value of param %d exceeded';
   cSExpectedMoreParams = 'Meer dan 2 parameters werden verwacht';
   cSInvalidVarByteArray = 'Ongeldig VarByte array';
   cSVariableAlreadyExists = 'Variabele "%s" bestaat al';
@@ -548,6 +604,7 @@ resourcestring
   cSBoundVarStrIndexMissing = 'Tekst index van bound variable bestaat niet: "%s"';
   cSBindVarOutOfRange      = 'Bound variable index buiten bereik: %d';
   cSFailedToBindResults    = 'Binding van resultaat mislukt';
+  cSPreviousResultStillOpen = 'Previous resultset of this statement is still open';
 
   cSRefreshRowOnlySupportedWithUpdateObject = 'De refreshrow methode is enkel ondersteund vooreen update object';
   cSMustBeInBrowseMode = 'Bewerking is enkel toegestaan in dsBROWSE status';
@@ -557,6 +614,8 @@ resourcestring
   cSInvalidUpdateCount     = '%d record(s) gewijzigd. Slechts 1 record had gewijzigd mogen zijn.';
 
   cSRowBufferWidthExceeded ='Rij buffer grootte overschreden. Probeer minder kolommen te gebruiken in je SQL query.';
+
+  csCantFilterOnComputedColumns = 'Translate: Filtering a data set on computed fields and lookup fields is not supported.';
 {$ELSE}
 // <- ms, 09/05/2005
 
@@ -583,6 +642,7 @@ resourcestring
   cSUnexpectedExprEnd = 'Unerwartetes Ende des Ausdrucks';
   cSRightBraceExpected = ') erwartet';
   cSParametersError = 'Es werden %d Parameter erwartet, aber nur %d Parameter gefunden';
+  cSParamValueExceeded = 'Daten des Parameters %d zu groß.';
   cSExpectedMoreParams = 'Es werden mehr als zwei Parameter erwartet';
   cSInvalidVarByteArray = 'Ungültiges VarByte Array';
   cSVariableAlreadyExists = 'Die Variable "%s" existiert bereits';
@@ -640,14 +700,14 @@ resourcestring
   cSOperationIsNotAllowed4 = 'Die Operation ist bei einem geschlossenen DataSet nicht erlaubt';
   cSNoMoreRecords = 'Es gibt keine weiteren Datensätze in der Ergebnismenge';
   cSCanNotOpenResultSet = 'Die Ergebnismenge kann nicht geöffnet werden';
-  cSCanNotOpenDataSetWhenDestroying ='Translate : Cannot open a dataset when the componentstate is dsDestroying';
+  cSCanNotOpenDataSetWhenDestroying ='Dataset kann nicht im Komponenten-Status dsDestroying geöffnet werden';
   cSCircularLink = 'Die DataSource hat einen zirkulären Verweis';
   cSBookmarkWasNotFound = 'Das Lesezeichen (Bookmark) wurde nicht gefunden';
   cSIncorrectSearchFieldsNumber = 'Die Anzahl der Suchfeldwerte ist nicht korrekt';
   cSInvalidOperationInTrans = 'Ungültige Operatio im Zustand einer expliziten Transaktion';
   cSIncorrectSymbol = 'Falsches Symbol in der Feldliste "%s".';
   cSIncorrectToken = 'Falsches Token gefolgt von ":"';
-  cSIncorrectParamChar = 'TRANSLATE : Invalid value for ParamChar';
+  cSIncorrectParamChar = 'Ungültiger Wert für Parameter-Indikator';
 
   cSSelectedTransactionIsolation = 'Der gewählte Transaktions-Isolationslevel wird nicht unterstützt';
   cSDriverNotSupported = 'Der Treiber wird nicht unterstützt: %s';
@@ -699,30 +759,33 @@ resourcestring
   cSUpdateSQLRefreshStatementcount ='Translate : Update Refresh SQL Statement count must be 1';
 
   {$IFDEF FPC}
-  cSNotEditing = 'Das DataSet ist nicht im "edit" oder "insert" Modus.';
+  cSNotEditing = 'Das DataSet ist nicht im "Ändern" oder "Einfüge" Modus.';
   cSFieldTypeMismatch = 'Der Typ für Feld ''%s'' stimmt nicht. Erwartet wird %s der Typ ist aber momentan %s';
   cSFieldSizeMismatch = 'Die Größe des Feldes ''%s'' stimmt nicht. Erwartet wird  %d die Größe ist aber momentan %d';
   {$ENDIF}
-  cSNeedField               = 'Translate: Field %s is required, but not supplied.';
+  cSNeedField               = 'Feld %s benötigt einen Wert, welcher nicht zugewiesen wurde.';
 
-  cSFailedtoInitPrepStmt   = 'Translate: Prepared statement failed to initialize';
-  cSFailedtoPrepareStmt    = 'Translate: Statement failed during prepare process';
-  cSFailedToBindAllValues  = 'Translate: Application failed to pre-bind all values';
-  cSAttemptExecOnBadPrep   = 'Translate: Attempt made to execute a statement before a successful preparation.';
-  cSBindingFailure         = 'Translate: Failed to bind parameter set';
-  cSPreparedStmtExecFailure = 'Translate: Prepared statement failed to execute';
+  cSFailedtoInitPrepStmt   = 'Die Initialisierung für vorbereitete Abfrage ist gescheitert';
+  cSFailedtoPrepareStmt    = 'Abfrage ist wärend des Vorbereitungsprozesses gescheitert.';
+  cSFailedToBindAllValues  = 'Anwendung konnte nicht alle Werte übergeben';
+  cSAttemptExecOnBadPrep   = 'Es wurde versucht eine nicht erfolgreich vorbereitete Abfrage auszuführen';
+  cSBindingFailure         = 'Konnte nicht alle ausgewählten Parameter der Abfrage binden';
+  cSPreparedStmtExecFailure = 'Vorbeitet Abfrage scheiterte beim Ausführen';
   cSBoundVarStrIndexMissing = 'Translate: Bound variable text index "%s" does not exist';
   cSBindVarOutOfRange      = 'Translate: Bound variable index out of range: %d';
   cSFailedToBindResults    = 'Translate: Application failed to bind to the result set';
+  cSPreviousResultStillOpen = 'Previous resultset of this statement is still open';
 
   cSRefreshRowOnlySupportedWithUpdateObject = 'TRANSLATE: The refreshrow method is only supported with an update object';
   cSMustBeInBrowseMode = 'TRANSLATE: Operation is only allowed in dsBROWSE state';
 
-  cSUnKnownParamDataType = 'TRANSLATE: Unknown Param.DataType';
-  cSFieldReadOnly          = 'Translate : Readonly field can''t be assigned a value: %d';
-  cSInvalidUpdateCount     = 'Translate : %d record(s) updated. Only one record should have been updated.';
+  cSUnKnownParamDataType = 'Unbekannter Parameter-Datentyp';
+  cSFieldReadOnly          = 'Einem "Nur-Lesen" Feld kann kein Wert zugewiesen werden: %d';
+  cSInvalidUpdateCount     = '%d Datensätze geändert. Exakt ein Datensatz sollte geändert werden.';
 
   cSRowBufferWidthExceeded ='Translate: Row buffer width exceeded. Try using fewer or longer columns in SQL query.';
+
+  csCantFilterOnComputedColumns = 'Datasets können nich nach berechneten Feldern und Lookup-Feldern gefiltert werden.';
 {$ELSE}
   // -> fduenas, 28/06/2005
 {$IFDEF SPANISH} //Spanish translations
@@ -747,6 +810,7 @@ resourcestring
   cSUnexpectedExprEnd = 'Fin de expresión inesperado';
   cSRightBraceExpected = ') esperado';
   cSParametersError = 'Se esperaban %d parámetros pero solo %d fueron encontrados';
+  cSParamValueExceeded = 'value of param %d exceeded';
   cSExpectedMoreParams = 'Se esperaban más de dos parámetros';
   cSInvalidVarByteArray = 'Arreglo VarByte inválido';
   cSVariableAlreadyExists = 'La variable "%s" ya existe';
@@ -879,6 +943,7 @@ resourcestring
   cSBoundVarStrIndexMissing = 'Translate: Bound variable text index "%s" does not exist';
   cSBindVarOutOfRange      = 'Translate: Bound variable index out of range: %d';
   cSFailedToBindResults    = 'Translate: Application failed to bind to the result set';
+  cSPreviousResultStillOpen = 'Previous resultset of this statement is still open';
 
   cSRefreshRowOnlySupportedWithUpdateObject = 'TRANSLATE: The refreshrow method is only supported with an update object';
   cSMustBeInBrowseMode = 'TRANSLATE: Operation is only allowed in dsBROWSE state';
@@ -888,12 +953,13 @@ resourcestring
   cSInvalidUpdateCount     = 'Translate : %d record(s) updated. Only one record should have been updated.';
 
   cSRowBufferWidthExceeded ='Translate: Row buffer width exceeded. Try using fewer or longer columns in SQL query.';
+
+  csCantFilterOnComputedColumns = 'Translate: Filtering a data set on computed fields and lookup fields is not supported.';
 {$ELSE}
 
 {$IFDEF ROMANA}
 
-
- SSQLError1 = 'SQL Eroare: %s';
+  SSQLError1 = 'SQL Eroare: %s';
   cSSQLError2 = 'SQL Eroare: %s Cod: %d';
   cSSQLError3 = 'SQL Eroare: %s Cod: %d SQL: %s';
   cSSQLError4 = 'SQL Eroare: %s Cod: %d Mesaj: %s';
@@ -914,6 +980,7 @@ resourcestring
   cSUnexpectedExprEnd = 'Final neaºteptat pentru expresie';
   cSRightBraceExpected = ') aºteptat';
   cSParametersError = 'parametrul %d a fost aºteptat dar %d a fost gãsit';
+  cSParamValueExceeded = 'value of param %d exceeded';
   cSExpectedMoreParams = 'Mai nult de doi parametrii sunt aºteptaþi';
   cSInvalidVarByteArray = 'Arie VarByte invalidã';
   cSVariableAlreadyExists = 'Variabila "%s" deja existã';
@@ -1045,6 +1112,7 @@ resourcestring
   cSBoundVarStrIndexMissing = 'Translate: Bound variable text index "%s" does not exist';
   cSBindVarOutOfRange      = 'Translate: Bound variable index out of range: %d';
   cSFailedToBindResults    = 'Translate: Application failed to bind to the result set';
+  cSPreviousResultStillOpen = 'Previous resultset of this statement is still open';
 
   cSRefreshRowOnlySupportedWithUpdateObject = 'TRANSLATE: The refreshrow method is only supported with an update object';
   cSMustBeInBrowseMode = 'TRANSLATE: Operation is only allowed in dsBROWSE state';
@@ -1052,6 +1120,9 @@ resourcestring
   cSUnKnownParamDataType = 'TRANSLATE: Unknown Param.DataType';
 
   cSRowBufferWidthExceeded ='Translate: Row buffer width exceeded. Try using fewer or longer columns in SQL query.';
+
+  csCantFilterOnComputedColumns = 'Translate: Filtering a data set on computed fields and lookup fields is not supported.';
+
   // <-- added by tohenk
   {$ELSE}
   {$IFDEF INDONESIAN}
@@ -1076,6 +1147,7 @@ resourcestring
   cSUnexpectedExprEnd = 'Tidak dibutuhkan, akhir dari ekspresi';
   cSRightBraceExpected = ') dibutuhkan';
   cSParametersError = '%d parameter dibutuhkan tapi terdapat %d parameter';
+  cSParamValueExceeded = 'value of param %d exceeded';
   cSExpectedMoreParams = 'Dibutuhkan lebih dari dua parameter';
   cSInvalidVarByteArray = 'array VarByte tidak valid';
   cSVariableAlreadyExists = 'Variabel "%s" sudah ada';
@@ -1207,6 +1279,7 @@ resourcestring
   cSBoundVarStrIndexMissing = 'Teks variabel indeks "%s" tidak ada';
   cSBindVarOutOfRange      = 'Variabel indeks diluar jangkauan: %d';
   cSFailedToBindResults    = 'Aplikasi gagal pada penggabungan ke Resultset';
+  cSPreviousResultStillOpen = 'Previous resultset of this statement is still open';
 
   cSRefreshRowOnlySupportedWithUpdateObject = 'Metode RefreshRow hanya didukung oleh obyek Update';
   cSMustBeInBrowseMode = 'Operasi hanya diperbolehkan pada status dsBrowse';
@@ -1216,6 +1289,8 @@ resourcestring
   cSInvalidUpdateCount     = '%d rekord terupdate. Seharusnya hanya satu rekord yang terupdate.';
 
   cSRowBufferWidthExceeded = 'Lebar buffer baris terlampaui. Coba kurangi atau gunakan kolom yang lebih panjang dalam query SQL.';
+
+  csCantFilterOnComputedColumns = 'Translate: Filtering a data set on computed fields and lookup fields is not supported.';
   // <--- end added by tohenk
   //--- begin added by ORMADA --------------------------------------------------
 {$ELSE}
@@ -1241,6 +1316,7 @@ resourcestring
   cSUnexpectedExprEnd                       = 'Íåîæèäàííûé êîíåö âûðàæåíèÿ';
   cSRightBraceExpected                      = ') ïðîïóùåíà';
   cSParametersError                         = 'îæèäàåòñÿ %d ïàðàìåòðîâ, íàéäåíî %d';
+  cSParamValueExceeded = 'value of param %d exceeded';
   cSExpectedMoreParams                      = 'Îæèäàåòñÿ áîëåå 2-õ ïàðàìåòðîâ';
   cSInvalidVarByteArray                     = 'Íåâåðíûé ìàññèâ (VarByte)';
   cSVariableAlreadyExists                   = 'Çíà÷åíèå "%s" óæå ñóùåñòâóåò';
@@ -1372,6 +1448,7 @@ resourcestring
   cSBoundVarStrIndexMissing                 = 'Îãðàíè÷åíèå íà òåêñò ñ èíäåêñîì "%s" íå ñóùåñòâóåò';
   cSBindVarOutOfRange                       = 'Èíäåêñ îãðàíè÷åíèÿ âûøåë çà ãðàíèöû : %d';
   cSFailedToBindResults                     = 'Íåóäàëîñü ñâÿçàòü(bind) ðåçóëüòàò âûïîëíåíèÿ';
+  cSPreviousResultStillOpen = 'Previous resultset of this statement is still open';
 
   cSRefreshRowOnlySupportedWithUpdateObject = 'Ìåòîä îáíîâëåíèÿ ñòðîêè (RefreshRow) ïîääåðæèâàåòñÿ òîëüêî ïðè îáíîâëåíèè îáúåêòà';
   cSMustBeInBrowseMode                      = 'Îïåðàöèÿ ïîääåðæèâàåò òîëüêî â ðåæèìå ïðîñìîòðà (dsBROWSE)';
@@ -1382,6 +1459,8 @@ resourcestring
   cSInvalidUpdateCount     = 'Translate : %d record(s) updated. Only one record should have been updated.';
 
   cSRowBufferWidthExceeded ='Translate: Row buffer width exceeded. Try using fewer or longer columns in SQL query.';
+
+  csCantFilterOnComputedColumns = 'Translate: Filtering a data set on computed fields and lookup fields is not supported.';
 {$ELSE}
 
 //--- added by Petr Stasiak - pestasoft.com ------------------------------------
@@ -1407,6 +1486,7 @@ resourcestring
   cSUnexpectedExprEnd = 'Neoèekávaný konec výrazu';
   cSRightBraceExpected = ') oèekáván(o/a/y)';
   cSParametersError = '%d parametrù oèekáváno, ale %d existuje';
+  cSParamValueExceeded = 'value of param %d exceeded';
   cSExpectedMoreParams = 'Je oèekáváno více, než 2 parametry';
   cSInvalidVarByteArray = 'Nesprávný VarByte array';
   cSVariableAlreadyExists = 'Promìná "%s" již existuje';
@@ -1538,6 +1618,7 @@ resourcestring
   cSBoundVarStrIndexMissing = 'Index textové promìné "%s" neexistuje';
   cSBindVarOutOfRange      = 'Index promené je mimo rozsah: %d';
   cSFailedToBindResults    = 'Aplikace selhala pøi získávání výsledkù dotazu';
+  cSPreviousResultStillOpen = 'Previous resultset of this statement is still open';
 
 //FOS+ 07112006
   cSRefreshRowOnlySupportedWithUpdateObject = 'Metoda "refreshrow" je podporována pouze v "update object"';
@@ -1548,13 +1629,14 @@ resourcestring
   cSInvalidUpdateCount     = '%d záznam(ù) aktualizováno. Pouze jeden záznam byl zmìnìn.';
 
   cSRowBufferWidthExceeded ='Translate: Row buffer width exceeded. Try using fewer or longer columns in SQL query.';
+
+  csCantFilterOnComputedColumns = 'Translate: Filtering a data set on computed fields and lookup fields is not supported.';
 //--- end added by Petr Stasiak - pestasoft.com ------------------------------------
 
 {$ELSE}
 
 //--- added by pawelsel --------------------------------------------------------
 {$IFDEF POLISH}
-
   cSSQLError1 = 'B³¹d SQL: %s';
   cSSQLError2 = 'B³¹d SQL: %s Kod: %d';
   cSSQLError3 = 'B³¹d SQL: %s Kod: %d SQL: %s';
@@ -1576,6 +1658,7 @@ resourcestring
   cSUnexpectedExprEnd = 'Nieoczekiwany koniec wyra¿enia';
   cSRightBraceExpected = 'Oczekiwano znaku )';
   cSParametersError = 'Oczekiwana iloœæ parametrów: %d, znaleziono: %d';
+  cSParamValueExceeded = 'value of param %d exceeded';
   cSExpectedMoreParams = 'Oczekiwano wiêcej ni¿ dwa parametry';
   cSInvalidVarByteArray = 'B³êdna tablica VarByte';
   cSVariableAlreadyExists = 'Zmienna "%s" ju¿ istnieje';
@@ -1611,7 +1694,7 @@ resourcestring
   cSCanNotConnectToServer = 'Nie mo¿na po³¹czyæ siê z serwerem SQL';
   cSTableIsNotSpecified = 'Nie okreœlono tabeli';
   cSLiveResultSetsAreNotSupported = '"Live query" nie jest obs³ugiwane przez t¹ klasê';
-  cSInvalidInputParameterCount = 'Liczba parametrów wejsciowych jest mniejsza ni¿ oczekiwana';
+  cSInvalidInputParameterCount = 'Liczba parametrów wejœciowych jest mniejsza ni¿ oczekiwana';
   cSIsolationIsNotSupported = 'Poziom izolacji transakcji nie jest obs³ugiwany';
   cSColumnWasNotFound = 'Nie znaleziono kolumny o nazwie "%s"';
   cSWrongTypeForBlobParameter = 'B³êdny typ parametru Blob';
@@ -1630,17 +1713,17 @@ resourcestring
   cSOperationIsNotAllowed1 = 'Niedozwolona operacja w trybie FORWARD ONLY';
   cSOperationIsNotAllowed2 = 'Niedozwolona operacja w trybie READ ONLY';
   cSOperationIsNotAllowed3 = 'Niedozwolona operacja w trybie %s';
-  cSOperationIsNotAllowed4 = 'Niedozwolona operacja przy zamniêtym Ÿródle danych';
+  cSOperationIsNotAllowed4 = 'Niedozwolona operacja przy zamkniêtym Ÿródle danych';
   cSNoMoreRecords = 'Nie ma ju¿ wiêcej rekordów wynikowych';
-  cSCanNotOpenResultSet = 'Nie mozna otworzyæ danych wynikowych';
-  cSCanNotOpenDataSetWhenDestroying ='Translate : Cannot open a dataset when the componentstate is dsDestroying';
+  cSCanNotOpenResultSet = 'Nie mo¿na otworzyæ danych wynikowych';
+  cSCanNotOpenDataSetWhenDestroying ='Nie mo¿na otworzyæ dataset gdy componentstate to dsDestroying';
   cSCircularLink = 'Datasource tworzy powi¹zanie cykliczne';
   cSBookmarkWasNotFound = 'Nie znaleziono zak³adki (Bookmark)';
   cSIncorrectSearchFieldsNumber = 'B³êdna liczba pól do wyszukiwania';
   cSInvalidOperationInTrans = 'B³êdna operacja w trybie transakcji';
   cSIncorrectSymbol = 'B³êdny symbol w liœcie pól "%s".';
   cSIncorrectToken = 'B³êdny wyraz za ":"';
-  cSIncorrectParamChar = 'TRANSLATE : Invalid value for ParamChar';
+  cSIncorrectParamChar = 'B³êdna wartoœæ dla ParamChar';
 
   cSSelectedTransactionIsolation = 'Wybrany poziom izolacji transakcji nie jest obs³ugiwany';
   cSDriverNotSupported = 'Nie obs³ugiwany sterownik %s';
@@ -1651,7 +1734,7 @@ resourcestring
   cSCannotPerformOperation = 'Nie mo¿na wykonaæ operacji na zamkniêtym zbiorze danych';
   cSInvalidState = 'B³êdny stan';
   cSErrorConvertion = 'B³¹d konwersji';
-  cSDataTypeDoesNotSupported = 'Nieobs³ugiwany typ dannych';
+  cSDataTypeDoesNotSupported = 'Nieobs³ugiwany typ danych';
   cSUnsupportedParameterType = 'Nieobs³ugiwany typ parametru';
   cSUnsupportedDataType = 'Nieobs³ugiwany typ danych';
   cSErrorConvertionField = 'B³¹d konwersji pola "%s" na SQLType "%s"';
@@ -1665,7 +1748,7 @@ resourcestring
 
   cSPropertyQuery = 'Zapytanie mo¿e chwilê potrwaæ na wiêkszej bazie danych!';
   cSPropertyTables = 'Powinieneœ uœciœliæ Katalog i/lub Schemat.';
-  cSPropertyColumns = 'Powinieneœ uœciœliæ Katalog, Schemat i/lub NazwêTabeli.';
+  cSPropertyColumns = 'Powinieneœ uœciœliæ Katalog, Schemat i/lub Nazwê Tabeli.';
   cSPropertyProcedures = 'Powinieneœ uœciœliæ Katalog i/lub Schemat.';
   cSPropertySequences = 'Powinieneœ uœciœliæ Katalog i/lub Schemat.';
   cSPropertyExecute = 'Czy mimo to wykonaæ zapytanie?';
@@ -1707,6 +1790,7 @@ resourcestring
   cSBoundVarStrIndexMissing = 'Nie istnieje zmienna licznikowa "%s"';
   cSBindVarOutOfRange      = 'Wartoœæ zmiennej licznikowej poza zakresem: %d';
   cSFailedToBindResults    = 'B³¹d aplikacji podczas ³¹czenia do wyników zapytania';
+  cSPreviousResultStillOpen = 'Poprzedni zbiór wynikowy tego wyra¿enia jest nadal otwarty';
 
 //FOS+ 07112006
   cSRefreshRowOnlySupportedWithUpdateObject = 'Metoda refreshrow jest obs³ugiwana tylko przez obiekt typu "update"';
@@ -1716,10 +1800,11 @@ resourcestring
   cSFieldReadOnly        = 'Nie mo¿na przypisaæ do pola tylko do odczytu wartoœci: %d';
   cSInvalidUpdateCount     = 'Liczba zaktualizowanych rekordów: %d. tylko jeden rekord powinien byæ zaktualizowany.';
 
-  cSRowBufferWidthExceeded ='Translate: Row buffer width exceeded. Try using fewer or longer columns in SQL query.';
+  cSRowBufferWidthExceeded ='Przekroczono rozmiar bufora. Spróbuj u¿yæ mniejszej liczby kolumn lub d³u¿szych kolumn w zapytaniu SQL.';
+
+  csCantFilterOnComputedColumns = 'Translate: Filtering a data set on computed fields and lookup fields is not supported.';
 
 {$ELSE} // default: ENGLISH
-
 
   cSSQLError1 = 'SQL Error: %s';
   cSSQLError2 = 'SQL Error: %s Code: %d';
@@ -1742,6 +1827,7 @@ resourcestring
   cSUnexpectedExprEnd = 'Unexpected end of expression';
   cSRightBraceExpected = ') expected';
   cSParametersError = '%d parameters were expected but %d were found';
+  cSParamValueExceeded = 'value of param %d exceeded';
   cSExpectedMoreParams = 'More than two parameters are expected';
   cSInvalidVarByteArray = 'Invalid VarByte array';
   cSVariableAlreadyExists = 'Variable "%s" already exists';
@@ -1873,6 +1959,7 @@ resourcestring
   cSBoundVarStrIndexMissing = 'Bound variable text index "%s" does not exist';
   cSBindVarOutOfRange      = 'Bound variable index out of range: %d';
   cSFailedToBindResults    = 'Application failed to bind to the result set';
+  cSPreviousResultStillOpen = 'Previous resultset of this statement is still open';
 
 //FOS+ 07112006
   cSRefreshRowOnlySupportedWithUpdateObject = 'The refreshrow method is only supported with an update object';
@@ -1883,6 +1970,8 @@ resourcestring
   cSInvalidUpdateCount     = '%d record(s) updated. Only one record should have been updated.';
 
   cSRowBufferWidthExceeded ='Row buffer width exceeded. Try using fewer or longer columns in SQL query.';
+
+  csCantFilterOnComputedColumns = 'Filtering a data set on computed fields and lookup fields is not supported.';
 
 {$ENDIF} // POLISH
 
@@ -1901,10 +1990,12 @@ resourcestring
 {$ENDIF} // DUTCH
 
 {$ENDIF} // PORTUGUESE
-
 {$ENDIF FRENCH}
+type
+  TMessageToRaw = function(const AMessage: String; Const RawCP: Word): RawByteString;
 
 var
+  MessageCodePage: Word;
   SSQLError1: String;
   SSQLError2: String;
   SSQLError3: String;
@@ -1926,6 +2017,7 @@ var
   SUnexpectedExprEnd: String;
   SRightBraceExpected: String;
   SParametersError: String;
+  SParamValueExceeded: String;
   SExpectedMoreParams: String;
   SInvalidVarByteArray: String;
   SVariableAlreadyExists: String;
@@ -2057,6 +2149,7 @@ var
   SBoundVarStrIndexMissing: String;
   SBindVarOutOfRange: String;
   SFailedToBindResults: String;
+  SPreviousResultStillOpen: String;
 
 
   SRefreshRowOnlySupportedWithUpdateObject: String;
@@ -2070,8 +2163,10 @@ var
 
 implementation
 
-procedure loadmessages();
+procedure loadmessages;
 begin
+  MessageCodePage := cCodePage;
+
   SSQLError1 := cSSQLError1;
   SSQLError2 := cSSQLError2;
   SSQLError3 := cSSQLError3;
@@ -2093,6 +2188,8 @@ begin
   SUnexpectedExprEnd := cSUnexpectedExprEnd;
   SRightBraceExpected := cSRightBraceExpected;
   SParametersError := cSParametersError;
+  SParamValueExceeded := cSParamValueExceeded;
+
   SExpectedMoreParams := cSExpectedMoreParams;
   SInvalidVarByteArray := cSInvalidVarByteArray;
   SVariableAlreadyExists := cSVariableAlreadyExists;
@@ -2224,7 +2321,7 @@ begin
   SBoundVarStrIndexMissing := cSBoundVarStrIndexMissing;
   SBindVarOutOfRange := cSBindVarOutOfRange;
   SFailedToBindResults := cSFailedToBindResults;
-
+  SPreviousResultStillOpen := cSPreviousResultStillOpen;
 
   SRefreshRowOnlySupportedWithUpdateObject := cSRefreshRowOnlySupportedWithUpdateObject;
   SMustBeInBrowseMode := cSMustBeInBrowseMode;

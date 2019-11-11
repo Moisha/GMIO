@@ -55,17 +55,25 @@ interface
 
 {$I ZDbc.inc}
 
+{$IFNDEF ZEOS_DISABLE_DBLIB} //if set we have an empty unit
 uses
-  Types, Classes, SysUtils, ZSysUtils, ZDbcIntfs, ZDbcMetadata, ZURL,
-  ZCompatibility, ZDbcConnection, ZSelectSchema;
+  Types, Classes, SysUtils, ZSysUtils, ZDbcIntfs, ZDbcMetadata,
+  ZCompatibility, ZSelectSchema;
 
 type
 
+   IZDbLibDatabaseInfo = Interface(IZDataBaseInfo)
+     ['{A99F9433-6A2F-40C8-9D15-96FE5632654E}']
+     procedure InitIdentifierCase(const Collation: String);
+   End;
   // technobot 2008-06-25 - methods moved as is from TZDbLibBaseDatabaseMetadata:
   {** Implements MsSql Database Information. }
-  TZDbLibDatabaseInfo = class(TZAbstractDatabaseInfo)
+  TZDbLibDatabaseInfo = class(TZAbstractDatabaseInfo, IZDbLibDatabaseInfo)
+  private
+    fCaseIdentifiers: TZIdentifierCase;
   public
-
+    procedure InitIdentifierCase(const Collation: String);
+  public
     // database/driver/server info:
     function GetDatabaseProductName: string; override;
     function GetDatabaseProductVersion: string; override;
@@ -133,13 +141,13 @@ type
     function SupportsOpenStatementsAcrossCommit: Boolean; override;
     function SupportsOpenStatementsAcrossRollback: Boolean; override;
     function SupportsTransactions: Boolean; override;
-    function SupportsTransactionIsolationLevel(Level: TZTransactIsolationLevel):
+    function SupportsTransactionIsolationLevel(const {%H-}Level: TZTransactIsolationLevel):
       Boolean; override;
     function SupportsDataDefinitionAndDataManipulationTransactions: Boolean; override;
     function SupportsDataManipulationTransactionsOnly: Boolean; override;
-    function SupportsResultSetType(_Type: TZResultSetType): Boolean; override;
-    function SupportsResultSetConcurrency(_Type: TZResultSetType;
-      Concurrency: TZResultSetConcurrency): Boolean; override;
+    function SupportsResultSetType(const {%H-}_Type: TZResultSetType): Boolean; override;
+    function SupportsResultSetConcurrency(const {%H-}_Type: TZResultSetType;
+      const {%H-}Concurrency: TZResultSetConcurrency): Boolean; override;
 //    function SupportsBatchUpdates: Boolean; override; -> Not implemented
 
     // maxima:
@@ -216,14 +224,14 @@ type
   {** Implements DbLib Database Metadata. }
   TZDbLibBaseDatabaseMetadata = class(TZAbstractDatabaseMetadata)
   protected
+    function ConvertEscapes(const Pattern: String): String;
+    function GetSP_Prefix(const Catalog, Schema: String): String;
     function ComposeObjectString(const S: String; Const NullText: String = 'null';
       QuoteChar: Char = #39): String;
     function DecomposeObjectString(const S: String): String; override;
     function CreateDatabaseInfo: IZDatabaseInfo; override; // technobot 2008-06-25
 
     function UncachedGetImportedKeys(const Catalog: string; const Schema: string;
-      const Table: string): IZResultSet; override;
-    function UncachedGetExportedKeys(const Catalog: string; const Schema: string;
       const Table: string): IZResultSet; override;
   end;
 
@@ -248,6 +256,8 @@ type
     function UncachedGetCrossReference(const PrimaryCatalog: string; const PrimarySchema: string;
       const PrimaryTable: string; const ForeignCatalog: string; const ForeignSchema: string;
       const ForeignTable: string): IZResultSet; override;
+    function UncachedGetExportedKeys(const Catalog: string; const Schema: string;
+      const Table: string): IZResultSet; override;
     function UncachedGetIndexInfo(const Catalog: string; const Schema: string; const Table: string;
       Unique: Boolean; Approximate: Boolean): IZResultSet; override;
     function UncachedGetProcedures(const Catalog: string; const SchemaPattern: string;
@@ -297,11 +307,14 @@ type
     function UncachedGetTypeInfo: IZResultSet; override;
     function UncachedGetUDTs(const Catalog: string; const SchemaPattern: string;
       const TypeNamePattern: string; const Types: TIntegerDynArray): IZResultSet; override;
+    function RemoveQuotesFromIdentifier(const Identifier: String): String;
   end;
 
+{$ENDIF ZEOS_DISABLE_DBLIB} //if set we have an empty unit
 implementation
+{$IFNDEF ZEOS_DISABLE_DBLIB} //if set we have an empty unit
 
-uses ZDbcUtils, ZDbcDbLibUtils;
+uses ZFastCode, ZDbcDbLibUtils, ZDbcDbLib;
 
 { TZDbLibDatabaseInfo }
 
@@ -372,7 +385,7 @@ end;
 }
 function TZDbLibDatabaseInfo.SupportsMixedCaseIdentifiers: Boolean;
 begin
-  Result := False;
+  Result := fCaseIdentifiers in [icMixed,icSpecial];
 end;
 
 {**
@@ -382,7 +395,7 @@ end;
 }
 function TZDbLibDatabaseInfo.StoresUpperCaseIdentifiers: Boolean;
 begin
-  Result := True;
+  Result := False
 end;
 
 {**
@@ -392,7 +405,7 @@ end;
 }
 function TZDbLibDatabaseInfo.StoresLowerCaseIdentifiers: Boolean;
 begin
-  Result := True;
+  Result := false;
 end;
 
 {**
@@ -402,7 +415,7 @@ end;
 }
 function TZDbLibDatabaseInfo.StoresMixedCaseIdentifiers: Boolean;
 begin
-  Result := True;
+  Result := fCaseIdentifiers in [icMixed, icSpecial];
 end;
 
 {**
@@ -423,7 +436,7 @@ end;
 }
 function TZDbLibDatabaseInfo.StoresUpperCaseQuotedIdentifiers: Boolean;
 begin
-  Result := True;
+  Result := False;
 end;
 
 {**
@@ -433,7 +446,7 @@ end;
 }
 function TZDbLibDatabaseInfo.StoresLowerCaseQuotedIdentifiers: Boolean;
 begin
-  Result := True;
+  Result := False;
 end;
 
 {**
@@ -454,7 +467,7 @@ end;
 function TZDbLibDatabaseInfo.GetSQLKeywords: string;
 begin
   { TODO -ofjanos -cAPI : SQL Keywords that are not SQL92 compliant }
-  Result := '';
+  Result := inherited GetSQLKeywords;
 end;
 
 {**
@@ -504,6 +517,15 @@ end;
 function TZDbLibDatabaseInfo.GetTimeDateFunctions: string;
 begin
   Result := 'DATEADD,DATEDIFF,DATENAME,DATEPART,DAY,GETDATE,MONTH,YEAR';
+end;
+
+procedure TZDbLibDatabaseInfo.InitIdentifierCase(const Collation: String);
+begin
+  if ZFastCode.Pos('_CI_', Collation) > 0
+  then fCaseIdentifiers := icLower
+  else if (ZFastCode.Pos('_BIN', Collation) > 0){SQLServer} or (ZFastCode.Pos('bin_', Collation) > 0) {Sybase}
+  then fCaseIdentifiers := icSpecial
+  else fCaseIdentifiers := icMixed;
 end;
 
 {**
@@ -1116,7 +1138,7 @@ end;
   @see Connection
 }
 function TZDbLibDatabaseInfo.SupportsTransactionIsolationLevel(
-  Level: TZTransactIsolationLevel): Boolean;
+  const Level: TZTransactIsolationLevel): Boolean;
 begin
   Result := True;
 end;
@@ -1168,7 +1190,7 @@ end;
   @return <code>true</code> if so; <code>false</code> otherwise
 }
 function TZDbLibDatabaseInfo.SupportsResultSetType(
-  _Type: TZResultSetType): Boolean;
+  const _Type: TZResultSetType): Boolean;
 begin
   Result := True;
 end;
@@ -1182,7 +1204,7 @@ end;
   @return <code>true</code> if so; <code>false</code> otherwise
 }
 function TZDbLibDatabaseInfo.SupportsResultSetConcurrency(
-  _Type: TZResultSetType; Concurrency: TZResultSetConcurrency): Boolean;
+  const _Type: TZResultSetType; const Concurrency: TZResultSetConcurrency): Boolean;
 begin
   Result := True;
 end;
@@ -1190,43 +1212,70 @@ end;
 
 { TZDbLibBaseDatabaseMetadata }
 
+function TZDbLibBaseDatabaseMetadata.GetSP_Prefix(const Catalog, Schema: String): String;
+begin
+  if (UpperCase(Catalog) = 'INFORMATION_SCHEMA') or
+     (UpperCase(Schema)  = 'INFORMATION_SCHEMA') then
+    Result := ''
+  else
+    Result := Catalog+'.'+ConvertEscapes(Schema)+'.';
+end;
+
 {**
-  Composes a object name, AnsiQuotedStr or NullText
+  Composes a object name, SQLQuotedStror NullText
   @param S the object string
   @param NullText the "NULL"-Text default: 'null'
   @param QuoteChar the QuoteChar default: '
-  @return 'null' if S is '' or S if s is already Quoted or AnsiQuotedStr(S, #39)
+  @return 'null' if S is '' or S if s is already Quoted or SQLQuotedStr(S, #39)
 }
 function TZDbLibBaseDatabaseMetadata.ComposeObjectString(const S: String;
   Const NullText: String = 'null'; QuoteChar: Char = #39): String;
 begin
   if S = '' then
     Result := NullText
-  else
-    if IC.IsQuoted(s) then
-      Result := S
-    else
-      Result := AnsiQuotedStr(S, QuoteChar);
+  else begin
+    Result := ConvertEscapes(S);
+    if not IC.IsQuoted(Result) then
+      Result := SQLQuotedStr(Result, QuoteChar);
+  end;
 end;
 
 {**
-  Decomposes a object name, AnsiQuotedStr or NullText
+  Decomposes a object name, SQLQuotedStr or NullText
   @param S the object string
-  @return 'null' if S is '' or S if s is already Quoted or AnsiQuotedStr(S, #39)
+  @return 'null' if S is '' or S if s is already Quoted or SQLQuotedStr(S, #39)
 }
 function TZDbLibBaseDatabaseMetadata.DecomposeObjectString(const S: String): String;
 begin
   if S = '' then
     Result := 'null'
   else
-  begin
-    if IC.IsQuoted(s) then
-      Result := IC.ExtractQuote(s)
-    else
-      Result := S;
-    Result := AnsiQuotedStr(Result, #39);
-  end;
+    Result := SQLQuotedStr(Inherited DecomposeObjectString(S), #39);
 end;
+
+function TZDbLibBaseDatabaseMetadata.ConvertEscapes(const Pattern: String): String;
+var
+  EscapeChar: PChar;
+  P: PChar;
+begin
+  Result := '';
+  P := Pointer(Pattern);
+  if P = nil then Exit;
+  EscapeChar := Pointer(GetDatabaseInfo.GetSearchStringEscape);
+  ClearBuf;
+  while P^ <> #0 do begin
+    if (P^ = EscapeChar^) and (((P+1)^ = WildcardsArray[0]) or ((P+1)^=WildcardsArray[1])) then begin
+      ToBuf('[', Result);
+      Inc(P);
+      ToBuf(P^, Result);
+      ToBuf(']', Result);
+    end else
+      ToBuf(P^, Result);
+    Inc(P);
+  end;
+  FlushBuf(Result);
+end;
+
 {**
   Constructs a database information object and returns the interface to it. Used
   internally by the constructor.
@@ -1308,79 +1357,6 @@ function TZDbLibBaseDatabaseMetadata.UncachedGetImportedKeys(const Catalog: stri
   const Schema: string; const Table: string): IZResultSet;
 begin
   Result := UncachedGetCrossReference('', '', '', Catalog, Schema, Table);
-end;
-
-{**
-  Gets a description of the foreign key columns that reference a
-  table's primary key columns (the foreign keys exported by a
-  table).  They are ordered by FKTABLE_CAT, FKTABLE_SCHEM,
-  FKTABLE_NAME, and KEY_SEQ.
-
-  <P>Each foreign key column description has the following columns:
-   <OL>
-        <LI><B>PKTABLE_CAT</B> String => primary key table catalog (may be null)
-        <LI><B>PKTABLE_SCHEM</B> String => primary key table schema (may be null)
-        <LI><B>PKTABLE_NAME</B> String => primary key table name
-        <LI><B>PKCOLUMN_NAME</B> String => primary key column name
-        <LI><B>FKTABLE_CAT</B> String => foreign key table catalog (may be null)
-       being exported (may be null)
-        <LI><B>FKTABLE_SCHEM</B> String => foreign key table schema (may be null)
-       being exported (may be null)
-        <LI><B>FKTABLE_NAME</B> String => foreign key table name
-       being exported
-        <LI><B>FKCOLUMN_NAME</B> String => foreign key column name
-       being exported
-        <LI><B>KEY_SEQ</B> short => sequence number within foreign key
-        <LI><B>UPDATE_RULE</B> short => What happens to
-        foreign key when primary is updated:
-       <UL>
-       <LI> importedNoAction - do not allow update of primary
-                key if it has been imported
-       <LI> importedKeyCascade - change imported key to agree
-                with primary key update
-       <LI> importedKeySetNull - change imported key to NULL if
-                its primary key has been updated
-       <LI> importedKeySetDefault - change imported key to default values
-                if its primary key has been updated
-       <LI> importedKeyRestrict - same as importedKeyNoAction
-                                  (for ODBC 2.x compatibility)
-       </UL>
-        <LI><B>DELETE_RULE</B> short => What happens to
-       the foreign key when primary is deleted.
-       <UL>
-       <LI> importedKeyNoAction - do not allow delete of primary
-                key if it has been imported
-       <LI> importedKeyCascade - delete rows that import a deleted key
-       <LI> importedKeySetNull - change imported key to NULL if
-                its primary key has been deleted
-       <LI> importedKeyRestrict - same as importedKeyNoAction
-                                  (for ODBC 2.x compatibility)
-       <LI> importedKeySetDefault - change imported key to default if
-                its primary key has been deleted
-       </UL>
-        <LI><B>FK_NAME</B> String => foreign key name (may be null)
-        <LI><B>PK_NAME</B> String => primary key name (may be null)
-        <LI><B>DEFERRABILITY</B> short => can the evaluation of foreign key
-       constraints be deferred until commit
-       <UL>
-       <LI> importedKeyInitiallyDeferred - see SQL92 for definition
-       <LI> importedKeyInitiallyImmediate - see SQL92 for definition
-       <LI> importedKeyNotDeferrable - see SQL92 for definition
-       </UL>
-   </OL>
-
-  @param catalog a catalog name; "" retrieves those without a
-  catalog; null means drop catalog name from the selection criteria
-  @param schema a schema name; "" retrieves those
-  without a schema
-  @param table a table name
-  @return <code>ResultSet</code> - each row is a foreign key column description
-  @see #getImportedKeys
-}
-function TZDbLibBaseDatabaseMetadata.UncachedGetExportedKeys(const Catalog: string;
-  const Schema: string; const Table: string): IZResultSet;
-begin
-  Result := UncachedGetCrossReference(Catalog, Schema, Table, '', '', '');
 end;
 
 {**
@@ -1487,22 +1463,17 @@ function TZMsSqlDatabaseMetadata.UncachedGetProcedures(const Catalog: string;
 begin
     Result:=inherited UncachedGetProcedures(Catalog, SchemaPattern, ProcedureNamePattern);
 
-    with GetStatement.ExecuteQuery(
-      Format('exec sp_stored_procedures %s, %s, %s',
-      [ComposeObjectString(ProcedureNamePattern), ComposeObjectString(SchemaPattern), ComposeObjectString(Catalog)])) do
+    with GetStatement.ExecuteQuery('exec '+Catalog+'.'+SchemaPattern+'.'+'sp_stored_procedures '+
+      ComposeObjectString(ProcedureNamePattern)+', '+ComposeObjectString(SchemaPattern)+', '+ComposeObjectString(Catalog)) do
     begin
       while Next do
       begin
         Result.MoveToInsertRow;
-        Result.UpdateStringByName('PROCEDURE_CAT',
-          GetStringByName('PROCEDURE_QUALIFIER'));
-        Result.UpdateStringByName('PROCEDURE_SCHEM',
-          GetStringByName('PROCEDURE_OWNER'));
-        Result.UpdateStringByName('PROCEDURE_NAME',
-          GetStringByName('PROCEDURE_NAME'));
-        Result.UpdateStringByName('REMARKS',
-          GetStringByName('REMARKS'));
-        Result.UpdateShortByName('PROCEDURE_TYPE', 0);
+        Result.UpdateString(CatalogNameIndex, GetStringByName('PROCEDURE_QUALIFIER'));
+        Result.UpdateString(SchemaNameIndex, GetStringByName('PROCEDURE_OWNER'));
+        Result.UpdateString(ProcedureNameIndex, GetStringByName('PROCEDURE_NAME'));
+        Result.UpdateString(ProcedureRemarksIndex, GetStringByName('REMARKS'));
+        Result.UpdateSmall(ProcedureTypeIndex, 0);
         Result.InsertRow;
       end;
       Close;
@@ -1570,45 +1541,43 @@ function TZMsSqlDatabaseMetadata.UncachedGetProcedureColumns(const Catalog: stri
   const SchemaPattern: string; const ProcedureNamePattern: string;
   const ColumnNamePattern: string): IZResultSet;
 begin
-    Result:=inherited UncachedGetProcedureColumns(Catalog, SchemaPattern, ProcedureNamePattern, ColumnNamePattern);
+    Result:=inherited UncachedGetProcedureColumns(Catalog, SchemaPattern,
+      ProcedureNamePattern, ColumnNamePattern);
 
-    with GetStatement.ExecuteQuery(
-      Format('exec sp_sproc_columns %s, %s, %s, %s',
-      [ComposeObjectString(ProcedureNamePattern), ComposeObjectString(SchemaPattern), ComposeObjectString(Catalog), ComposeObjectString(ColumnNamePattern)])) do
+    with GetStatement.ExecuteQuery('exec '+Catalog+'.'+SchemaPattern+'.'+
+      'sp_sproc_columns '+ComposeObjectString(ProcedureNamePattern)+', '+
+      ComposeObjectString(SchemaPattern)+', '+ComposeObjectString(Catalog)+', '+
+      ComposeObjectString(ColumnNamePattern)) do
     begin
       while Next do
       begin
         Result.MoveToInsertRow;
-        Result.UpdateStringByName('PROCEDURE_CAT',
-          GetStringByName('PROCEDURE_QUALIFIER'));
-        Result.UpdateStringByName('PROCEDURE_SCHEM',
-          GetStringByName('PROCEDURE_OWNER'));
-        Result.UpdateStringByName('PROCEDURE_NAME',
-          GetStringByName('PROCEDURE_NAME'));
-        Result.UpdateStringByName('COLUMN_NAME',
-          GetStringByName('COLUMN_NAME'));
-        case GetShortByName('COLUMN_TYPE') of
-          1: Result.UpdateShortByName('COLUMN_TYPE', Ord(pctIn));
-          2: Result.UpdateShortByName('COLUMN_TYPE', Ord(pctInOut));
-          3: Result.UpdateShortByName('COLUMN_TYPE', Ord(pctUnknown));
-          4: Result.UpdateShortByName('COLUMN_TYPE', Ord(pctInOut));
-          5: Result.UpdateShortByName('COLUMN_TYPE', Ord(pctReturn));
+        Result.UpdateString(CatalogNameIndex, GetStringByName('PROCEDURE_QUALIFIER'));
+        Result.UpdateString(SchemaNameIndex, GetStringByName('PROCEDURE_OWNER'));
+        Result.UpdateString(ProcColProcedureNameIndex, GetStringByName('PROCEDURE_NAME'));
+        Result.UpdateString(ProcColColumnNameIndex, GetStringByName('COLUMN_NAME'));
+        case GetSmallByName('COLUMN_TYPE') of
+          1: Result.UpdateSmall(ProcColColumnTypeIndex, Ord(pctIn));
+          2: Result.UpdateSmall(ProcColColumnTypeIndex, Ord(pctInOut));
+          3: Result.UpdateSmall(ProcColColumnTypeIndex, Ord(pctUnknown));
+          4: Result.UpdateSmall(ProcColColumnTypeIndex, Ord(pctInOut));
+          5: Result.UpdateSmall(ProcColColumnTypeIndex, Ord(pctReturn));
         else
-          Result.UpdateShortByName('COLUMN_TYPE', Ord(pctUnknown));
+          Result.UpdateSmall(ProcColColumnTypeIndex, Ord(pctUnknown));
         end;
-        Result.UpdateShortByName('DATA_TYPE',
-          Ord(ConvertODBCToSqlType(GetShortByName('DATA_TYPE'), ConSettings.CPType)));
-        Result.UpdateStringByName('TYPE_NAME', GetStringByName('TYPE_NAME'));
-        Result.UpdateIntByName('PRECISION', GetIntByName('PRECISION'));
-        Result.UpdateIntByName('LENGTH', GetIntByName('LENGTH'));
-        Result.UpdateShortByName('SCALE', GetShortByName('SCALE'));
-        Result.UpdateShortByName('RADIX', GetShortByName('RADIX'));
-        Result.UpdateShortByName('NULLABLE', 2);
+        Result.UpdateSmall(ProcColDataTypeIndex,
+          Ord(ConvertODBCToSqlType(GetSmallByName('DATA_TYPE'), ConSettings.CPType)));
+        Result.UpdateString(ProcColTypeNameIndex, GetStringByName('TYPE_NAME'));
+        Result.UpdateInt(ProcColPrecisionIndex, GetIntByName('PRECISION'));
+        Result.UpdateInt(ProcColLengthIndex, GetIntByName('LENGTH'));
+        Result.UpdateSmall(ProcColScaleIndex, GetSmallByName('SCALE'));
+        Result.UpdateSmall(ProcColRadixIndex, GetSmallByName('RADIX'));
+        Result.UpdateSmall(ProcColNullableIndex, 2);
         if GetStringByName('IS_NULLABLE') = 'NO' then
-          Result.UpdateShortByName('NULLABLE', 0);
+          Result.UpdateSmall(ProcColNullableIndex, 0);
         if GetStringByName('IS_NULLABLE') = 'YES' then
-          Result.UpdateShortByName('NULLABLE', 1);
-        Result.UpdateStringByName('REMARKS', GetStringByName('REMARKS'));
+          Result.UpdateSmall(ProcColNullableIndex, 1);
+        Result.UpdateString(ProcColRemarksIndex, GetStringByName('REMARKS'));
         Result.InsertRow;
       end;
       Close;
@@ -1657,14 +1626,10 @@ begin
 
     TableTypes := '';
     for I := 0 to Length(Types) - 1 do
-    begin
-      if Length(TableTypes) > 0 then
-        TableTypes := TableTypes + ',';
-      TableTypes := TableTypes + AnsiQuotedStr(Types[I], '''');
-    end;
+      AppendSepString(TableTypes, SQLQuotedStr(Types[I], ''''), ',');
     if TableTypes = '' then
       TableTypes := 'null'
-    else TableTypes := AnsiQuotedStr(TableTypes, '"');
+    else TableTypes := SQLQuotedStr(TableTypes, '"');
 
     with GetStatement.ExecuteQuery(
       Format('exec sp_tables %s, %s, %s, %s',
@@ -1673,12 +1638,11 @@ begin
       while Next do
       begin
         Result.MoveToInsertRow;
-        Result.UpdateStringByName('TABLE_CAT',
-          GetStringByName('TABLE_QUALIFIER'));
-        Result.UpdateStringByName('TABLE_SCHEM', GetStringByName('TABLE_OWNER'));
-        Result.UpdateStringByName('TABLE_NAME', GetStringByName('TABLE_NAME'));
-        Result.UpdateStringByName('TABLE_TYPE', GetStringByName('TABLE_TYPE'));
-        Result.UpdateStringByName('REMARKS', GetStringByName('REMARKS'));
+        Result.UpdateString(CatalogNameIndex, GetStringByName('TABLE_QUALIFIER'));
+        Result.UpdateString(SchemaNameIndex, GetStringByName('TABLE_OWNER'));
+        Result.UpdateString(TableNameIndex, GetStringByName('TABLE_NAME'));
+        Result.UpdateString(TableColumnsSQLType, GetStringByName('TABLE_TYPE'));
+        Result.UpdateString(TableColumnsRemarks, GetStringByName('REMARKS'));
         Result.InsertRow;
       end;
       Close;
@@ -1708,8 +1672,7 @@ begin
       while Next do
       begin
         Result.MoveToInsertRow;
-        Result.UpdateStringByName('TABLE_SCHEM',
-          GetStringByName('TABLE_OWNER'));
+        Result.UpdateString(SchemaColumnsTableSchemaIndex, GetString(FirstDbcIndex));
         Result.InsertRow;
       end;
       Close;
@@ -1738,8 +1701,7 @@ begin
       while Next do
       begin
         Result.MoveToInsertRow;
-        Result.UpdateStringByName('TABLE_CAT',
-          GetStringByName('DATABASE_NAME'));
+        Result.UpdateString(CatalogNameIndex, GetStringByName('DATABASE_NAME'));
         Result.InsertRow;
       end;
       Close;
@@ -1772,7 +1734,7 @@ begin
     for I := 0 to 2 do
     begin
       Result.MoveToInsertRow;
-      Result.UpdateStringByName('TABLE_TYPE', TableTypes[I]);
+      Result.UpdateString(TableTypeColumnTableTypeIndex, TableTypes[I]);
       Result.InsertRow;
     end;
     Result.BeforeFirst;
@@ -1834,95 +1796,114 @@ function TZMsSqlDatabaseMetadata.UncachedGetColumns(const Catalog: string;
   const ColumnNamePattern: string): IZResultSet;
 var
   SQLType: TZSQLType;
+  tmp: String;
+  ResultHasRows: Boolean;
 begin
-    Result:=inherited UncachedGetColumns(Catalog, SchemaPattern, TableNamePattern, ColumnNamePattern);
+  ResultHasRows := False;
+  Result:=inherited UncachedGetColumns(Catalog, SchemaPattern, TableNamePattern, ColumnNamePattern);
 
-    with GetStatement.ExecuteQuery(
-      Format('exec sp_columns %s, %s, %s, %s',
-        [ComposeObjectString(TableNamePattern),
-         ComposeObjectString(SchemaPattern),
-         ComposeObjectString(Catalog),
-         ComposeObjectString(ColumnNamePattern)])) do
+  with GetStatement.ExecuteQuery('exec '+GetSP_Prefix(Catalog, SchemaPattern)+'sp_columns '+
+      ComposeObjectString(TableNamePattern)+', '+ComposeObjectString(SchemaPattern)+', '+
+      ComposeObjectString(Catalog)+', '+ComposeObjectString(ColumnNamePattern)) do
+  begin
+    while Next do
     begin
-      while Next do
+      ResultHasRows := True;
+      Result.MoveToInsertRow;
+      Result.UpdateString(CatalogNameIndex, GetStringByName('TABLE_QUALIFIER'));
+      Result.UpdateString(SchemaNameIndex, GetStringByName('TABLE_OWNER'));
+      Result.UpdateString(TableNameIndex, GetStringByName('TABLE_NAME'));
+      tmp := GetStringByName('COLUMN_NAME');
+      Result.UpdateString(ColumnNameIndex, tmp);
+      Result.UpdateBoolean(TableColColumnCaseSensitiveIndex, IC.IsCaseSensitive(tmp));
+      //The value in the resultset will be used
+      SQLType := ConvertODBCToSqlType(GetSmallByName('DATA_TYPE'), ConSettings.CPType);
+      tmp := UpperCase(GetStringByName('TYPE_NAME'));
+      if SQLType = stUnknown then
+        Result.UpdateNull(TableColColumnTypeIndex)
+      else if ( SQLType = stBytes) and (tmp = 'UNIQUEIDENTIFIER') then
+        Result.UpdateSmall(TableColColumnTypeIndex, Ord(stGUID))
+      else if ( SQLType = stDouble) and StartsWith(tmp, 'MONEY') then
+        Result.UpdateSmall(TableColColumnTypeIndex, Ord(stCurrency))
+      else if (SQLType = stString) and (tmp = 'DATE') then
+        Result.UpdateSmall(TableColColumnTypeIndex, Ord(stDate))
+      else
+        Result.UpdateSmall(TableColColumnTypeIndex, Ord(SQLType));
+      Result.UpdateString(TableColColumnTypeNameIndex, tmp);
+      Result.UpdateInt(TableColColumnSizeIndex, GetIntByName('LENGTH'));
+      Result.UpdateInt(TableColColumnBufLengthIndex, GetIntByName('LENGTH'));
+      Result.UpdateInt(TableColColumnDecimalDigitsIndex, GetIntByName('SCALE'));
+      Result.UpdateSmall(TableColColumnNumPrecRadixIndex, GetSmallByName('RADIX'));
+      tmp := GetStringByName('IS_NULLABLE');
+      if tmp = 'NO' then
+        Result.UpdateInt(TableColColumnNullableIndex, Ord(ntNoNulls))
+      else if tmp = 'YES' then
+        Result.UpdateSmall(TableColColumnNullableIndex, Ord(ntNullable))
+      else
+        Result.UpdateSmall(TableColColumnNullableIndex, Ord(ntNullableUnknown));
+      Result.UpdateString(TableColColumnRemarksIndex, GetStringByName('REMARKS'));
+      //if (GetConnection as IZDBLibConnection).GetProvider = dpSybase then
+        Result.UpdateString(TableColColumnColDefIndex, GetStringByName('COLUMN_DEF'))
+      {else //MSSQL bizarity: defaults are double braked '((value))' or braked and quoted '(''value'')'
       begin
-        Result.MoveToInsertRow;
-        Result.UpdateStringByName('TABLE_CAT', GetStringByName('TABLE_QUALIFIER'));
-        Result.UpdateStringByName('TABLE_SCHEM', GetStringByName('TABLE_OWNER'));
-        Result.UpdateStringByName('TABLE_NAME',
-          GetStringByName('TABLE_NAME'));
-        Result.UpdateStringByName('COLUMN_NAME',
-          GetStringByName('COLUMN_NAME'));
-        //The value in the resultset will be used
-        SQLType := ConvertODBCToSqlType(GetShortByName('DATA_TYPE'), ConSettings.CPType);
-        if SQLType = stUnknown then
-          Result.UpdateNullByName('DATA_TYPE')
-        else
-          Result.UpdateShortByName('DATA_TYPE', Ord(SQLType));
-        if ( SQLType = stBytes) and (UpperCase(GetStringByName('TYPE_NAME')) = 'UNIQUEIDENTIFIER') then
-          Result.UpdateShortByName('DATA_TYPE', Ord(stGUID));
-        Result.UpdateStringByName('TYPE_NAME', GetStringByName('TYPE_NAME'));
-        Result.UpdateIntByName('COLUMN_SIZE', GetIntByName('LENGTH'));
-        Result.UpdateIntByName('BUFFER_LENGTH', GetIntByName('LENGTH'));
-        Result.UpdateIntByName('DECIMAL_DIGITS', GetIntByName('SCALE'));
-        Result.UpdateIntByName('NUM_PREC_RADIX', GetShortByName('RADIX'));
-        Result.UpdateIntByName('NULLABLE', 2);
-        if GetStringByName('IS_NULLABLE') = 'NO' then
-          Result.UpdateShortByName('NULLABLE', 0);
-        if GetStringByName('IS_NULLABLE') = 'YES' then
-          Result.UpdateShortByName('NULLABLE', 1);
-        Result.UpdateStringByName('REMARKS', GetStringByName('REMARKS'));
-        Result.UpdateStringByName('COLUMN_DEF', GetStringByName('COLUMN_DEF'));
-        Result.UpdateShortByName('SQL_DATA_TYPE', GetShortByName('SQL_DATA_TYPE'));
-        Result.UpdateShortByName('SQL_DATETIME_SUB', GetShortByName('SQL_DATETIME_SUB'));
-        Result.UpdateIntByName('CHAR_OCTET_LENGTH', GetIntByName('CHAR_OCTET_LENGTH'));
-        Result.UpdateIntByName('ORDINAL_POSITION', GetIntByName('ORDINAL_POSITION'));
-        Result.UpdateStringByName('IS_NULLABLE',
-          GetStringByName('IS_NULLABLE'));
-
-        Result.UpdateBooleanByName('SEARCHABLE',
-          not (GetShortByName('SS_DATA_TYPE') in [34, 35]));
-
-        Result.InsertRow;
-      end;
-      Close;
+        default_val := GetStringByName('COLUMN_DEF');
+        if default_val <> '' then
+          Result.UpdateString(TableColColumnColDefIndex, Copy(default_val, 3, Length(default_val)-4));
+      end};
+      Result.UpdateSmall(TableColColumnSQLDataTypeIndex, GetSmallByName('SQL_DATA_TYPE'));
+      Result.UpdateSmall(TableColColumnSQLDateTimeSubIndex, GetSmallByName('SQL_DATETIME_SUB'));
+      Result.UpdateInt(TableColColumnCharOctetLengthIndex, GetIntByName('CHAR_OCTET_LENGTH'));
+      Result.UpdateInt(TableColColumnOrdPosIndex, GetIntByName('ORDINAL_POSITION'));
+      Result.UpdateString(TableColColumnIsNullableIndex, tmp);
+      if (GetConnection as IZDBLibConnection).GetProvider = dpMsSQL then
+        Result.UpdateBoolean(TableColColumnSearchableIndex,
+          not (GetSmallByName('SS_DATA_TYPE') in [34, 35]));
+      Result.InsertRow;
     end;
+    Close;
+  end;
 
+  if ResultHasRows then begin
+
+    // hint by Jan: I am not sure wether this statement still works with SQL Server 2000 or before.
     Result.BeforeFirst;
     with GetStatement.ExecuteQuery(
-      Format('select c.colid, c.name, c.type, c.prec, c.scale, c.colstat,'
-      + ' c.status, c.iscomputed from syscolumns c inner join'
-      + ' sysobjects o on (o.id = c.id) where o.name COLLATE Latin1_General_CS_AS = %s and c.number=0 order by colid',
-      [DeComposeObjectString(TableNamePattern)])) do
+      Format('select c.colid, c.name, c.type, c.prec, c.scale, c.colstat, c.status, c.iscomputed '
+      + ' from syscolumns c '
+      + '   inner join sys.sysobjects o on (o.id = c.id) '
+      + '   inner join sys.schemas s on (o.uid = s.schema_id) '
+      + ' where c.number=0 '
+      + '   and (o.name like %0:s escape ''%2:s'' or (%0:s is null)) '
+      + '   and (s.name like %1:s escape ''%2:s'' or (%1:s is null)) '
+      + ' order by colid ',
+      [DeComposeObjectString(TableNamePattern), DeComposeObjectString(SchemaPattern), GetDataBaseInfo.GetSearchStringEscape])) do
       // hint http://blog.sqlauthority.com/2007/04/30/case-sensitive-sql-query-search/ for the collation setting to get a case sensitive behavior
     begin
       while Next do
       begin
         Result.Next;
-        Result.UpdateBooleanByName('AUTO_INCREMENT',
-          (GetShortByName('status') and $80) <> 0);
-        Result.UpdateNullByName('CASE_SENSITIVE');
-        Result.UpdateBooleanByName('SEARCHABLE',
-          Result.GetBooleanByName('SEARCHABLE')
+        Result.UpdateBoolean(TableColColumnAutoIncIndex, (GetSmallByName('status') and $80) <> 0);
+        Result.UpdateBoolean(TableColColumnSearchableIndex,
+          Result.GetBoolean(TableColColumnSearchableIndex) and (GetIntByName('iscomputed') = 0));
+        Result.UpdateBoolean(TableColColumnWritableIndex,
+          ((GetSmallByName('status') and $80) = 0)
+          (*and (GetSmallByName('type') <> 37)*)   // <<<< *DEBUG WARUM?
           and (GetIntByName('iscomputed') = 0));
-        Result.UpdateBooleanByName('WRITABLE',
-          ((GetShortByName('status') and $80) = 0)
-          (*and (GetShortByName('type') <> 37)*)   // <<<< *DEBUG WARUM?
-          and (GetIntByName('iscomputed') = 0));
-        Result.UpdateBooleanByName('DEFINITELYWRITABLE',
-          Result.GetBooleanByName('WRITABLE'));
-        Result.UpdateBooleanByName('READONLY',
-          not Result.GetBooleanByName('WRITABLE'));
-        if Result.GetBooleanByName('AUTO_INCREMENT') then
+        Result.UpdateBoolean(TableColColumnDefinitelyWritableIndex,
+          Result.GetBoolean(TableColColumnWritableIndex));
+        Result.UpdateBoolean(TableColColumnReadonlyIndex,
+          not Result.GetBoolean(TableColColumnWritableIndex));
+        if Result.GetBoolean(TableColColumnAutoIncIndex) then
         begin
-          Result.UpdateShortByName('NULLABLE', 1);
-          Result.UpdateStringByName('IS_NULLABLE', 'YES');
+          Result.UpdateSmall(TableColColumnNullableIndex, 1);
+          Result.UpdateString(TableColColumnIsNullableIndex, 'YES');
         end;
         Result.UpdateRow;
       end;
       Close;
     end;
     Result.BeforeFirst;
+  end;
 end;
 
 {**
@@ -1958,29 +1939,21 @@ function TZMsSqlDatabaseMetadata.UncachedGetColumnPrivileges(const Catalog: stri
 begin
     Result:=inherited UncachedGetColumnPrivileges(Catalog, Schema, Table, ColumnNamePattern);
 
-    with GetStatement.ExecuteQuery(
-      Format('exec sp_column_privileges %s, %s, %s, %s',
-      [ComposeObjectString(Table), ComposeObjectString(Schema), ComposeObjectString(Catalog), ComposeObjectString(ColumnNamePattern)])) do
+    with GetStatement.ExecuteQuery('exec '+GetSP_Prefix(Catalog, Schema)+'sp_column_privileges '+
+      ComposeObjectString(Table)+', '+ComposeObjectString(Schema)+', '+
+      ComposeObjectString(Catalog)+', '+ComposeObjectString(ColumnNamePattern)) do
     begin
       while Next do
       begin
         Result.MoveToInsertRow;
-        Result.UpdateStringByName('TABLE_CAT',
-          GetStringByName('TABLE_QUALIFIER'));
-        Result.UpdateStringByName('TABLE_SCHEM',
-          GetStringByName('TABLE_OWNER'));
-        Result.UpdateStringByName('TABLE_NAME',
-          GetStringByName('TABLE_NAME'));
-        Result.UpdateStringByName('COLUMN_NAME',
-          GetStringByName('COLUMN_NAME'));
-        Result.UpdateStringByName('GRANTOR',
-          GetStringByName('GRANTOR'));
-        Result.UpdateStringByName('GRANTEE',
-          GetStringByName('GRANTEE'));
-        Result.UpdateStringByName('PRIVILEGE',
-          GetStringByName('PRIVILEGE'));
-        Result.UpdateStringByName('IS_GRANTABLE',
-          GetStringByName('IS_GRANTABLE'));
+        Result.UpdateString(CatalogNameIndex, GetStringByName('TABLE_QUALIFIER'));
+        Result.UpdateString(SchemaNameIndex, GetStringByName('TABLE_OWNER'));
+        Result.UpdateString(TableNameIndex, GetStringByName('TABLE_NAME'));
+        Result.UpdateString(ColumnNameIndex, GetStringByName('COLUMN_NAME'));
+        Result.UpdateString(TableColPrivGrantorIndex, GetStringByName('GRANTOR'));
+        Result.UpdateString(TableColPrivGranteeIndex, GetStringByName('GRANTEE'));
+        Result.UpdateString(TableColPrivPrivilegeIndex, GetStringByName('PRIVILEGE'));
+        Result.UpdateString(TableColPrivIsGrantableIndex, GetStringByName('IS_GRANTABLE'));
         Result.InsertRow;
       end;
       Close;
@@ -2032,20 +2005,13 @@ begin
       while Next do
       begin
         Result.MoveToInsertRow;
-        Result.UpdateStringByName('TABLE_CAT',
-          GetStringByName('TABLE_QUALIFIER'));
-        Result.UpdateStringByName('TABLE_SCHEM',
-          GetStringByName('TABLE_OWNER'));
-        Result.UpdateStringByName('TABLE_NAME',
-          GetStringByName('TABLE_NAME'));
-        Result.UpdateStringByName('GRANTOR',
-          GetStringByName('GRANTOR'));
-        Result.UpdateStringByName('GRANTEE',
-          GetStringByName('GRANTEE'));
-        Result.UpdateStringByName('PRIVILEGE',
-          GetStringByName('PRIVILEGE'));
-        Result.UpdateStringByName('IS_GRANTABLE',
-          GetStringByName('IS_GRANTABLE'));
+        Result.UpdateString(CatalogNameIndex, GetStringByName('TABLE_QUALIFIER'));
+        Result.UpdateString(SchemaNameIndex,GetStringByName('TABLE_OWNER'));
+        Result.UpdateString(TableNameIndex, GetStringByName('TABLE_NAME'));
+        Result.UpdateString(TablePrivGrantorIndex, GetStringByName('GRANTOR'));
+        Result.UpdateString(TablePrivGranteeIndex, GetStringByName('GRANTEE'));
+        Result.UpdateString(TablePrivPrivilegeIndex, GetStringByName('PRIVILEGE'));
+        Result.UpdateString(TablePrivIsGrantableIndex, GetStringByName('IS_GRANTABLE'));
         Result.InsertRow;
       end;
       Close;
@@ -2085,41 +2051,30 @@ end;
 }
 function TZMsSqlDatabaseMetadata.UncachedGetVersionColumns(const Catalog: string;
   const Schema: string; const Table: string): IZResultSet;
-var
-  MSCol_Type: string;
 begin
-    Result:=inherited UncachedGetVersionColumns(Catalog, Schema, Table);
+  Result:=inherited UncachedGetVersionColumns(Catalog, Schema, Table);
 
-    MSCol_Type := '''V''';
-
-    with GetStatement.ExecuteQuery(
-      Format('exec sp_special_columns %s, %s, %s, %s',
-      [ComposeObjectString(Table), ComposeObjectString(Schema), ComposeObjectString(Catalog), MSCol_Type])) do
+  with GetStatement.ExecuteQuery(
+    Format('exec sp_special_columns %s, %s, %s, %s',
+    [ComposeObjectString(Table), ComposeObjectString(Schema), ComposeObjectString(Catalog), '''V'''])) do
+  begin
+    while Next do
     begin
-      while Next do
-      begin
-        Result.MoveToInsertRow;
-        Result.UpdateShortByName('SCOPE',
-          GetShortByName('SCOPE'));
-        Result.UpdateStringByName('COLUMN_NAME',
-          GetStringByName('COLUMN_NAME'));
-        Result.UpdateShortByName('DATA_TYPE',
-          Ord(ConvertODBCToSqlType(GetShortByName('DATA_TYPE'), ConSettings.CPType)));
-        Result.UpdateStringByName('TYPE_NAME',
-          GetStringByName('TYPE_NAME'));
-        Result.UpdateIntByName('COLUMN_SIZE',
-          GetIntByName('LENGTH'));
-        Result.UpdateIntByName('BUFFER_LENGTH',
-          GetIntByName('LENGTH'));
-        Result.UpdateIntByName('DECIMAL_DIGITS',
-          GetIntByName('SCALE'));
-        Result.UpdateShortByName('PSEUDO_COLUMN',
-          GetShortByName('PSEUDO_COLUMN'));
-        Result.InsertRow;
-      end;
-      Close;
+      Result.MoveToInsertRow;
+      Result.UpdateSmall(TableColVerScopeIndex, GetSmallByName('SCOPE'));
+      Result.UpdateString(TableColVerColNameIndex, GetStringByName('COLUMN_NAME'));
+      Result.UpdateSmall(TableColVerDataTypeIndex, Ord(ConvertODBCToSqlType(
+        GetSmallByName('DATA_TYPE'), ConSettings.CPType)));
+      Result.UpdateString(TableColVerTypeNameIndex, GetStringByName('TYPE_NAME'));
+      Result.UpdateInt(TableColVerColSizeIndex, GetIntByName('LENGTH'));
+      Result.UpdateInt(TableColVerBufLengthIndex, GetIntByName('LENGTH'));
+      Result.UpdateInt(TableColVerDecimalDigitsIndex, GetIntByName('SCALE'));
+      Result.UpdateSmall(TableColVerPseudoColumnIndex, GetSmallByName('PSEUDO_COLUMN'));
+      Result.InsertRow;
     end;
-    Result.BeforeFirst;
+    Close;
+  end;
+  Result.BeforeFirst;
 end;
 
 {**
@@ -2147,32 +2102,26 @@ end;
 function TZMsSqlDatabaseMetadata.UncachedGetPrimaryKeys(const Catalog: string;
   const Schema: string; const Table: string): IZResultSet;
 begin
-    Result:=inherited UncachedGetPrimaryKeys(Catalog, Schema, Table);
+  Result:=inherited UncachedGetPrimaryKeys(Catalog, Schema, Table);
 
-    with GetStatement.ExecuteQuery(
-      Format('exec sp_pkeys %s, %s, %s',
-      [ComposeObjectString(Table), ComposeObjectString(Schema), ComposeObjectString(Catalog)])) do
+  with GetStatement.ExecuteQuery(
+    Format('exec sp_pkeys %s, %s, %s',
+    [ComposeObjectString(Table), ComposeObjectString(Schema), ComposeObjectString(Catalog)])) do
+  begin
+    while Next do
     begin
-      while Next do
-      begin
-        Result.MoveToInsertRow;
-        Result.UpdateStringByName('TABLE_CAT',
-          GetStringByName('TABLE_QUALIFIER'));
-        Result.UpdateStringByName('TABLE_SCHEM',
-          GetStringByName('TABLE_OWNER'));
-        Result.UpdateStringByName('TABLE_NAME',
-          GetStringByName('TABLE_NAME'));
-        Result.UpdateStringByName('COLUMN_NAME',
-          GetStringByName('COLUMN_NAME'));
-        Result.UpdateShortByName('KEY_SEQ',
-          GetShortByName('KEY_SEQ'));
-        Result.UpdateStringByName('PK_NAME',
-          GetStringByName('PK_NAME'));
-        Result.InsertRow;
-      end;
-      Close;
+      Result.MoveToInsertRow;
+      Result.UpdateString(CatalogNameIndex, GetStringByName('TABLE_QUALIFIER'));
+      Result.UpdateString(SchemaNameIndex, GetStringByName('TABLE_OWNER'));
+      Result.UpdateString(TableNameIndex, GetStringByName('TABLE_NAME'));
+      Result.UpdateString(PrimaryKeyColumnNameIndex, GetStringByName('COLUMN_NAME'));
+      Result.UpdateSmall(PrimaryKeyKeySeqIndex, GetSmallByName('KEY_SEQ'));
+      Result.UpdateString(PrimaryKeyPKNameIndex, GetStringByName('PK_NAME'));
+      Result.InsertRow;
     end;
-    Result.BeforeFirst;
+    Close;
+  end;
+  Result.BeforeFirst;
 end;
 
 {**
@@ -2253,11 +2202,9 @@ end;
 function TZMsSqlDatabaseMetadata.UncachedGetCrossReference(const PrimaryCatalog: string;
   const PrimarySchema: string; const PrimaryTable: string; const ForeignCatalog: string;
   const ForeignSchema: string; const ForeignTable: string): IZResultSet;
-var KeySeq: Integer;
 begin
   Result:=inherited UncachedGetCrossReference(PrimaryCatalog, PrimarySchema, PrimaryTable,
                                               ForeignCatalog, ForeignSchema, ForeignTable);
-  KeySeq := 0;
   with GetStatement.ExecuteQuery(
     Format('exec sp_fkeys %s, %s, %s, %s, %s, %s',
     [ComposeObjectString(PrimaryTable), ComposeObjectString(PrimarySchema), ComposeObjectString(PrimaryCatalog),
@@ -2265,39 +2212,99 @@ begin
   begin
     while Next do
     begin
-      Inc(KeySeq);
       Result.MoveToInsertRow;
-      Result.UpdateStringByName('PKTABLE_CAT',
-        GetStringByName('PKTABLE_QUALIFIER'));
-      Result.UpdateStringByName('PKTABLE_SCHEM',
-        GetStringByName('PKTABLE_OWNER'));
-      Result.UpdateStringByName('PKTABLE_NAME',
-        GetStringByName('PKTABLE_NAME'));
-      Result.UpdateStringByName('PKCOLUMN_NAME',
-        GetStringByName('PKCOLUMN_NAME'));
-      Result.UpdateStringByName('FKTABLE_CAT',
-        GetStringByName('FKTABLE_QUALIFIER'));
-      Result.UpdateStringByName('FKTABLE_SCHEM',
-        GetStringByName('FKTABLE_OWNER'));
-      Result.UpdateStringByName('FKTABLE_NAME',
-        GetStringByName('FKTABLE_NAME'));
-      Result.UpdateStringByName('FKCOLUMN_NAME',
-        GetStringByName('FKCOLUMN_NAME'));
-      Result.UpdateShortByName('KEY_SEQ', KeySeq);
-      Result.UpdateShortByName('UPDATE_RULE',
-        GetShortByName('UPDATE_RULE'));
-      Result.UpdateShortByName('DELETE_RULE',
-        GetShortByName('DELETE_RULE'));
-      Result.UpdateStringByName('FK_NAME',
-        GetStringByName('FK_NAME'));
-      Result.UpdateStringByName('PK_NAME',
-        GetStringByName('PK_NAME'));
-      Result.UpdateIntByName('DEFERRABILITY', 0);
+      Result.UpdateString(CrossRefKeyColPKTableCatalogIndex, GetStringByName('PKTABLE_QUALIFIER'));
+      Result.UpdateString(CrossRefKeyColPKTableSchemaIndex, GetStringByName('PKTABLE_OWNER'));
+      Result.UpdateString(CrossRefKeyColPKTableNameIndex, GetStringByName('PKTABLE_NAME'));
+      Result.UpdateString(CrossRefKeyColPKColumnNameIndex, GetStringByName('PKCOLUMN_NAME'));
+      Result.UpdateString(CrossRefKeyColFKTableCatalogIndex, GetStringByName('FKTABLE_QUALIFIER'));
+      Result.UpdateString(CrossRefKeyColFKTableSchemaIndex, GetStringByName('FKTABLE_OWNER'));
+      Result.UpdateString(CrossRefKeyColFKTableNameIndex, GetStringByName('FKTABLE_NAME'));
+      Result.UpdateString(CrossRefKeyColFKColumnNameIndex, GetStringByName('FKCOLUMN_NAME'));
+      Result.UpdateSmall(CrossRefKeyColKeySeqIndex, GetSmallByName('KEY_SEQ'));
+      Result.UpdateSmall(CrossRefKeyColUpdateRuleIndex, GetSmallByName('UPDATE_RULE'));
+      Result.UpdateSmall(CrossRefKeyColDeleteRuleIndex, GetSmallByName('DELETE_RULE'));
+      Result.UpdateString(CrossRefKeyColFKNameIndex, GetStringByName('FK_NAME'));
+      Result.UpdateString(CrossRefKeyColPKNameIndex, GetStringByName('PK_NAME'));
+      Result.UpdateInt(CrossRefKeyColDeferrabilityIndex, 0);
       Result.InsertRow;
     end;
     Close;
   end;
   Result.BeforeFirst;
+end;
+
+{**
+  Gets a description of the foreign key columns that reference a
+  table's primary key columns (the foreign keys exported by a
+  table).  They are ordered by FKTABLE_CAT, FKTABLE_SCHEM,
+  FKTABLE_NAME, and KEY_SEQ.
+
+  <P>Each foreign key column description has the following columns:
+   <OL>
+        <LI><B>PKTABLE_CAT</B> String => primary key table catalog (may be null)
+        <LI><B>PKTABLE_SCHEM</B> String => primary key table schema (may be null)
+        <LI><B>PKTABLE_NAME</B> String => primary key table name
+        <LI><B>PKCOLUMN_NAME</B> String => primary key column name
+        <LI><B>FKTABLE_CAT</B> String => foreign key table catalog (may be null)
+       being exported (may be null)
+        <LI><B>FKTABLE_SCHEM</B> String => foreign key table schema (may be null)
+       being exported (may be null)
+        <LI><B>FKTABLE_NAME</B> String => foreign key table name
+       being exported
+        <LI><B>FKCOLUMN_NAME</B> String => foreign key column name
+       being exported
+        <LI><B>KEY_SEQ</B> short => sequence number within foreign key
+        <LI><B>UPDATE_RULE</B> short => What happens to
+        foreign key when primary is updated:
+       <UL>
+       <LI> importedNoAction - do not allow update of primary
+                key if it has been imported
+       <LI> importedKeyCascade - change imported key to agree
+                with primary key update
+       <LI> importedKeySetNull - change imported key to NULL if
+                its primary key has been updated
+       <LI> importedKeySetDefault - change imported key to default values
+                if its primary key has been updated
+       <LI> importedKeyRestrict - same as importedKeyNoAction
+                                  (for ODBC 2.x compatibility)
+       </UL>
+        <LI><B>DELETE_RULE</B> short => What happens to
+       the foreign key when primary is deleted.
+       <UL>
+       <LI> importedKeyNoAction - do not allow delete of primary
+                key if it has been imported
+       <LI> importedKeyCascade - delete rows that import a deleted key
+       <LI> importedKeySetNull - change imported key to NULL if
+                its primary key has been deleted
+       <LI> importedKeyRestrict - same as importedKeyNoAction
+                                  (for ODBC 2.x compatibility)
+       <LI> importedKeySetDefault - change imported key to default if
+                its primary key has been deleted
+       </UL>
+        <LI><B>FK_NAME</B> String => foreign key name (may be null)
+        <LI><B>PK_NAME</B> String => primary key name (may be null)
+        <LI><B>DEFERRABILITY</B> short => can the evaluation of foreign key
+       constraints be deferred until commit
+       <UL>
+       <LI> importedKeyInitiallyDeferred - see SQL92 for definition
+       <LI> importedKeyInitiallyImmediate - see SQL92 for definition
+       <LI> importedKeyNotDeferrable - see SQL92 for definition
+       </UL>
+   </OL>
+
+  @param catalog a catalog name; "" retrieves those without a
+  catalog; null means drop catalog name from the selection criteria
+  @param schema a schema name; "" retrieves those
+  without a schema
+  @param table a table name
+  @return <code>ResultSet</code> - each row is a foreign key column description
+  @see #getImportedKeys
+}
+function TZMsSqlDatabaseMetadata.UncachedGetExportedKeys(const Catalog, Schema,
+  Table: string): IZResultSet;
+begin
+  Result := UncachedGetCrossReference(Catalog, Schema, Table, '', '', '');
 end;
 
 {**
@@ -2347,54 +2354,37 @@ end;
 }
 function TZMsSqlDatabaseMetadata.UncachedGetTypeInfo: IZResultSet;
 begin
-    Result:=inherited UncachedGetTypeInfo;
+  Result:=inherited UncachedGetTypeInfo;
 
-    with GetStatement.ExecuteQuery('exec sp_datatype_info') do
+  with GetStatement.ExecuteQuery('exec sp_datatype_info') do
+  begin
+    while Next do
     begin
-      while Next do
-      begin
-        Result.MoveToInsertRow;
-        Result.UpdateStringByName('TYPE_NAME',
-          GetStringByName('TYPE_NAME'));
-        Result.UpdateShortByName('DATA_TYPE',
-          Ord(ConvertODBCToSqlType(GetShortByName('DATA_TYPE'), ConSettings.CPType)));
-        Result.UpdateIntByName('PRECISION',
-          GetIntByName('PRECISION'));
-        Result.UpdateStringByName('LITERAL_PREFIX',
-          GetStringByName('LITERAL_PREFIX'));
-        Result.UpdateStringByName('LITERAL_SUFFIX',
-          GetStringByName('LITERAL_SUFFIX'));
-        Result.UpdateStringByName('CREATE_PARAMS',
-          GetStringByName('CREATE_PARAMS'));
-        Result.UpdateShortByName('NULLABLE',
-          GetShortByName('NULLABLE'));
-        Result.UpdateBooleanByName('CASE_SENSITIVE',
-          GetShortByName('CASE_SENSITIVE') = 1);
-        Result.UpdateShortByName('SEARCHABLE',
-          GetShortByName('SEARCHABLE'));
-        Result.UpdateBooleanByName('UNSIGNED_ATTRIBUTE',
-          GetShortByName('UNSIGNED_ATTRIBUTE') = 1);
-        Result.UpdateBooleanByName('FIXED_PREC_SCALE',
-          GetShortByName('MONEY') = 1);
-        Result.UpdateBooleanByName('AUTO_INCREMENT',
-          GetShortByName('AUTO_INCREMENT') = 1);
-        Result.UpdateStringByName('LOCAL_TYPE_NAME',
-          GetStringByName('LOCAL_TYPE_NAME'));
-        Result.UpdateShortByName('MINIMUM_SCALE',
-          GetShortByName('MINIMUM_SCALE'));
-        Result.UpdateShortByName('MAXIMUM_SCALE',
-          GetShortByName('MAXIMUM_SCALE'));
-        Result.UpdateShortByName('SQL_DATA_TYPE',
-          GetShortByName('SQL_DATA_TYPE'));
-        Result.UpdateShortByName('SQL_DATETIME_SUB',
-          GetShortByName('SQL_DATETIME_SUB'));
-        Result.UpdateShortByName('NUM_PREC_RADIX',
-          GetShortByName('NUM_PREC_RADIX'));
-        Result.InsertRow;
-      end;
-      Close;
+      Result.MoveToInsertRow;
+      Result.UpdateString(TypeInfoTypeNameIndex, GetStringByName('TYPE_NAME'));
+      Result.UpdateSmall(TypeInfoDataTypeIndex, Ord(ConvertODBCToSqlType(
+        GetSmallByName('DATA_TYPE'), ConSettings.CPType)));
+      Result.UpdateInt(TypeInfoPecisionIndex, GetIntByName('PRECISION'));
+      Result.UpdateString(TypeInfoLiteralPrefixIndex, GetStringByName('LITERAL_PREFIX'));
+      Result.UpdateString(TypeInfoLiteralSuffixIndex, GetStringByName('LITERAL_SUFFIX'));
+      Result.UpdateString(TypeInfoCreateParamsIndex, GetStringByName('CREATE_PARAMS'));
+      Result.UpdateSmall(TypeInfoNullAbleIndex, GetSmallByName('NULLABLE'));
+      Result.UpdateBoolean(TypeInfoCaseSensitiveIndex, GetSmallByName('CASE_SENSITIVE') = 1);
+      Result.UpdateSmall(TypeInfoSearchableIndex, GetSmallByName('SEARCHABLE'));
+      Result.UpdateBoolean(TypeInfoUnsignedAttributeIndex, GetSmallByName('UNSIGNED_ATTRIBUTE') = 1);
+      Result.UpdateBoolean(TypeInfoFixedPrecScaleIndex, GetSmallByName('MONEY') = 1);
+      Result.UpdateBoolean(TypeInfoAutoIncrementIndex, GetSmallByName('AUTO_INCREMENT') = 1);
+      Result.UpdateString(TypeInfoLocaleTypeNameIndex, GetStringByName('LOCAL_TYPE_NAME'));
+      Result.UpdateSmall(TypeInfoMinimumScaleIndex, GetSmallByName('MINIMUM_SCALE'));
+      Result.UpdateSmall(TypeInfoMaximumScaleIndex, GetSmallByName('MAXIMUM_SCALE'));
+      Result.UpdateSmall(TypeInfoSQLDataTypeIndex, GetSmallByName('SQL_DATA_TYPE'));
+      Result.UpdateSmall(TypeInfoSQLDateTimeSubIndex, GetSmallByName('SQL_DATETIME_SUB'));
+      Result.UpdateSmall(TypeInfoNumPrecRadix, GetSmallByName('NUM_PREC_RADIX'));
+      Result.InsertRow;
     end;
-    Result.BeforeFirst;
+    Close;
+  end;
+  Result.BeforeFirst;
 end;
 
 {**
@@ -2454,53 +2444,40 @@ function TZMsSqlDatabaseMetadata.UncachedGetIndexInfo(const Catalog: string;
 var
   Is_Unique, Accuracy: string;
 begin
-    Result:=inherited UncachedGetIndexInfo(Catalog, Schema, Table, Unique, Approximate);
+  Result:=inherited UncachedGetIndexInfo(Catalog, Schema, Table, Unique, Approximate);
 
-    if Unique then
-      Is_Unique := '''Y'''
-    else Is_Unique := '''N''';
-    if Approximate then
-      Accuracy := '''Q'''
-    else Accuracy := '''E''';
+  if Unique then
+    Is_Unique := '''Y'''
+  else Is_Unique := '''N''';
+  if Approximate then
+    Accuracy := '''Q'''
+  else Accuracy := '''E''';
 
-    with GetStatement.ExecuteQuery(
-      Format('exec sp_statistics %s, %s, %s, ''%%'', %s, %s',
-      [ComposeObjectString(Table), ComposeObjectString(Schema), ComposeObjectString(Catalog), Is_Unique, Accuracy])) do
+  with GetStatement.ExecuteQuery(
+    Format('exec sp_statistics %s, %s, %s, ''%%'', %s, %s',
+    [ComposeObjectString(Table), ComposeObjectString(Schema), ComposeObjectString(Catalog), Is_Unique, Accuracy])) do
+  begin
+    while Next do
     begin
-      while Next do
-      begin
-        Result.MoveToInsertRow;
-        Result.UpdateStringByName('TABLE_CAT',
-          GetStringByName('TABLE_QUALIFIER'));
-        Result.UpdateStringByName('TABLE_SCHEM',
-          GetStringByName('TABLE_OWNER'));
-        Result.UpdateStringByName('TABLE_NAME',
-          GetStringByName('TABLE_NAME'));
-        Result.UpdateBooleanByName('NON_UNIQUE',
-          GetShortByName('NON_UNIQUE') = 1);
-        Result.UpdateStringByName('INDEX_QUALIFIER',
-          GetStringByName('INDEX_QUALIFIER'));
-        Result.UpdateStringByName('INDEX_NAME',
-          GetStringByName('INDEX_NAME'));
-        Result.UpdateShortByName('TYPE',
-          GetShortByName('TYPE'));
-        Result.UpdateShortByName('ORDINAL_POSITION',
-          GetShortByName('SEQ_IN_INDEX'));
-        Result.UpdateStringByName('COLUMN_NAME',
-          GetStringByName('COLUMN_NAME'));
-        Result.UpdateStringByName('ASC_OR_DESC',
-          GetStringByName('COLLATION'));
-        Result.UpdateIntByName('CARDINALITY',
-          GetIntByName('CARDINALITY'));
-        Result.UpdateIntByName('PAGES',
-          GetIntByName('PAGES'));
-        Result.UpdateStringByName('FILTER_CONDITION',
-          GetStringByName('FILTER_CONDITION'));
-        Result.InsertRow;
-      end;
-      Close;
+      Result.MoveToInsertRow;
+      Result.UpdateString(CatalogNameIndex, GetStringByName('TABLE_QUALIFIER'));
+      Result.UpdateString(SchemaNameIndex, GetStringByName('TABLE_OWNER'));
+      Result.UpdateString(TableNameIndex, GetStringByName('TABLE_NAME'));
+      Result.UpdateBoolean(IndexInfoColNonUniqueIndex, GetSmallByName('NON_UNIQUE') = 1);
+      Result.UpdateString(IndexInfoColIndexQualifierIndex, GetStringByName('INDEX_QUALIFIER'));
+      Result.UpdateString(IndexInfoColIndexNameIndex, GetStringByName('INDEX_NAME'));
+      Result.UpdateSmall(IndexInfoColTypeIndex, GetSmallByName('TYPE'));
+      Result.UpdateSmall(IndexInfoColOrdPositionIndex, GetSmallByName('SEQ_IN_INDEX'));
+      Result.UpdateString(IndexInfoColColumnNameIndex, GetStringByName('COLUMN_NAME'));
+      Result.UpdateString(IndexInfoColAscOrDescIndex, GetStringByName('COLLATION'));
+      Result.UpdateInt(IndexInfoColCardinalityIndex, GetIntByName('CARDINALITY'));
+      Result.UpdateInt(IndexInfoColPagesIndex, GetIntByName('PAGES'));
+      Result.UpdateString(IndexInfoColFilterConditionIndex, GetStringByName('FILTER_CONDITION'));
+      Result.InsertRow;
     end;
-    Result.BeforeFirst;
+    Close;
+  end;
+  Result.BeforeFirst;
 end;
 
 { TZSybaseDatabaseMetadata }
@@ -2560,16 +2537,11 @@ begin
       while Next do
       begin
         Result.MoveToInsertRow;
-        Result.UpdateStringByName('PROCEDURE_CAT',
-          GetStringByName('PROCEDURE_CAT'));
-        Result.UpdateStringByName('PROCEDURE_SCHEM',
-          GetStringByName('PROCEDURE_SCHEM'));
-        Result.UpdateStringByName('PROCEDURE_NAME',
-          GetStringByName('PROCEDURE_NAME'));
-        Result.UpdateStringByName('REMARKS',
-          GetStringByName('REMARKS'));
-        Result.UpdateShortByName('PROCEDURE_TYPE',
-          GetShortByName('PROCEDURE_TYPE'));
+        Result.UpdateString(CatalogNameIndex, GetStringByName('PROCEDURE_CAT'));
+        Result.UpdateString(SchemaNameIndex, GetStringByName('PROCEDURE_SCHEM'));
+        Result.UpdateString(ProcedureNameIndex, GetStringByName('PROCEDURE_NAME'));
+        Result.UpdateString(ProcedureRemarksIndex, GetStringByName('REMARKS'));
+        Result.UpdateSmall(ProcedureTypeIndex, GetSmallByName('PROCEDURE_TYPE'));
         Result.InsertRow;
       end;
       Close;
@@ -2637,99 +2609,88 @@ function TZSybaseDatabaseMetadata.UncachedGetProcedureColumns(const Catalog: str
   const ColumnNamePattern: string): IZResultSet;
 var
   ProcNamePart: string;
+  P: PChar absolute ProcNamePart;
   NumberPart: string;
   status2: Integer;
 begin
-    Result:=inherited UncachedGetProcedureColumns(Catalog, SchemaPattern, ProcedureNamePattern, ColumnNamePattern);
+  Result:=inherited UncachedGetProcedureColumns(Catalog, SchemaPattern, ProcedureNamePattern, ColumnNamePattern);
 
-    with GetStatement.ExecuteQuery(
-      Format('exec sp_jdbc_getprocedurecolumns %s, %s, %s, %s',
-      [ComposeObjectString(Catalog), ComposeObjectString(SchemaPattern), ComposeObjectString(ProcedureNamePattern), ComposeObjectString(ColumnNamePattern)])) do
+  with GetStatement.ExecuteQuery(
+    Format('exec sp_jdbc_getprocedurecolumns %s, %s, %s, %s',
+    [ComposeObjectString(Catalog), ComposeObjectString(SchemaPattern), ComposeObjectString(ProcedureNamePattern), ComposeObjectString(ColumnNamePattern)])) do
+  begin
+    while Next do
     begin
-      while Next do
-      begin
-        Result.MoveToInsertRow;
-        Result.UpdateStringByName('PROCEDURE_CAT',
-          GetStringByName('PROCEDURE_CAT'));
-        Result.UpdateStringByName('PROCEDURE_SCHEM',
-          GetStringByName('PROCEDURE_SCHEM'));
-        Result.UpdateStringByName('PROCEDURE_NAME',
-          GetStringByName('PROCEDURE_NAME'));
-        Result.UpdateStringByName('COLUMN_NAME',
-          GetStringByName('COLUMN_NAME'));
-        case GetShortByName('COLUMN_TYPE') of
-          0, 1: Result.UpdateShortByName('COLUMN_TYPE', Ord(pctIn));
-          2: Result.UpdateShortByName('COLUMN_TYPE', Ord(pctInOut));
-          3: Result.UpdateShortByName('COLUMN_TYPE', Ord(pctUnknown));
-          4: Result.UpdateShortByName('COLUMN_TYPE', Ord(pctInOut));
-          5: Result.UpdateShortByName('COLUMN_TYPE', Ord(pctReturn));
-        else
-          Result.UpdateShortByName('COLUMN_TYPE', Ord(pctUnknown));
-        end;
-        Result.UpdateShortByName('DATA_TYPE',
-          Ord(ConvertODBCToSqlType(GetShortByName('DATA_TYPE'), ConSettings.CPType)));
-        Result.UpdateStringByName('TYPE_NAME',
-          GetStringByName('TYPE_NAME'));
-        Result.UpdateIntByName('PRECISION',
-          GetIntByName('PRECISION'));
-        Result.UpdateIntByName('LENGTH',
-          GetIntByName('LENGTH'));
-        Result.UpdateShortByName('SCALE',
-          GetShortByName('SCALE'));
-        Result.UpdateShortByName('RADIX',
-          GetShortByName('RADIX'));
-        Result.UpdateShortByName('NULLABLE',
-          GetShortByName('NULLABLE'));
-        Result.UpdateStringByName('REMARKS',
-          GetStringByName('REMARKS'));
-        Result.InsertRow;
+      Result.MoveToInsertRow;
+      Result.UpdateString(CatalogNameIndex, GetStringByName('PROCEDURE_CAT'));
+      Result.UpdateString(SchemaNameIndex, GetStringByName('PROCEDURE_SCHEM'));
+      Result.UpdateString(ProcColProcedureNameIndex, GetStringByName('PROCEDURE_NAME'));
+      Result.UpdateString(ProcColColumnNameIndex, GetStringByName('COLUMN_NAME'));
+      case GetSmallByName('COLUMN_TYPE') of
+        0, 1: Result.UpdateSmall(ProcColColumnTypeIndex, Ord(pctIn));
+        2: Result.UpdateSmall(ProcColColumnTypeIndex, Ord(pctInOut));
+        3: Result.UpdateSmall(ProcColColumnTypeIndex, Ord(pctUnknown));
+        4: Result.UpdateSmall(ProcColColumnTypeIndex, Ord(pctInOut));
+        5: Result.UpdateSmall(ProcColColumnTypeIndex, Ord(pctReturn));
+      else
+        Result.UpdateSmall(ProcColColumnTypeIndex, Ord(pctUnknown));
       end;
-      Close;
+      Result.UpdateSmall(ProcColDataTypeIndex, Ord(ConvertODBCToSqlType(
+        GetSmallByName('DATA_TYPE'), ConSettings.CPType)));
+      Result.UpdateString(ProcColTypeNameIndex, GetStringByName('TYPE_NAME'));
+      Result.UpdateInt(ProcColPrecisionIndex, GetIntByName('PRECISION'));
+      Result.UpdateInt(ProcColLengthIndex, GetIntByName('LENGTH'));
+      Result.UpdateSmall(ProcColScaleIndex, GetSmallByName('SCALE'));
+      Result.UpdateSmall(ProcColRadixIndex, GetSmallByName('RADIX'));
+      Result.UpdateSmall(ProcColNullableIndex, GetSmallByName('NULLABLE'));
+      Result.UpdateString(ProcColRemarksIndex, GetStringByName('REMARKS'));
+      Result.InsertRow;
     end;
-    Result.BeforeFirst;
+    Close;
+  end;
+  Result.BeforeFirst;
 
-    NumberPart := '1';
-    ProcNamePart := '';
-    if AnsiPos(';', ProcNamePart) > 0 then
-    begin
-      NumberPart := Copy(ProcNamePart, LastDelimiter(';', ProcNamePart) + 1,
-        Length(ProcNamePart));
-      if NumberPart = '' then
-        NumberPart := '1';
+  NumberPart := '1';
+  ProcNamePart := '';
+  if AnsiPos(';', ProcNamePart) > 0 then begin
+    NumberPart := Copy(ProcNamePart, LastDelimiter(';', ProcNamePart) + 1,
+      Length(ProcNamePart));
+    if NumberPart = '' then
+      NumberPart := '1';
 
-      ProcNamePart := Copy(ProcNamePart, 1, LastDelimiter(';', ProcNamePart));
-      if ProcNamePart[Length(ProcNamePart)] = ';' then
-        Delete(ProcNamePart, Length(ProcNamePart), 1);
-    end;
-  //status2 is added in sybase ASE 12.5 to store the storedprocedure parameters
-  // input/output type this column does not exists in prior versions.
-  // In prior versions there is no way to determine between input or output type.
-    with GetStatement.ExecuteQuery(
-      Format('select c.* from syscolumns c inner join sysobjects o on'
-      + ' (o.id = c.id) where o.name = %s and c.number = %s order by colid',
-      [AnsiQuotedStr(ProcNamePart, ''''), NumberPart])) do
+    ProcNamePart := Copy(ProcNamePart, 1, LastDelimiter(';', ProcNamePart));
+    if (P+Length(ProcNamePart)-1)^ = ';' then
+      Delete(ProcNamePart, Length(ProcNamePart), 1);
+  end;
+//status2 is added in sybase ASE 12.5 to store the storedprocedure parameters
+// input/output type this column does not exists in prior versions.
+// In prior versions there is no way to determine between input or output type.
+  with GetStatement.ExecuteQuery(
+    Format('select c.* from syscolumns c inner join sysobjects o on'
+    + ' (o.id = c.id) where o.name = %s and c.number = %s order by colid',
+    [SQLQuotedStr(ProcNamePart, ''''), NumberPart])) do
+  begin
+    Result.Next;//Skip return parameter
+    while Next do
     begin
-      Result.Next;//Skip return parameter
-      while Next do
-      begin
-        Result.Next;
-        if FindColumn('status2') >= 1 then
-          status2 := GetShortByName('status2')
-        else
-          status2 := 0;
-        case status2 of
-          0, 1: Result.UpdateShortByName('COLUMN_TYPE', Ord(pctIn));
-          2: Result.UpdateShortByName('COLUMN_TYPE', Ord(pctInOut));
-          3: Result.UpdateShortByName('COLUMN_TYPE', Ord(pctUnknown));
-          4: Result.UpdateShortByName('COLUMN_TYPE', Ord(pctInOut));
-          5: Result.UpdateShortByName('COLUMN_TYPE', Ord(pctReturn));
-        else
-          Result.UpdateShortByName('COLUMN_TYPE', Ord(pctUnknown));
-        end;
-        Result.UpdateRow;
+      Result.Next;
+      if FindColumn('status2') >= 1 then
+        status2 := GetSmallByName('status2')
+      else
+        status2 := 0;
+      case status2 of
+        0, 1: Result.UpdateSmall(ProcColColumnTypeIndex, Ord(pctIn));
+        2: Result.UpdateSmall(ProcColColumnTypeIndex, Ord(pctInOut));
+        3: Result.UpdateSmall(ProcColColumnTypeIndex, Ord(pctUnknown));
+        4: Result.UpdateSmall(ProcColColumnTypeIndex, Ord(pctInOut));
+        5: Result.UpdateSmall(ProcColColumnTypeIndex, Ord(pctReturn));
+      else
+        Result.UpdateSmall(ProcColColumnTypeIndex, Ord(pctUnknown));
       end;
-      Close;
+      Result.UpdateRow;
     end;
+    Close;
+  end;
 end;
 
 {**
@@ -2768,39 +2729,30 @@ function TZSybaseDatabaseMetadata.UncachedGetTables(const Catalog: string;
 var
   I: Integer;
   TableTypes: string;
+  StatementResult: IZResultSet;
 begin
-    Result:=inherited UncachedGetTables(Catalog, SchemaPattern, TableNamePattern, Types);
+  Result:=inherited UncachedGetTables(Catalog, SchemaPattern, TableNamePattern, Types);
 
-    TableTypes := '';
-    for I := 0 to Length(Types) - 1 do
-    begin
-      if TableTypes <> '' then
-        TableTypes := TableTypes + ',';
-      TableTypes := TableTypes + AnsiQuotedStr(Types[I], '''');
-    end;
+  TableTypes := '';
+  for I := 0 to Length(Types) - 1 do
+    AppendSepString(TableTypes, SQLQuotedStr(Types[I], ''''), ',');
 
-  with GetStatement.ExecuteQuery(
-    Format('exec sp_jdbc_tables %s, %s, %s, %s',
-    [ComposeObjectString(TableNamePattern), ComposeObjectString(SchemaPattern), ComposeObjectString(Catalog), ComposeObjectString(TableTypes)])) do
+  StatementResult := GetStatement.ExecuteQuery(Format('exec sp_jdbc_tables %s, %s, %s, %s',
+    [ComposeObjectString(TableNamePattern), ComposeObjectString(SchemaPattern), ComposeObjectString(Catalog), ComposeObjectString(TableTypes)]));
+  if Assigned(StatementResult) then with StatementResult do
   begin
     while Next do
-      while Next do
-      begin
-        Result.MoveToInsertRow;
-        Result.UpdateStringByName('TABLE_CAT',
-          GetStringByName('TABLE_CAT'));
-        Result.UpdateStringByName('TABLE_SCHEM',
-          GetStringByName('TABLE_SCHEM'));
-        Result.UpdateStringByName('TABLE_NAME',
-          GetStringByName('TABLE_NAME'));
-        Result.UpdateStringByName('TABLE_TYPE',
-          GetStringByName('TABLE_TYPE'));
-        Result.UpdateStringByName('REMARKS',
-          GetStringByName('REMARKS'));
-        Result.InsertRow;
-      end;
-      Close;
+    begin
+      Result.MoveToInsertRow;
+      Result.UpdateString(CatalogNameIndex, GetStringByName('TABLE_CAT'));
+      Result.UpdateString(SchemaNameIndex, GetStringByName('TABLE_SCHEM'));
+      Result.UpdateString(TableNameIndex, GetStringByName('TABLE_NAME'));
+      Result.UpdateString(TableColumnsSQLType, GetStringByName('TABLE_TYPE'));
+      Result.UpdateString(TableColumnsRemarks, GetStringByName('REMARKS'));
+      Result.InsertRow;
     end;
+    Close;
+  end;
 end;
 
 {**
@@ -2817,19 +2769,18 @@ end;
 }
 function TZSybaseDatabaseMetadata.UncachedGetSchemas: IZResultSet;
 begin
-    Result:=inherited UncachedGetSchemas;
+  Result:=inherited UncachedGetSchemas;
 
-    with GetStatement.ExecuteQuery('exec sp_jdbc_getschemas') do
+  with GetStatement.ExecuteQuery('exec sp_jdbc_getschemas') do
+  begin
+    while Next do
     begin
-      while Next do
-      begin
-        Result.MoveToInsertRow;
-        Result.UpdateStringByName('TABLE_SCHEM',
-          GetStringByName('TABLE_SCHEM'));
-        Result.InsertRow;
-      end;
-      Close;
+      Result.MoveToInsertRow;
+      Result.UpdateString(SchemaColumnsTableSchemaIndex, GetStringByName('TABLE_SCHEM'));
+      Result.InsertRow;
     end;
+    Close;
+  end;
 end;
 
 {**
@@ -2846,19 +2797,18 @@ end;
 }
 function TZSybaseDatabaseMetadata.UncachedGetCatalogs: IZResultSet;
 begin
-    Result:=inherited UncachedGetCatalogs;
+  Result:=inherited UncachedGetCatalogs;
 
-    with GetStatement.ExecuteQuery('exec sp_jdbc_getcatalogs') do
+  with GetStatement.ExecuteQuery('exec sp_jdbc_getcatalogs') do
+  begin
+    while Next do
     begin
-      while Next do
-      begin
-        Result.MoveToInsertRow;
-        Result.UpdateStringByName('TABLE_CAT',
-          GetStringByName('TABLE_CAT'));
-        Result.InsertRow;
-      end;
-      Close;
+      Result.MoveToInsertRow;
+      Result.UpdateString(CatalogNameIndex, GetStringByName('TABLE_CAT'));
+      Result.InsertRow;
     end;
+    Close;
+  end;
 end;
 
 {**
@@ -2881,14 +2831,14 @@ const
 var
   I: Integer;
 begin
-    Result:=inherited UncachedGetTableTypes;
+  Result:=inherited UncachedGetTableTypes;
 
-    for I := 0 to 2 do
-    begin
-      Result.MoveToInsertRow;
-      Result.UpdateStringByName('TABLE_TYPE', TableTypes[I]);
-      Result.InsertRow;
-    end;
+  for I := 0 to 2 do
+  begin
+    Result.MoveToInsertRow;
+    Result.UpdateString(TableTypeColumnTableTypeIndex, TableTypes[I]);
+    Result.InsertRow;
+  end;
 end;
 
 {**
@@ -2945,87 +2895,72 @@ end;
 function TZSybaseDatabaseMetadata.UncachedGetColumns(const Catalog: string;
   const SchemaPattern: string; const TableNamePattern: string;
   const ColumnNamePattern: string): IZResultSet;
+var
+  TempCatalog, TempSchema, TempTable, TempColumn: String;
 begin
-    Result:=inherited UncachedGetColumns(Catalog, SchemaPattern, TableNamePattern, ColumnNamePattern);
+  Result := inherited UncachedGetColumns(Catalog, SchemaPattern, TableNamePattern, ColumnNamePattern);
+  TempCatalog := RemoveQuotesFromIdentifier(Catalog);
+  TempSchema := RemoveQuotesFromIdentifier(SchemaPattern);
+  TempTable := RemoveQuotesFromIdentifier(TableNamePattern);
+  TempColumn := RemoveQuotesFromIdentifier(ColumnNamePattern);
 
-    with GetStatement.ExecuteQuery(
-      Format('exec sp_jdbc_columns %s, %s, %s, %s',
-      [ComposeObjectString(TableNamePattern), ComposeObjectString(SchemaPattern), ComposeObjectString(Catalog), ComposeObjectString(ColumnNamePattern)])) do
+  with GetStatement.ExecuteQuery('exec '+GetSP_Prefix(Catalog, SchemaPattern)+
+    'sp_jdbc_columns '+ComposeObjectString(TempTable)+', '+
+    ComposeObjectString(TempSchema)+', '+ComposeObjectString(TempCatalog)+', '+
+    ComposeObjectString(TempColumn)) do
+  begin
+    while Next do
     begin
-      while Next do
-      begin
-        Result.MoveToInsertRow;
-        Result.UpdateStringByName('TABLE_CAT',
-          ''{GetStringByName('TABLE_CAT')});
-        Result.UpdateStringByName('TABLE_SCHEM',
-          ''{GetStringByName('TABLE_SCHEM')});
-        Result.UpdateStringByName('TABLE_NAME',
-          GetStringByName('TABLE_NAME'));
-        Result.UpdateStringByName('COLUMN_NAME',
-          GetStringByName('COLUMN_NAME'));
-  //The value in the resultset will be used
-  //      Result.UpdateShortByName('DATA_TYPE',
-  //        Ord(ConvertODBCToSqlType(GetShortByName('DATA_TYPE'))));
-        Result.UpdateStringByName('TYPE_NAME',
-          GetStringByName('TYPE_NAME'));
-        Result.UpdateIntByName('COLUMN_SIZE',
-          GetIntByName('COLUMN_SIZE'));
-        Result.UpdateIntByName('BUFFER_LENGTH',
-          GetIntByName('BUFFER_LENGTH'));
-        Result.UpdateIntByName('DECIMAL_DIGITS',
-          GetIntByName('DECIMAL_DIGITS'));
-        Result.UpdateIntByName('NUM_PREC_RADIX',
-          GetShortByName('NUM_PREC_RADIX'));
-        Result.UpdateShortByName('NULLABLE',
-          GetShortByName('NULLABLE'));
-        Result.UpdateStringByName('REMARKS',
-          GetStringByName('REMARKS'));
-        Result.UpdateStringByName('COLUMN_DEF',
-          GetStringByName('COLUMN_DEF'));
-        Result.UpdateShortByName('SQL_DATA_TYPE',
-          GetShortByName('SQL_DATA_TYPE'));
-        Result.UpdateShortByName('SQL_DATETIME_SUB',
-          GetShortByName('SQL_DATETIME_SUB'));
-        Result.UpdateIntByName('CHAR_OCTET_LENGTH',
-          GetIntByName('CHAR_OCTET_LENGTH'));
-        Result.UpdateIntByName('ORDINAL_POSITION',
-          GetIntByName('ORDINAL_POSITION'));
-        Result.UpdateStringByName('IS_NULLABLE',
-          GetStringByName('IS_NULLABLE'));
-        Result.InsertRow;
-      end;
-      Close;
+      Result.MoveToInsertRow;
+      Result.UpdateString(CatalogNameIndex, GetStringByName('TABLE_CAT'));
+      Result.UpdateString(SchemaNameIndex, GetStringByName('TABLE_SCHEM'));
+      Result.UpdateString(TableNameIndex, GetStringByName('TABLE_NAME'));
+      Result.UpdateString(ColumnNameIndex, GetStringByName('COLUMN_NAME'));
+//The value in the resultset will be used
+      Result.UpdateSmall(TableColColumnTypeIndex,
+        Ord(ConvertODBCToSqlType(GetSmallByName('DATA_TYPE'), ConSettings.CPType)));
+      Result.UpdateString(TableColColumnTypeNameIndex, GetStringByName('TYPE_NAME'));
+      Result.UpdateInt(TableColColumnSizeIndex, GetIntByName('COLUMN_SIZE'));
+      Result.UpdateInt(TableColColumnBufLengthIndex, GetIntByName('BUFFER_LENGTH'));
+      Result.UpdateInt(TableColColumnDecimalDigitsIndex, GetIntByName('DECIMAL_DIGITS'));
+      Result.UpdateInt(TableColColumnNumPrecRadixIndex, GetSmallByName('NUM_PREC_RADIX'));
+      Result.UpdateSmall(TableColColumnNullableIndex, GetSmallByName('NULLABLE'));
+      Result.UpdateString(TableColColumnRemarksIndex, GetStringByName('REMARKS'));
+      Result.UpdateString(TableColColumnColDefIndex, GetStringByName('COLUMN_DEF'));
+      Result.UpdateSmall(TableColColumnSQLDataTypeIndex, GetSmallByName('SQL_DATA_TYPE'));
+      Result.UpdateSmall(TableColColumnSQLDateTimeSubIndex, GetSmallByName('SQL_DATETIME_SUB'));
+      Result.UpdateInt(TableColColumnCharOctetLengthIndex, GetIntByName('CHAR_OCTET_LENGTH'));
+      Result.UpdateInt(TableColColumnOrdPosIndex, GetIntByName('ORDINAL_POSITION'));
+      Result.UpdateString(TableColColumnIsNullableIndex, GetStringByName('IS_NULLABLE'));
+      Result.UpdateBoolean(TableColColumnCaseSensitiveIndex, IC.GetIdentifierCase(GetStringByName('TYPE_NAME'), True) in [icMixed, icSpecial]);
+      Result.InsertRow;
     end;
-    Result.BeforeFirst;
-    with GetStatement.ExecuteQuery(
-      Format('select c.colid, c.name, c.type, c.prec, c.scale, c.status'
-      + ' from syscolumns c inner join sysobjects o on (o.id = c.id)'
-      + ' where o.name = %s order by colid', [AnsiQuotedStr(TableNamePattern, '''')])) do
+    Close;
+  end;
+  Result.BeforeFirst;
+  with GetStatement.ExecuteQuery(
+    Format('select c.colid, c.name, c.type, c.prec, c.scale, c.status'
+    + ' from syscolumns c inner join sysobjects o on (o.id = c.id)'
+    + ' where o.name like %s order by colid', [ComposeObjectString(TempTable)])) do
+  begin
+    while Next do
     begin
-      while Next do
+      Result.Next;
+      Result.UpdateBoolean(TableColColumnAutoIncIndex, (GetSmallByName('status') and $80) <> 0);
+      Result.UpdateBoolean(TableColColumnSearchableIndex, not (GetSmallByName('type') in [34, 35]));
+      Result.UpdateBoolean(TableColColumnWritableIndex, ((GetSmallByName('status') and $80) = 0)
+        (*and (GetSmallByName('type') <> 37)*));   // <<<< *DEBUG WARUM?
+      Result.UpdateBoolean(TableColColumnDefinitelyWritableIndex, Result.GetBooleanByName('WRITABLE'));
+      Result.UpdateBoolean(TableColColumnReadonlyIndex, not Result.GetBooleanByName('WRITABLE'));
+      if Result.GetBoolean(TableColColumnAutoIncIndex) then
       begin
-        Result.Next;
-        Result.UpdateBooleanByName('AUTO_INCREMENT',
-          (GetShortByName('status') and $80) <> 0);
-        Result.UpdateNullByName('CASE_SENSITIVE');
-        Result.UpdateBooleanByName('SEARCHABLE',
-          not (GetShortByName('type') in [34, 35]));
-        Result.UpdateBooleanByName('WRITABLE',
-          ((GetShortByName('status') and $80) = 0)
-          (*and (GetShortByName('type') <> 37)*));   // <<<< *DEBUG WARUM?
-        Result.UpdateBooleanByName('DEFINITELYWRITABLE',
-          Result.GetBooleanByName('WRITABLE'));
-        Result.UpdateBooleanByName('READONLY',
-          not Result.GetBooleanByName('WRITABLE'));
-        if Result.GetBooleanByName('AUTO_INCREMENT') then
-        begin
-          Result.UpdateShortByName('NULLABLE', 1);
-          Result.UpdateStringByName('IS_NULLABLE', 'YES');
-        end;
-        Result.UpdateRow;
+        Result.UpdateSmall(TableColColumnNullableIndex, 1);
+        Result.UpdateString(TableColColumnIsNullableIndex, 'YES');
       end;
-      Close;
+      Result.UpdateRow;
     end;
+    Close;
+  end;
 end;
 
 {**
@@ -3059,36 +2994,28 @@ end;
 function TZSybaseDatabaseMetadata.UncachedGetColumnPrivileges(const Catalog: string;
   const Schema: string; const Table: string; const ColumnNamePattern: string): IZResultSet;
 begin
-    Result:=inherited UncachedGetColumnPrivileges(Catalog, Schema, Table, ColumnNamePattern);
+  Result:=inherited UncachedGetColumnPrivileges(Catalog, Schema, Table, ColumnNamePattern);
 
-    with GetStatement.ExecuteQuery(
-      Format('exec sp_jdbc_getcolumnprivileges %s, %s, %s, %s',
-      [ComposeObjectString(Catalog), ComposeObjectString(Schema), ComposeObjectString(Table),
-       ComposeObjectString(ColumnNamePattern, '''%''')])) do
+  with GetStatement.ExecuteQuery(
+    Format('exec sp_jdbc_getcolumnprivileges %s, %s, %s, %s',
+    [ComposeObjectString(Catalog), ComposeObjectString(Schema), ComposeObjectString(Table),
+     ComposeObjectString(ColumnNamePattern, '''%''')])) do
+  begin
+    while Next do
     begin
-      while Next do
-      begin
-        Result.MoveToInsertRow;
-        Result.UpdateStringByName('TABLE_CAT',
-          GetStringByName('TABLE_CAT'));
-        Result.UpdateStringByName('TABLE_SCHEM',
-          GetStringByName('TABLE_SCHEM'));
-        Result.UpdateStringByName('TABLE_NAME',
-          GetStringByName('TABLE_NAME'));
-        Result.UpdateStringByName('COLUMN_NAME',
-          GetStringByName('COLUMN_NAME'));
-        Result.UpdateStringByName('GRANTOR',
-          GetStringByName('GRANTOR'));
-        Result.UpdateStringByName('GRANTEE',
-          GetStringByName('GRANTEE'));
-        Result.UpdateStringByName('PRIVILEGE',
-          GetStringByName('PRIVILEGE'));
-        Result.UpdateStringByName('IS_GRANTABLE',
-          GetStringByName('IS_GRANTABLE'));
-        Result.InsertRow;
-      end;
-      Close;
+      Result.MoveToInsertRow;
+      Result.UpdateString(CatalogNameIndex, GetStringByName('TABLE_CAT'));
+      Result.UpdateString(SchemaNameIndex, GetStringByName('TABLE_SCHEM'));
+      Result.UpdateString(TableNameIndex, GetStringByName('TABLE_NAME'));
+      Result.UpdateString(ColumnNameIndex, GetStringByName('COLUMN_NAME'));
+      Result.UpdateString(TableColPrivGrantorIndex, GetStringByName('GRANTOR'));
+      Result.UpdateString(TableColPrivGranteeIndex, GetStringByName('GRANTEE'));
+      Result.UpdateString(TableColPrivPrivilegeIndex, GetStringByName('PRIVILEGE'));
+      Result.UpdateString(TableColPrivIsGrantableIndex, GetStringByName('IS_GRANTABLE'));
+      Result.InsertRow;
     end;
+    Close;
+  end;
 end;
 
 {**
@@ -3126,33 +3053,26 @@ end;
 function TZSybaseDatabaseMetadata.UncachedGetTablePrivileges(const Catalog: string;
   const SchemaPattern: string; const TableNamePattern: string): IZResultSet;
 begin
-    Result:=inherited UncachedGetTablePrivileges(Catalog, SchemaPattern, TableNamePattern);
+  Result:=inherited UncachedGetTablePrivileges(Catalog, SchemaPattern, TableNamePattern);
 
-    with GetStatement.ExecuteQuery(
-      Format('exec sp_jdbc_gettableprivileges %s, %s, %s',
-      [ComposeObjectString(Catalog), ComposeObjectString(SchemaPattern), ComposeObjectString(TableNamePattern)])) do
+  with GetStatement.ExecuteQuery(
+    Format('exec sp_jdbc_gettableprivileges %s, %s, %s',
+    [ComposeObjectString(Catalog), ComposeObjectString(SchemaPattern), ComposeObjectString(TableNamePattern)])) do
+  begin
+    while Next do
     begin
-      while Next do
-      begin
-        Result.MoveToInsertRow;
-        Result.UpdateStringByName('TABLE_CAT',
-          GetStringByName('TABLE_CAT'));
-        Result.UpdateStringByName('TABLE_SCHEM',
-          GetStringByName('TABLE_SCHEM'));
-        Result.UpdateStringByName('TABLE_NAME',
-          GetStringByName('TABLE_NAME'));
-        Result.UpdateStringByName('GRANTOR',
-          GetStringByName('GRANTOR'));
-        Result.UpdateStringByName('GRANTEE',
-          GetStringByName('GRANTEE'));
-        Result.UpdateStringByName('PRIVILEGE',
-          GetStringByName('PRIVILEGE'));
-        Result.UpdateStringByName('IS_GRANTABLE',
-          GetStringByName('IS_GRANTABLE'));
-        Result.InsertRow;
-      end;
-      Close;
+      Result.MoveToInsertRow;
+      Result.UpdateString(CatalogNameIndex, GetStringByName('TABLE_CAT'));
+      Result.UpdateString(SchemaNameIndex, GetStringByName('TABLE_SCHEM'));
+      Result.UpdateString(TableNameIndex, GetStringByName('TABLE_NAME'));
+      Result.UpdateString(TablePrivGrantorIndex, GetStringByName('GRANTOR'));
+      Result.UpdateString(TablePrivGranteeIndex, GetStringByName('GRANTEE'));
+      Result.UpdateString(TablePrivPrivilegeIndex, GetStringByName('PRIVILEGE'));
+      Result.UpdateString(TablePrivIsGrantableIndex, GetStringByName('IS_GRANTABLE'));
+      Result.InsertRow;
     end;
+    Close;
+  end;
 end;
 
 {**
@@ -3188,35 +3108,47 @@ end;
 function TZSybaseDatabaseMetadata.UncachedGetVersionColumns(const Catalog: string;
   const Schema: string; const Table: string): IZResultSet;
 begin
-    Result:=inherited UncachedGetVersionColumns(Catalog, Schema, Table);
+  Result:=inherited UncachedGetVersionColumns(Catalog, Schema, Table);
 
-    with GetStatement.ExecuteQuery(
-      Format('exec sp_jdbc_getversioncolumns %s, %s, %s',
-      [ComposeObjectString(Catalog), ComposeObjectString(Schema), ComposeObjectString(Table)])) do
+  with GetStatement.ExecuteQuery(
+    Format('exec sp_jdbc_getversioncolumns %s, %s, %s',
+    [ComposeObjectString(Catalog), ComposeObjectString(Schema), ComposeObjectString(Table)])) do
+  begin
+    while Next do
     begin
-      while Next do
-      begin
-        Result.MoveToInsertRow;
-        Result.UpdateShortByName('SCOPE',
-          GetShortByName('SCOPE'));
-        Result.UpdateStringByName('COLUMN_NAME',
-          GetStringByName('COLUMN_NAME'));
-        Result.UpdateShortByName('DATA_TYPE',
-          Ord(ConvertODBCToSqlType(GetShortByName('DATA_TYPE'), ConSettings.CPType)));
-        Result.UpdateStringByName('TYPE_NAME',
-          GetStringByName('TYPE_NAME'));
-        Result.UpdateIntByName('COLUMN_SIZE',
-          GetIntByName('COLUMN_SIZE'));
-        Result.UpdateIntByName('BUFFER_LENGTH',
-          GetIntByName('BUFFER_LENGTH'));
-        Result.UpdateIntByName('DECIMAL_DIGITS',
-          GetIntByName('DECIMAL_DIGITS'));
-        Result.UpdateShortByName('PSEUDO_COLUMN',
-          GetShortByName('PSEUDO_COLUMN'));
-        Result.InsertRow;
-      end;
-      Close;
+      Result.MoveToInsertRow;
+      Result.UpdateSmall(TableColVerScopeIndex, GetSmallByName('SCOPE'));
+      Result.UpdateString(TableColVerColNameIndex, GetStringByName('COLUMN_NAME'));
+      Result.UpdateSmall(TableColVerDataTypeIndex,
+        Ord(ConvertODBCToSqlType(GetSmallByName('DATA_TYPE'), ConSettings.CPType)));
+      Result.UpdateString(TableColVerTypeNameIndex, GetStringByName('TYPE_NAME'));
+      Result.UpdateInt(TableColVerColSizeIndex, GetIntByName('COLUMN_SIZE'));
+      Result.UpdateInt(TableColVerBufLengthIndex, GetIntByName('BUFFER_LENGTH'));
+      Result.UpdateInt(TableColVerDecimalDigitsIndex, GetIntByName('DECIMAL_DIGITS'));
+      Result.UpdateSmall(TableColVerPseudoColumnIndex, GetSmallByName('PSEUDO_COLUMN'));
+      Result.InsertRow;
     end;
+    Close;
+  end;
+end;
+
+{**
+  Removes Quotes from Identifier Names if they are passed with quotes.
+
+  @param Identifier The Identifier where the quotes are to be removed
+  @return The identifier without quotes
+}
+function TZSybaseDatabaseMetadata.RemoveQuotesFromIdentifier(const Identifier: String): String;
+var
+  QuoteStr: String;
+  pI, pQ: PChar;
+begin
+  QuoteStr := GetDatabaseInfo.GetIdentifierQuoteString;
+  pI := Pointer(Identifier);
+  pQ := Pointer(QuoteStr);
+  if (pI <> nil) and (pQ <> nil) and (pI^ = pq^) and ((pI+Length(Identifier)-1)^ = pQ^)
+  then Result := Copy(Identifier, 2, length(Identifier) - 2)
+  else Result := Identifier;
 end;
 
 {**
@@ -3243,32 +3175,31 @@ end;
 }
 function TZSybaseDatabaseMetadata.UncachedGetPrimaryKeys(const Catalog: string;
   const Schema: string; const Table: string): IZResultSet;
+var
+  TempCatalog, TempSchema, TempTable: String;
 begin
-    Result:=inherited UncachedGetPrimaryKeys(Catalog, Schema, Table);
+  Result:=inherited UncachedGetPrimaryKeys(Catalog, Schema, Table);
+  TempCatalog := RemoveQuotesFromIdentifier(Catalog);
+  TempSchema := RemoveQuotesFromIdentifier(Schema);
+  TempTable := RemoveQuotesFromIdentifier(Table);
 
-    with GetStatement.ExecuteQuery(
-      Format('exec sp_jdbc_primarykey %s, %s, %s',
-      [ComposeObjectString(Catalog), ComposeObjectString(Schema), ComposeObjectString(Table)])) do
+  with GetStatement.ExecuteQuery(
+    Format('exec sp_jdbc_primarykey %s, %s, %s',
+    [ComposeObjectString(TempCatalog), ComposeObjectString(TempSchema), ComposeObjectString(TempTable)])) do
+  begin
+    while Next do
     begin
-      while Next do
-      begin
-        Result.MoveToInsertRow;
-        Result.UpdateStringByName('TABLE_CAT',
-          GetStringByName('TABLE_CAT'));
-        Result.UpdateStringByName('TABLE_SCHEM',
-          GetStringByName('TABLE_SCHEM'));
-        Result.UpdateStringByName('TABLE_NAME',
-          GetStringByName('TABLE_NAME'));
-        Result.UpdateStringByName('COLUMN_NAME',
-          GetStringByName('COLUMN_NAME'));
-        Result.UpdateShortByName('KEY_SEQ',
-          GetShortByName('KEY_SEQ'));
-        Result.UpdateStringByName('PK_NAME',
-          GetStringByName('PK_NAME'));
-        Result.InsertRow;
-      end;
-      Close;
+      Result.MoveToInsertRow;
+      Result.UpdateString(CatalogNameIndex, GetStringByName('TABLE_CAT'));
+      Result.UpdateString(SchemaNameIndex, GetStringByName('TABLE_SCHEM'));
+      Result.UpdateString(TableNameIndex, GetStringByName('TABLE_NAME'));
+      Result.UpdateString(PrimaryKeyColumnNameIndex, GetStringByName('COLUMN_NAME'));
+      Result.UpdateSmall(PrimaryKeyKeySeqIndex, GetSmallByName('KEY_SEQ'));
+      Result.UpdateString(PrimaryKeyPKNameIndex, GetStringByName('PK_NAME'));
+      Result.InsertRow;
     end;
+    Close;
+  end;
 end;
 
 {**
@@ -3341,47 +3272,33 @@ end;
 function TZSybaseDatabaseMetadata.UncachedGetImportedKeys(const Catalog: string;
   const Schema: string; const Table: string): IZResultSet;
 begin
-    Result:=inherited UncachedGetImportedKeys(Catalog, Schema, Table);
+  Result:=inherited UncachedGetImportedKeys(Catalog, Schema, Table);
 
-    with GetStatement.ExecuteQuery(
-      Format('exec sp_jdbc_importkey %s, %s, %s',
-      [ComposeObjectString(Catalog), ComposeObjectString(Schema), ComposeObjectString(Table)])) do
+  with GetStatement.ExecuteQuery(
+    Format('exec sp_jdbc_importkey %s, %s, %s',
+    [ComposeObjectString(Catalog), ComposeObjectString(Schema), ComposeObjectString(Table)])) do
+  begin
+    while Next do
     begin
-      while Next do
-      begin
-        Result.MoveToInsertRow;
-        Result.UpdateStringByName('PKTABLE_CAT',
-          GetStringByName('PKTABLE_CAT'));
-        Result.UpdateStringByName('PKTABLE_SCHEM',
-          GetStringByName('PKTABLE_SCHEM'));
-        Result.UpdateStringByName('PKTABLE_NAME',
-          GetStringByName('PKTABLE_NAME'));
-        Result.UpdateStringByName('PKCOLUMN_NAME',
-          GetStringByName('PKCOLUMN_NAME'));
-        Result.UpdateStringByName('FKTABLE_CAT',
-          GetStringByName('FKTABLE_CAT'));
-        Result.UpdateStringByName('FKTABLE_SCHEM',
-          GetStringByName('FKTABLE_SCHEM'));
-        Result.UpdateStringByName('FKTABLE_NAME',
-          GetStringByName('FKTABLE_NAME'));
-        Result.UpdateStringByName('FKCOLUMN_NAME',
-          GetStringByName('FKCOLUMN_NAME'));
-        Result.UpdateShortByName('KEY_SEQ',
-          GetShortByName('KEY_SEQ'));
-        Result.UpdateShortByName('UPDATE_RULE',
-          GetShortByName('UPDATE_RULE'));
-        Result.UpdateShortByName('DELETE_RULE',
-          GetShortByName('DELETE_RULE'));
-        Result.UpdateStringByName('FK_NAME',
-          GetStringByName('FK_NAME'));
-        Result.UpdateStringByName('PK_NAME',
-          GetStringByName('PK_NAME'));
-        Result.UpdateIntByName('DEFERRABILITY',
-          GetIntByName('DEFERRABILITY'));
-        Result.InsertRow;
-      end;
-      Close;
+      Result.MoveToInsertRow;
+      Result.UpdateString(ImportedKeyColPKTableCatalogIndex, GetStringByName('PKTABLE_CAT'));
+      Result.UpdateString(ImportedKeyColPKTableSchemaIndex, GetStringByName('PKTABLE_SCHEM'));
+      Result.UpdateString(ImportedKeyColPKTableNameIndex, GetStringByName('PKTABLE_NAME'));
+      Result.UpdateString(ImportedKeyColPKColumnNameIndex, GetStringByName('PKCOLUMN_NAME'));
+      Result.UpdateString(ImportedKeyColFKTableCatalogIndex, GetStringByName('FKTABLE_CAT'));
+      Result.UpdateString(ImportedKeyColFKTableSchemaIndex, GetStringByName('FKTABLE_SCHEM'));
+      Result.UpdateString(ImportedKeyColFKTableNameIndex, GetStringByName('FKTABLE_NAME'));
+      Result.UpdateString(ImportedKeyColFKColumnNameIndex, GetStringByName('FKCOLUMN_NAME'));
+      Result.UpdateSmall(ImportedKeyColKeySeqIndex, GetSmallByName('KEY_SEQ'));
+      Result.UpdateSmall(ImportedKeyColUpdateRuleIndex, GetSmallByName('UPDATE_RULE'));
+      Result.UpdateSmall(ImportedKeyColDeleteRuleIndex, GetSmallByName('DELETE_RULE'));
+      Result.UpdateString(ImportedKeyColFKNameIndex, GetStringByName('FK_NAME'));
+      Result.UpdateString(ImportedKeyColPKNameIndex, GetStringByName('PK_NAME'));
+      Result.UpdateInt(ImportedKeyColDeferrabilityIndex, GetIntByName('DEFERRABILITY'));
+      Result.InsertRow;
     end;
+    Close;
+  end;
 end;
 
 {**
@@ -3454,47 +3371,33 @@ end;
 function TZSybaseDatabaseMetadata.UncachedGetExportedKeys(const Catalog: string;
   const Schema: string; const Table: string): IZResultSet;
 begin
-    Result:=inherited UncachedGetExportedKeys(Catalog, Schema, Table);
+  Result := inherited UncachedGetExportedKeys(Catalog, Schema, Table);
 
-    with GetStatement.ExecuteQuery(
-      Format('exec sp_jdbc_exportkey %s, %s, %s',
-      [ComposeObjectString(Catalog), ComposeObjectString(Schema), ComposeObjectString(Table)])) do
+  with GetStatement.ExecuteQuery(
+    Format('exec sp_jdbc_exportkey %s, %s, %s',
+    [ComposeObjectString(Catalog), ComposeObjectString(Schema), ComposeObjectString(Table)])) do
+  begin
+    while Next do
     begin
-      while Next do
-      begin
-        Result.MoveToInsertRow;
-        Result.UpdateStringByName('PKTABLE_CAT',
-          GetStringByName('PKTABLE_CAT'));
-        Result.UpdateStringByName('PKTABLE_SCHEM',
-          GetStringByName('PKTABLE_SCHEM'));
-        Result.UpdateStringByName('PKTABLE_NAME',
-          GetStringByName('PKTABLE_NAME'));
-        Result.UpdateStringByName('PKCOLUMN_NAME',
-          GetStringByName('PKCOLUMN_NAME'));
-        Result.UpdateStringByName('FKTABLE_CAT',
-          GetStringByName('FKTABLE_CAT'));
-        Result.UpdateStringByName('FKTABLE_SCHEM',
-          GetStringByName('FKTABLE_SCHEM'));
-        Result.UpdateStringByName('FKTABLE_NAME',
-          GetStringByName('FKTABLE_NAME'));
-        Result.UpdateStringByName('FKCOLUMN_NAME',
-          GetStringByName('FKCOLUMN_NAME'));
-        Result.UpdateShortByName('KEY_SEQ',
-          GetShortByName('KEY_SEQ'));
-        Result.UpdateShortByName('UPDATE_RULE',
-          GetShortByName('UPDATE_RULE'));
-        Result.UpdateShortByName('DELETE_RULE',
-          GetShortByName('DELETE_RULE'));
-        Result.UpdateStringByName('FK_NAME',
-          GetStringByName('FK_NAME'));
-        Result.UpdateStringByName('PK_NAME',
-          GetStringByName('PK_NAME'));
-        Result.UpdateIntByName('DEFERRABILITY',
-          GetIntByName('DEFERRABILITY'));
-        Result.InsertRow;
-      end;
-      Close;
+      Result.MoveToInsertRow;
+      Result.UpdateString(ExportedKeyColPKTableCatalogIndex, GetStringByName('PKTABLE_CAT'));
+      Result.UpdateString(ExportedKeyColPKTableSchemaIndex, GetStringByName('PKTABLE_SCHEM'));
+      Result.UpdateString(ExportedKeyColPKTableNameIndex, GetStringByName('PKTABLE_NAME'));
+      Result.UpdateString(ExportedKeyColPKColumnNameIndex, GetStringByName('PKCOLUMN_NAME'));
+      Result.UpdateString(ExportedKeyColFKTableCatalogIndex, GetStringByName('FKTABLE_CAT'));
+      Result.UpdateString(ExportedKeyColFKTableSchemaIndex, GetStringByName('FKTABLE_SCHEM'));
+      Result.UpdateString(ExportedKeyColFKTableNameIndex, GetStringByName('FKTABLE_NAME'));
+      Result.UpdateString(ExportedKeyColFKColumnNameIndex, GetStringByName('FKCOLUMN_NAME'));
+      Result.UpdateSmall(ExportedKeyColKeySeqIndex, GetSmallByName('KEY_SEQ'));
+      Result.UpdateSmall(ExportedKeyColUpdateRuleIndex, GetSmallByName('UPDATE_RULE'));
+      Result.UpdateSmall(ExportedKeyColDeleteRuleIndex, GetSmallByName('DELETE_RULE'));
+      Result.UpdateString(ExportedKeyColFKNameIndex, GetStringByName('FK_NAME'));
+      Result.UpdateString(ExportedKeyColPKNameIndex, GetStringByName('PK_NAME'));
+      Result.UpdateInt(ExportedKeyColDeferrabilityIndex, GetIntByName('DEFERRABILITY'));
+      Result.InsertRow;
     end;
+    Close;
+  end;
 end;
 
 {**
@@ -3575,50 +3478,41 @@ end;
 function TZSybaseDatabaseMetadata.UncachedGetCrossReference(const PrimaryCatalog: string;
   const PrimarySchema: string; const PrimaryTable: string; const ForeignCatalog: string;
   const ForeignSchema: string; const ForeignTable: string): IZResultSet;
+var
+  Statement: String;
 begin
-    Result:=inherited UncachedGetCrossReference(PrimaryCatalog, PrimarySchema, PrimaryTable,
-                                        ForeignCatalog, ForeignSchema, ForeignTable);
+  Result:=inherited UncachedGetCrossReference(PrimaryCatalog, PrimarySchema, PrimaryTable,
+                                      ForeignCatalog, ForeignSchema, ForeignTable);
 
-    with GetStatement.ExecuteQuery(
-      Format('exec sp_jdbc_getcrossreferences %s, %s, %s, %s, %s, %s',
-      [ComposeObjectString(PrimaryCatalog), ComposeObjectString(PrimarySchema), ComposeObjectString(PrimaryTable),
-       ComposeObjectString(ForeignCatalog), ComposeObjectString(ForeignSchema), ComposeObjectString(ForeignTable)])) do
+  statement :=
+    Format('exec sp_jdbc_getcrossreferences %s, %s, %s, %s, %s, %s',
+    [ComposeObjectString(PrimaryCatalog), ComposeObjectString(PrimarySchema), ComposeObjectString(PrimaryTable),
+     ComposeObjectString(ForeignCatalog), ComposeObjectString(ForeignSchema), ComposeObjectString(ForeignTable)]);
+
+  with GetStatement.ExecuteQuery(Statement
+       ) do
+  begin
+    while Next do
     begin
-      while Next do
-      begin
-        Result.MoveToInsertRow;
-        Result.UpdateStringByName('PKTABLE_CAT',
-          GetStringByName('PKTABLE_CAT'));
-        Result.UpdateStringByName('PKTABLE_SCHEM',
-          GetStringByName('PKTABLE_SCHEM'));
-        Result.UpdateStringByName('PKTABLE_NAME',
-          GetStringByName('PKTABLE_NAME'));
-        Result.UpdateStringByName('PKCOLUMN_NAME',
-          GetStringByName('PKCOLUMN_NAME'));
-        Result.UpdateStringByName('FKTABLE_CAT',
-          GetStringByName('FKTABLE_CAT'));
-        Result.UpdateStringByName('FKTABLE_SCHEM',
-          GetStringByName('FKTABLE_SCHEM'));
-        Result.UpdateStringByName('FKTABLE_NAME',
-          GetStringByName('FKTABLE_NAME'));
-        Result.UpdateStringByName('FKCOLUMN_NAME',
-          GetStringByName('FKCOLUMN_NAME'));
-        Result.UpdateShortByName('KEY_SEQ',
-          GetShortByName('KEY_SEQ'));
-        Result.UpdateShortByName('UPDATE_RULE',
-          GetShortByName('UPDATE_RULE'));
-        Result.UpdateShortByName('DELETE_RULE',
-          GetShortByName('DELETE_RULE'));
-        Result.UpdateStringByName('FK_NAME',
-          GetStringByName('FK_NAME'));
-        Result.UpdateStringByName('PK_NAME',
-          GetStringByName('PK_NAME'));
-        Result.UpdateIntByName('DEFERRABILITY',
-          GetIntByName('DEFERRABILITY'));
-        Result.InsertRow;
-      end;
-      Close;
+      Result.MoveToInsertRow;
+      Result.UpdateString(CrossRefKeyColPKTableCatalogIndex, GetStringByName('PKTABLE_CAT'));
+      Result.UpdateString(CrossRefKeyColPKTableSchemaIndex, GetStringByName('PKTABLE_SCHEM'));
+      Result.UpdateString(CrossRefKeyColPKTableNameIndex, GetStringByName('PKTABLE_NAME'));
+      Result.UpdateString(CrossRefKeyColPKColumnNameIndex, GetStringByName('PKCOLUMN_NAME'));
+      Result.UpdateString(CrossRefKeyColFKTableCatalogIndex, GetStringByName('FKTABLE_CAT'));
+      Result.UpdateString(CrossRefKeyColFKTableSchemaIndex, GetStringByName('FKTABLE_SCHEM'));
+      Result.UpdateString(CrossRefKeyColFKTableNameIndex, GetStringByName('FKTABLE_NAME'));
+      Result.UpdateString(CrossRefKeyColFKColumnNameIndex, GetStringByName('FKCOLUMN_NAME'));
+      Result.UpdateSmall(CrossRefKeyColKeySeqIndex, GetSmallByName('KEY_SEQ'));
+      Result.UpdateSmall(CrossRefKeyColUpdateRuleIndex, GetSmallByName('UPDATE_RULE'));
+      Result.UpdateSmall(CrossRefKeyColDeleteRuleIndex, GetSmallByName('DELETE_RULE'));
+      Result.UpdateString(CrossRefKeyColFKNameIndex, GetStringByName('FK_NAME'));
+      Result.UpdateString(CrossRefKeyColPKNameIndex, GetStringByName('PK_NAME'));
+      Result.UpdateInt(CrossRefKeyColDeferrabilityIndex, GetIntByName('DEFERRABILITY'));
+      Result.InsertRow;
     end;
+    Close;
+  end;
 end;
 
 {**
@@ -3668,53 +3562,36 @@ end;
 }
 function TZSybaseDatabaseMetadata.UncachedGetTypeInfo: IZResultSet;
 begin
-    Result:=inherited UncachedGetTypeInfo;
+  Result:=inherited UncachedGetTypeInfo;
 
-    with GetStatement.ExecuteQuery('exec sp_jdbc_datatype_info') do
+  with GetStatement.ExecuteQuery('exec sp_jdbc_datatype_info') do
+  begin
+    while Next do
     begin
-      while Next do
-      begin
-        Result.MoveToInsertRow;
-        Result.UpdateStringByName('TYPE_NAME',
-          GetStringByName('TYPE_NAME'));
-        Result.UpdateShortByName('DATA_TYPE',
-          Ord(ConvertODBCToSqlType(GetShortByName('DATA_TYPE'), ConSettings.CPType)));
-        Result.UpdateIntByName('PRECISION',
-          GetIntByName('PRECISION'));
-        Result.UpdateStringByName('LITERAL_PREFIX',
-          GetStringByName('LITERAL_PREFIX'));
-        Result.UpdateStringByName('LITERAL_SUFFIX',
-          GetStringByName('LITERAL_SUFFIX'));
-        Result.UpdateStringByName('CREATE_PARAMS',
-          GetStringByName('CREATE_PARAMS'));
-        Result.UpdateShortByName('NULLABLE',
-          GetShortByName('NULLABLE'));
-        Result.UpdateBooleanByName('CASE_SENSITIVE',
-          GetShortByName('CASE_SENSITIVE') = 1);
-        Result.UpdateShortByName('SEARCHABLE',
-          GetShortByName('SEARCHABLE'));
-        Result.UpdateBooleanByName('UNSIGNED_ATTRIBUTE',
-          GetShortByName('UNSIGNED_ATTRIBUTE') = 1);
-        Result.UpdateBooleanByName('FIXED_PREC_SCALE',
-          GetShortByName('FIXED_PREC_SCALE') = 1);
-        Result.UpdateBooleanByName('AUTO_INCREMENT',
-          GetShortByName('AUTO_INCREMENT') = 1);
-        Result.UpdateStringByName('LOCAL_TYPE_NAME',
-          GetStringByName('LOCAL_TYPE_NAME'));
-        Result.UpdateShortByName('MINIMUM_SCALE',
-          GetShortByName('MINIMUM_SCALE'));
-        Result.UpdateShortByName('MAXIMUM_SCALE',
-          GetShortByName('MAXIMUM_SCALE'));
-        Result.UpdateShortByName('SQL_DATA_TYPE',
-          GetShortByName('SQL_DATA_TYPE'));
-        Result.UpdateShortByName('SQL_DATETIME_SUB',
-          GetShortByName('SQL_DATETIME_SUB'));
-        Result.UpdateShortByName('NUM_PREC_RADIX',
-          GetShortByName('NUM_PREC_RADIX'));
-        Result.InsertRow;
-      end;
-      Close;
+      Result.MoveToInsertRow;
+      Result.UpdateString(TypeInfoTypeNameIndex, GetStringByName('TYPE_NAME'));
+      Result.UpdateSmall(TypeInfoDataTypeIndex,
+        Ord(ConvertODBCToSqlType(GetSmallByName('DATA_TYPE'), ConSettings.CPType)));
+      Result.UpdateInt(TypeInfoPecisionIndex, GetIntByName('PRECISION'));
+      Result.UpdateString(TypeInfoLiteralPrefixIndex, GetStringByName('LITERAL_PREFIX'));
+      Result.UpdateString(TypeInfoLiteralSuffixIndex, GetStringByName('LITERAL_SUFFIX'));
+      Result.UpdateString(TypeInfoCreateParamsIndex, GetStringByName('CREATE_PARAMS'));
+      Result.UpdateSmall(TypeInfoNullAbleIndex, GetSmallByName('NULLABLE'));
+      Result.UpdateBoolean(TypeInfoCaseSensitiveIndex, GetSmallByName('CASE_SENSITIVE') = 1);
+      Result.UpdateSmall(TypeInfoSearchableIndex, GetSmallByName('SEARCHABLE'));
+      Result.UpdateBoolean(TypeInfoUnsignedAttributeIndex, GetSmallByName('UNSIGNED_ATTRIBUTE') = 1);
+      Result.UpdateBoolean(TypeInfoFixedPrecScaleIndex, GetSmallByName('FIXED_PREC_SCALE') = 1);
+      Result.UpdateBoolean(TypeInfoAutoIncrementIndex, GetSmallByName('AUTO_INCREMENT') = 1);
+      Result.UpdateString(TypeInfoLocaleTypeNameIndex, GetStringByName('LOCAL_TYPE_NAME'));
+      Result.UpdateSmall(TypeInfoMinimumScaleIndex, GetSmallByName('MINIMUM_SCALE'));
+      Result.UpdateSmall(TypeInfoMaximumScaleIndex, GetSmallByName('MAXIMUM_SCALE'));
+      Result.UpdateSmall(TypeInfoSQLDataTypeIndex, GetSmallByName('SQL_DATA_TYPE'));
+      Result.UpdateSmall(TypeInfoSQLDateTimeSubIndex, GetSmallByName('SQL_DATETIME_SUB'));
+      Result.UpdateSmall(TypeInfoNumPrecRadix, GetSmallByName('NUM_PREC_RADIX'));
+      Result.InsertRow;
     end;
+    Close;
+  end;
 end;
 
 {**
@@ -3774,52 +3651,35 @@ function TZSybaseDatabaseMetadata.UncachedGetIndexInfo(const Catalog: string;
 var
   Is_Unique, Accuracy: string;
 begin
-    Result:=inherited UncachedGetIndexInfo(Catalog, Schema, Table, Unique, Approximate);
+  Result:=inherited UncachedGetIndexInfo(Catalog, Schema, Table, Unique, Approximate);
 
-    if Unique then
-      Is_Unique := '''1'''
-    else Is_Unique := '''0''';
-    if Approximate then
-      Accuracy := '''1'''
-    else Accuracy := '''0''';
+  Is_Unique := SQLQuotedStr(BoolStrInts[Unique], '''');
+  Accuracy := SQLQuotedStr(BoolStrInts[Approximate], '''');
 
-    with GetStatement.ExecuteQuery(
-      Format('exec sp_jdbc_getindexinfo %s, %s, %s, %s, %s',
-      [ComposeObjectString(Catalog), ComposeObjectString(Schema), ComposeObjectString(Table), Is_Unique, Accuracy])) do
+  with GetStatement.ExecuteQuery(
+    Format('exec sp_jdbc_getindexinfo %s, %s, %s, %s, %s',
+    [ComposeObjectString(Catalog), ComposeObjectString(Schema), ComposeObjectString(Table), Is_Unique, Accuracy])) do
+  begin
+    while Next do
     begin
-      while Next do
-      begin
-        Result.MoveToInsertRow;
-        Result.UpdateStringByName('TABLE_CAT',
-          GetStringByName('TABLE_CAT'));
-        Result.UpdateStringByName('TABLE_SCHEM',
-          GetStringByName('TABLE_SCHEM'));
-        Result.UpdateStringByName('TABLE_NAME',
-          GetStringByName('TABLE_NAME'));
-        Result.UpdateBooleanByName('NON_UNIQUE',
-          GetShortByName('NON_UNIQUE') = 1);
-        Result.UpdateStringByName('INDEX_QUALIFIER',
-          GetStringByName('INDEX_QUALIFIER'));
-        Result.UpdateStringByName('INDEX_NAME',
-          GetStringByName('INDEX_NAME'));
-        Result.UpdateShortByName('TYPE',
-          GetShortByName('TYPE'));
-        Result.UpdateShortByName('ORDINAL_POSITION',
-          GetShortByName('ORDINAL_POSITION'));
-        Result.UpdateStringByName('COLUMN_NAME',
-          GetStringByName('COLUMN_NAME'));
-        Result.UpdateStringByName('ASC_OR_DESC',
-          GetStringByName('ASC_OR_DESC'));
-        Result.UpdateIntByName('CARDINALITY',
-          GetIntByName('CARDINALITY'));
-        Result.UpdateIntByName('PAGES',
-          GetIntByName('PAGES'));
-        Result.UpdateStringByName('FILTER_CONDITION',
-          GetStringByName('FILTER_CONDITION'));
-        Result.InsertRow;
-      end;
-      Close;
+      Result.MoveToInsertRow;
+      Result.UpdateString(CatalogNameIndex, GetStringByName('TABLE_CAT'));
+      Result.UpdateString(SchemaNameIndex, GetStringByName('TABLE_SCHEM'));
+      Result.UpdateString(TableNameIndex, GetStringByName('TABLE_NAME'));
+      Result.UpdateBoolean(IndexInfoColNonUniqueIndex, GetSmallByName('NON_UNIQUE') = 1);
+      Result.UpdateString(IndexInfoColIndexQualifierIndex, GetStringByName('INDEX_QUALIFIER'));
+      Result.UpdateString(IndexInfoColIndexNameIndex, GetStringByName('INDEX_NAME'));
+      Result.UpdateSmall(IndexInfoColTypeIndex, GetSmallByName('TYPE'));
+      Result.UpdateSmall(IndexInfoColOrdPositionIndex, GetSmallByName('ORDINAL_POSITION'));
+      Result.UpdateString(IndexInfoColColumnNameIndex, GetStringByName('COLUMN_NAME'));
+      Result.UpdateString(IndexInfoColAscOrDescIndex, GetStringByName('ASC_OR_DESC'));
+      Result.UpdateInt(IndexInfoColCardinalityIndex, GetIntByName('CARDINALITY'));
+      Result.UpdateInt(IndexInfoColPagesIndex, GetIntByName('PAGES'));
+      Result.UpdateString(IndexInfoColFilterConditionIndex, GetStringByName('FILTER_CONDITION'));
+      Result.InsertRow;
     end;
+    Close;
+  end;
 end;
 
 {**
@@ -3864,15 +3724,11 @@ var
   I: Integer;
   UDTypes: string;
 begin
-    Result:=inherited UncachedGetUDTs(Catalog, SchemaPattern, TypeNamePattern, Types);
+  Result:=inherited UncachedGetUDTs(Catalog, SchemaPattern, TypeNamePattern, Types);
 
-    UDTypes := '';
-    for I := 0 to Length(Types) - 1 do
-    begin
-      if Length(UDTypes) > 0 then
-        UDTypes := UDTypes + ',';
-      UDTypes := UDTypes + AnsiQuotedStr(IntToStr(Types[I]), '''');
-    end;
+  UDTypes := '';
+  for I := 0 to Length(Types) - 1 do
+    AppendSepString(UDTypes, SQLQuotedStr(ZFastCode.IntToStr(Types[I]), ''''), ',');
 
   with GetStatement.ExecuteQuery(
     Format('exec sp_jdbc_getudts %s, %s, %s, %s',
@@ -3880,28 +3736,20 @@ begin
      ComposeObjectString(TypeNamePattern, '''%'''), ComposeObjectString(UDTypes)])) do
   begin
     while Next do
-      while Next do
-      begin
-        Result.MoveToInsertRow;
-        Result.UpdateStringByName('TYPE_CAT',
-          GetStringByName('TYPE_CAT'));
-        Result.UpdateStringByName('TYPE_SCHEM',
-          GetStringByName('TYPE_SCHEM'));
-        Result.UpdateStringByName('TYPE_NAME',
-          GetStringByName('TYPE_NAME'));
-        Result.UpdateStringByName('JAVA_CLASS',
-          GetStringByName('JAVA_CLASS'));
-        Result.UpdateShortByName('DATA_TYPE',
-          Ord(ConvertODBCToSqlType(GetShortByName('DATA_TYPE'), ConSettings.CPType)));
-        Result.UpdateStringByName('REMARKS',
-          GetStringByName('REMARKS'));
-        Result.InsertRow;
-      end;
-      Close;
+    begin
+      Result.MoveToInsertRow;
+      Result.UpdateString(CatalogNameIndex, GetStringByName('TYPE_CAT'));
+      Result.UpdateString(SchemaNameIndex, GetStringByName('TYPE_SCHEM'));
+      Result.UpdateString(UDTColTypeNameIndex, GetStringByName('TYPE_NAME'));
+      Result.UpdateString(UDTColClassNameIndex, GetStringByName('JAVA_CLASS'));
+      Result.UpdateSmall(UDTColDataTypeIndex, Ord(ConvertODBCToSqlType(
+        GetSmallByName('DATA_TYPE'), ConSettings.CPType)));
+      Result.UpdateString(UDTColRemarksIndex, GetStringByName('REMARKS'));
+      Result.InsertRow;
     end;
+    Close;
+  end;
 end;
 
+{$ENDIF ZEOS_DISABLE_DBLIB} //if set we have an empty unit
 end.
-
-
-

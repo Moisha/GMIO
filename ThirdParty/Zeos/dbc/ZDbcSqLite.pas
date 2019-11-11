@@ -55,15 +55,15 @@ interface
 
 {$I ZDbc.inc}
 
+{$IFNDEF ZEOS_DISABLE_SQLITE} //if set we have an empty unit
 uses
-  Types, Classes, {$IFDEF MSEgui}mclasses,{$ENDIF} SysUtils,
+  Classes, {$IFDEF MSEgui}mclasses,{$ENDIF} SysUtils,
   ZDbcIntfs, ZDbcConnection, ZPlainSqLiteDriver, ZDbcLogging, ZTokenizer,
-  ZGenericSqlAnalyser, ZURL, ZPlainDriver, ZCompatibility;
+  ZGenericSqlAnalyser, ZURL, ZCompatibility;
 
 type
 
   {** Implements SQLite Database Driver. }
-  {$WARNINGS OFF}
   TZSQLiteDriver = class(TZAbstractDriver)
   public
     constructor Create; override;
@@ -74,32 +74,39 @@ type
     function GetTokenizer: IZTokenizer; override;
     function GetStatementAnalyser: IZStatementAnalyser; override;
   end;
-  {$WARNINGS ON}
 
   {** Represents a SQLite specific connection interface. }
   IZSQLiteConnection = interface (IZConnection)
     ['{A4B797A9-7CF7-4DE9-A5BB-693DD32D07D2}']
-    function UseOldBlobEncoding: Boolean;
     function GetPlainDriver: IZSQLitePlainDriver;
     function GetConnectionHandle: Psqlite;
+    function GetUndefinedVarcharAsStringLength: Integer;
+    function ExtendedErrorMessage: Boolean;
   end;
 
   {** Implements SQLite Database Connection. }
 
   { TZSQLiteConnection }
-
+  TSQLite3TransactionAction = (traBegin, traCommit, traRollBack);
+  TSQLite3TransactionStmt = record
+    Stmt: Psqlite3_stmt;
+    SQL: RawByteString;
+    nBytes: Integer;
+  end;
   TZSQLiteConnection = class(TZAbstractConnection, IZSQLiteConnection)
   private
     FCatalog: string;
     FHandle: Psqlite;
-    function UseOldBlobEncoding: Boolean;
+    FPlainDriver: IZSQLitePlainDriver;
+    FTransactionStmts: array[TSQLite3TransactionAction] of TSQLite3TransactionStmt;
+    FExtendedErrorMessage: Boolean;
+    procedure ExecTransactionStmt(Action: TSQLite3TransactionAction);
   protected
     procedure InternalCreate; override;
     procedure StartTransactionSupport;
-
+    function GetUndefinedVarcharAsStringLength: Integer;
+    function ExtendedErrorMessage: Boolean;
   public
-    destructor Destroy; override;
-
     function CreateRegularStatement(Info: TStrings): IZStatement; override;
     function CreatePreparedStatement(const SQL: string; Info: TStrings):
       IZPreparedStatement; override;
@@ -108,7 +115,9 @@ type
     procedure Rollback; override;
 
     procedure Open; override;
-    procedure Close; override;
+    procedure InternalClose; override;
+
+    procedure SetAutoCommit(Value: Boolean); override;
 
     procedure SetCatalog(const Catalog: string); override;
     function GetCatalog: string; override;
@@ -123,22 +132,19 @@ type
 
     function ReKey(const Key: string): Integer;
     function Key(const Key: string): Integer;
-    function GetBinaryEscapeString(const Value: RawByteString): String; overload; override;
-    function GetBinaryEscapeString(const Value: TByteDynArray): String; overload; override;
-    {$IFDEF ZEOS_TEST_ONLY}
-    constructor Create(const ZUrl: TZURL);
-    {$ENDIF}
   end;
 
 var
   {** The common driver manager object. }
   SQLiteDriver: IZDriver;
 
+{$ENDIF ZEOS_DISABLE_SQLITE} //if set we have an empty unit
 implementation
+{$IFNDEF ZEOS_DISABLE_SQLITE} //if set we have an empty unit
 
 uses
-  ZSysUtils, ZDbcUtils, ZDbcSqLiteStatement, ZSqLiteToken,
-  ZDbcSqLiteUtils, ZDbcSqLiteMetadata, ZSqLiteAnalyser
+  ZSysUtils, ZDbcSqLiteStatement, ZSqLiteToken, ZFastCode,
+  ZDbcSqLiteUtils, ZDbcSqLiteMetadata, ZSqLiteAnalyser, ZMessages
   {$IFDEF WITH_UNITANSISTRINGS}, AnsiStrings{$ENDIF};
 
 { TZSQLiteDriver }
@@ -176,12 +182,10 @@ end;
   @return a <code>Connection</code> object that represents a
     connection to the URL
 }
-{$WARNINGS OFF}
 function TZSQLiteDriver.Connect(const Url: TZURL): IZConnection;
 begin
   Result := TZSQLiteConnection.Create(Url);
 end;
-{$WARNINGS ON}
 
 {**
   Gets the driver's major version number. Initially this should be 1.
@@ -207,9 +211,7 @@ end;
 }
 function TZSQLiteDriver.GetTokenizer: IZTokenizer;
 begin
-  if Tokenizer = nil then
-    Tokenizer := TZSQLiteTokenizer.Create;
-  Result := Tokenizer;
+  Result := TZSQLiteTokenizer.Create; { thread save! Allways return a new Tokenizer! }
 end;
 
 {**
@@ -218,9 +220,7 @@ end;
 }
 function TZSQLiteDriver.GetStatementAnalyser: IZStatementAnalyser;
 begin
-  if Analyser = nil then
-    Analyser := TZSQLiteStatementAnalyser.Create;
-  Result := Analyser;
+  Result := TZSQLiteStatementAnalyser.Create; { thread save! Allways return a new Analyser! }
 end;
 
 { TZSQLiteConnection }
@@ -231,23 +231,17 @@ end;
 procedure TZSQLiteConnection.InternalCreate;
 begin
   FMetadata := TZSQLiteDatabaseMetadata.Create(Self, Url);
-  AutoCommit := True;
-  TransactIsolationLevel := tiNone;
+  //https://sqlite.org/pragma.html#pragma_read_uncommitted
+  inherited SetTransactionIsolation(tiSerializable);
   CheckCharEncoding('UTF-8');
-  Open;
-end;
-
-{**
-  Destroys this object and cleanups the memory.
-}
-destructor TZSQLiteConnection.Destroy;
-begin
-  inherited Destroy;
-end;
-
-function TZSQLiteConnection.UseOldBlobEncoding: Boolean;
-begin
-  Result := Url.Properties.Values['OldBlobEncoding'] = 'True';
+  FUndefinedVarcharAsStringLength := StrToIntDef(Info.Values['Undefined_Varchar_AsString_Length'], 0);
+  FTransactionStmts[traBegin].SQL := 'BEGIN TRANSACTION';
+  FTransactionStmts[traBegin].nBytes := Length(FTransactionStmts[traBegin].SQL);
+  FTransactionStmts[traCommit].SQL := 'COMMIT TRANSACTION';
+  FTransactionStmts[traCommit].nBytes := Length(FTransactionStmts[traCommit].SQL);
+  FTransactionStmts[traRollBack].SQL := 'ROLLBACK TRANSACTION';
+  FTransactionStmts[traRollBack].nBytes := Length(FTransactionStmts[traRollBack].SQL);
+  FExtendedErrorMessage := StrToBoolDef(Info.Values['ExtendedErrorMessage'], False);
 end;
 
 {**
@@ -260,9 +254,9 @@ var
   ErrorCode: Integer;
 begin
   {$IFDEF UNICODE}
-  ErrorCode := GetPlainDriver.Key(FHandle, PAnsiChar(UTF8String(Key)), {$IFDEF WITH_STRLEN_DEPRECATED}AnsiStrings.{$ENDIF}StrLen(PAnsiChar(UTF8String(Key))));
+  ErrorCode := GetPlainDriver.Key(FHandle, PAnsiChar(UTF8String(Key)), ZFastCode.StrLen(PAnsiChar(UTF8String(Key))));
   {$ELSE}
-  ErrorCode := GetPlainDriver.Key(FHandle, PAnsiChar(Key), StrLen(PAnsiChar(Key)));
+  ErrorCode := GetPlainDriver.Key(FHandle, PAnsiChar(Key), ZFastCode.StrLen(PAnsiChar(Key)));
   {$ENDIF}
   Result := ErrorCode;
 end;
@@ -278,9 +272,9 @@ var
   ErrorCode: Integer;
 begin
   {$IFDEF UNICODE}
-  ErrorCode := GetPlainDriver.ReKey(FHandle, PAnsiChar(UTF8String(Key)), {$IFDEF WITH_STRLEN_DEPRECATED}AnsiStrings.{$ENDIF}StrLen(PAnsiChar(UTF8String(Key))));
+  ErrorCode := GetPlainDriver.ReKey(FHandle, PAnsiChar(UTF8String(Key)), ZFastCode.StrLen(PAnsiChar(UTF8String(Key))));
   {$ELSE}
-  ErrorCode := GetPlainDriver.ReKey(FHandle, PAnsiChar(Key), StrLen(PAnsiChar(Key)));
+  ErrorCode := GetPlainDriver.ReKey(FHandle, PAnsiChar(Key), ZFastCode.StrLen(PAnsiChar(Key)));
   {$ENDIF}
   Result := ErrorCode;
 end;
@@ -290,74 +284,61 @@ end;
 }
 procedure TZSQLiteConnection.Open;
 var
-  ErrorCode: Integer;
-  ErrorMessage: PAnsiChar;
-  LogMessage: string;
-  SQL: AnsiString;
-  Timeout_ms: Integer;
+  LogMessage: RawByteString;
+  SQL: RawByteString;
+  TmpInt: Integer;
+  Stmt: IZStatement;
 begin
   if not Closed then
     Exit;
-  ErrorMessage := '';
 
-  LogMessage := Format('CONNECT TO "%s" AS USER "%s"', [Database, User]);
+  LogMessage := 'CONNECT TO "'+ConSettings^.Database+'" AS USER "'+ConSettings^.User+'"';
 
-{$IFDEF UNICODE}
-  FHandle := GetPlainDriver.Open(PAnsiChar(AnsiString(UTF8Encode(Database))), 0, ErrorMessage);
-{$ELSE}
-  FHandle := GetPlainDriver.Open(PAnsiChar(Database), 0, ErrorMessage);
-{$ENDIF}
-
-  if FHandle = nil then
-  begin
-    CheckSQLiteError(GetPlainDriver, FHandle, SQLITE_ERROR, ErrorMessage,
-      lcConnect, LogMessage);
-  end;
-  DriverManager.LogMessage(lcConnect, PlainDriver.GetProtocol, LogMessage);
+  SQL := {$IFDEF UNICODE}UTF8String{$ENDIF}(Database);
+  //patch by omaga software see https://sourceforge.net/p/zeoslib/tickets/312/
+  TmpInt := GetPlainDriver.open(Pointer(SQL), FHandle);
+  if TmpInt <> SQLITE_OK then
+    CheckSQLiteError(FPlainDriver, FHandle, TmpInt, lcConnect, LogMessage, ConSettings, FExtendedErrorMessage);
+  DriverManager.LogMessage(lcConnect, ConSettings^.Protocol, LogMessage);
 
   { Turn on encryption if requested }
   if StrToBoolEx(Info.Values['encrypted']) then
   begin
-    {$IFDEF UNICODE}
-    ErrorCode := GetPlainDriver.Key(FHandle, PAnsiChar(UTF8String(Password)), {$IFDEF WITH_STRLEN_DEPRECATED}AnsiStrings.{$ENDIF}StrLen(PAnsiChar(UTF8String(Password))));
-    {$ELSE}
-    ErrorCode := GetPlainDriver.Key(FHandle, PAnsiChar(Password), StrLen(PAnsiChar(Password)));
-    {$ENDIF}
-    CheckSQLiteError(GetPlainDriver, FHandle, ErrorCode, nil, lcConnect, 'SQLite.Key');
+    SQL := {$IFDEF UNICODE}UTF8String{$ENDIF}(Password);
+    CheckSQLiteError(FPlainDriver, FHandle,
+      GetPlainDriver.Key(FHandle, Pointer(SQL), Length(SQL)),
+      lcConnect, 'SQLite.Key', ConSettings, FExtendedErrorMessage);
   end;
 
   { Set busy timeout if requested }
-  Timeout_ms := StrToIntDef(Info.Values['busytimeout'], -1); 
-  if Timeout_ms >= 0 then 
-  begin 
-    GetPlainDriver.BusyTimeout(FHandle, Timeout_ms);
-  end; 
+  TmpInt := StrToIntDef(Info.Values['busytimeout'], -1);
+  if TmpInt >= 0 then
+    GetPlainDriver.BusyTimeout(FHandle, TmpInt);
+
+  Stmt := TZSQLiteStatement.Create(GetPlainDriver, Self, Info, FHandle);
+  { pimp performance }
+  Stmt.ExecuteUpdate('PRAGMA cache_size = '+IntToRaw(StrToIntDef(Info.Values['cache_size'], 10000)));
+
+  //see http://www.sqlite.org/pragma.html#pragma_synchronous
+  //0 brings best performance
+  if Info.Values['synchronous'] <> '' then
+    Stmt.ExecuteUpdate('PRAGMA synchronous = '+{$IFDEF UNICODE}UnicodeStringToAscii7{$ENDIF}(Info.Values['synchronous']));
+
+  //see http://www.sqlite.org/pragma.html#pragma_locking_mode
+  //EXCLUSIVE brings best performance
+  if Info.Values['locking_mode'] <> '' then
+    Stmt.ExecuteUpdate('PRAGMA locking_mode = '+{$IFDEF UNICODE}UnicodeStringToAscii7{$ENDIF}(Info.Values['locking_mode']));
 
   try
-    if ( FClientCodePage <> '' ) then
-    begin
-        SQL := 'PRAGMA encoding = '''+AnsiString(FClientCodePage)+'''';
-        ErrorCode := GetPlainDriver.Execute(FHandle, PAnsiChar(SQL),
-          nil, nil, ErrorMessage);
-        CheckSQLiteError(GetPlainDriver, FHandle, ErrorCode, ErrorMessage, lcExecute, String(SQL));
-    end;
+    if ( FClientCodePage <> '' ) and (FClientCodePage <> 'UTF-8') then
+      Stmt.ExecuteUpdate('PRAGMA encoding = '''+{$IFDEF UNICODE}UnicodeStringToAscii7{$ENDIF}(FClientCodePage)+'''');
 
-    SQL := 'PRAGMA show_datatypes = ON';
-    ErrorCode := GetPlainDriver.Execute(FHandle, PAnsiChar(SQL),
-      nil, nil, ErrorMessage);
-    CheckSQLiteError(GetPlainDriver, FHandle, ErrorCode, ErrorMessage, lcExecute, String(SQL));
+    Stmt.ExecuteUpdate('PRAGMA show_datatypes = ON');
 
     if Info.Values['foreign_keys'] <> '' then
-    begin
-      if StrToBoolEx(Info.Values['foreign_keys']) then
-        SQL := 'PRAGMA foreign_keys = 1'
-      else
-        SQL := 'PRAGMA foreign_keys = 0';
-      ErrorCode := GetPlainDriver.Execute(FHandle, PAnsiChar(SQL), nil, nil, ErrorMessage);
-      CheckSQLiteError(GetPlainDriver, FHandle, ErrorCode, ErrorMessage, lcExecute, String(SQL));
-      DriverManager.LogMessage(lcConnect, GetPlainDriver.GetProtocol, String(SQL));
-    end;
-    StartTransactionSupport;
+      Stmt.ExecuteUpdate('PRAGMA foreign_keys = '+BoolStrIntsRaw[StrToBoolEx(Info.Values['foreign_keys'])] );
+    if not GetAutoCommit then
+      ExecTransactionStmt(traBegin);
   except
     GetPlainDriver.Close(FHandle);
     FHandle := nil;
@@ -386,7 +367,34 @@ function TZSQLiteConnection.CreateRegularStatement(Info: TStrings):
 begin
   if IsClosed then
     Open;
+
   Result := TZSQLiteStatement.Create(GetPlainDriver, Self, Info, FHandle);
+end;
+
+procedure TZSQLiteConnection.ExecTransactionStmt(
+  Action: TSQLite3TransactionAction);
+var
+  pzTail: PAnsiChar;
+begin
+  with FTransactionStmts[Action] do begin
+    if Stmt = nil then
+      CheckSQLiteError(GetPlainDriver, FHandle,
+        GetPlainDriver.Prepare(FHandle, Pointer(SQL), nBytes, Stmt, pzTail),
+          lcExecute, SQL, ConSettings, FExtendedErrorMessage);
+    try
+      CheckSQLiteError(GetPlainDriver, FHandle, GetPlainDriver.Step(Stmt),
+        lcExecute, SQL, ConSettings, FExtendedErrorMessage);
+    finally
+      if Assigned(DriverManager) and DriverManager.HasLoggingListener then
+        DriverManager.LogMessage(lcTransaction, ConSettings^.Protocol, SQL);
+      FPlainDriver.reset(Stmt);
+    end;
+  end;
+end;
+
+function TZSQLiteConnection.ExtendedErrorMessage: Boolean;
+begin
+  Result := FExtendedErrorMessage;
 end;
 
 {**
@@ -422,35 +430,21 @@ function TZSQLiteConnection.CreatePreparedStatement(const SQL: string;
 begin
   if IsClosed then
     Open;
-  {$IFDEF ZEOS_TEST_ONLY}
-  Case GetTestMode of
-    0:
-  {$ENDIF}
-      Result := TZSQLiteCAPIPreparedStatement.Create(GetPlainDriver, Self, SQL, Info, FHandle);
-  {$IFDEF ZEOS_TEST_ONLY}
-    1: Result := TZSQLitePreparedStatement.Create(GetPlainDriver, Self, SQL, Info, FHandle);
-  end;
-  {$ENDIF}
+  Result := TZSQLiteCAPIPreparedStatement.Create(GetPlainDriver, Self, SQL, Info, FHandle);
 end;
 
 {**
   Starts a transaction support.
 }
 procedure TZSQLiteConnection.StartTransactionSupport;
-var
-  ErrorCode: Integer;
-  ErrorMessage: PAnsiChar;
-  SQL: String;
 begin
-  if TransactIsolationLevel <> tiNone then
-  begin
-    ErrorMessage := '';
-    SQL := 'BEGIN TRANSACTION';
-    ErrorCode := GetPlainDriver.Execute(FHandle, PAnsiChar(AnsiString(SQL)), nil, nil,
-      ErrorMessage);
-    CheckSQLiteError(GetPlainDriver, FHandle, ErrorCode, ErrorMessage, lcExecute, SQL);
-    DriverManager.LogMessage(lcExecute, PlainDriver.GetProtocol, SQL);
-  end;
+  if not Closed and not AutoCommit then
+    ExecTransactionStmt(traBegin);
+end;
+
+function TZSQLiteConnection.GetUndefinedVarcharAsStringLength: Integer;
+begin
+  Result := FUndefinedVarcharAsStringLength;
 end;
 
 {**
@@ -461,22 +455,13 @@ end;
   @see #setAutoCommit
 }
 procedure TZSQLiteConnection.Commit;
-var
-  ErrorCode: Integer;
-  ErrorMessage: PAnsiChar;
-  SQL: PAnsiChar;
 begin
-  if (TransactIsolationLevel <> tiNone) and not Closed then
-  begin
-    ErrorMessage := '';
-    SQL := 'COMMIT TRANSACTION';
-    ErrorCode := GetPlainDriver.Execute(FHandle, PAnsiChar(SQL), nil, nil,
-      ErrorMessage);
-    CheckSQLiteError(GetPlainDriver, FHandle, ErrorCode, ErrorMessage, lcExecute, String(SQL));
-    DriverManager.LogMessage(lcExecute, PlainDriver.GetProtocol, String(SQL));
-
-    StartTransactionSupport;
-  end;
+  if not Closed then
+    if not GetAutoCommit then begin
+      ExecTransactionStmt(traCommit);
+      ExecTransactionStmt(traBegin);
+    end else
+      raise Exception.Create(SInvalidOpInAutoCommit);
 end;
 
 {**
@@ -487,22 +472,13 @@ end;
   @see #setAutoCommit
 }
 procedure TZSQLiteConnection.Rollback;
-var
-  ErrorCode: Integer;
-  ErrorMessage: PAnsiChar;
-  SQL: String;
 begin
-  if (TransactIsolationLevel <> tiNone) and not Closed then
-  begin
-    ErrorMessage := '';
-    SQL := 'ROLLBACK TRANSACTION';
-    ErrorCode := GetPlainDriver.Execute(FHandle, PAnsiChar(AnsiString(SQL)), nil, nil,
-      ErrorMessage);
-    CheckSQLiteError(GetPlainDriver, FHandle, ErrorCode, ErrorMessage, lcExecute, SQL);
-    DriverManager.LogMessage(lcExecute, PlainDriver.GetProtocol, SQL);
-
-    StartTransactionSupport;
-  end;
+  if not Closed then
+    if not GetAutoCommit then begin
+      ExecTransactionStmt(traRollback);
+      ExecTransactionStmt(traBegin);
+    end else
+      raise Exception.Create(SInvalidOpInAutoCommit);
 end;
 
 {**
@@ -514,22 +490,26 @@ end;
   garbage collected. Certain fatal errors also result in a closed
   Connection.
 }
-procedure TZSQLiteConnection.Close;
+procedure TZSQLiteConnection.InternalClose;
 var
-  LogMessage: string;
+  LogMessage: RawByteString;
   ErrorCode: Integer;
+  TransactionAction: TSQLite3TransactionAction;
 begin
   if ( Closed ) or (not Assigned(PlainDriver)) then
     Exit;
-
-  LogMessage := 'DISCONNECT FROM "'+Database+'"';
-  if Assigned(DriverManager) then
-    DriverManager.LogMessage(lcDisconnect, PlainDriver.GetProtocol, LogMessage);
+  LogMessage := 'DISCONNECT FROM "'+ConSettings^.Database+'"';
+  for TransactionAction := low(TSQLite3TransactionAction) to high(TSQLite3TransactionAction) do
+    if FTransactionStmts[TransactionAction].Stmt <> nil then begin
+      GetPlainDriver.finalize(FTransactionStmts[TransactionAction].Stmt);
+      FTransactionStmts[TransactionAction].Stmt := nil;
+    end;
   ErrorCode := GetPlainDriver.Close(FHandle);
-  CheckSQLiteError(GetPlainDriver, FHandle, ErrorCode, nil,
-    lcOther, LogMessage);
   FHandle := nil;
-  inherited Close;
+  CheckSQLiteError(GetPlainDriver, FHandle, ErrorCode,
+    lcOther, LogMessage, ConSettings, FExtendedErrorMessage);
+  if Assigned(DriverManager) and DriverManager.HasLoggingListener then //thread save
+    DriverManager.LogMessage(lcDisconnect, ConSettings^.Protocol, LogMessage);
 end;
 
 {**
@@ -550,6 +530,17 @@ end;
   Sets a new selected catalog name.
   @param Catalog a selected catalog name.
 }
+procedure TZSQLiteConnection.SetAutoCommit(Value: Boolean);
+begin
+  if Value <> GetAutoCommit then begin
+    if not GetAutoCommit and not Closed then
+      ExecTransactionStmt(traRollBack);
+    inherited SetAutoCommit(Value);
+    if not Value and not Closed then
+      ExecTransactionStmt(traBegin);
+  end;
+end;
+
 procedure TZSQLiteConnection.SetCatalog(const Catalog: string);
 begin
   FCatalog := Catalog;
@@ -561,25 +552,14 @@ end;
 }
 procedure TZSQLiteConnection.SetTransactionIsolation(
   Level: TZTransactIsolationLevel);
-var
-  ErrorCode: Integer;
-  ErrorMessage: PAnsiChar;
-  SQL: String;
 begin
-  if (TransactIsolationLevel <> tiNone) and not Closed then
-  begin
-    ErrorMessage := '';
-    SQL := 'ROLLBACK TRANSACTION';
-    ErrorCode := GetPlainDriver.Execute(FHandle, PAnsiChar(AnsiString(SQL)), nil, nil,
-      ErrorMessage);
-    CheckSQLiteError(GetPlainDriver, FHandle, ErrorCode, ErrorMessage, lcExecute, SQL);
-    DriverManager.LogMessage(lcExecute, PlainDriver.GetProtocol, SQL);
+  if Level <> GetTransactionIsolation then begin
+    if not GetAutoCommit and not Closed then
+      ExecTransactionStmt(traRollBack);
+    inherited SetTransactionIsolation(Level);
+    if not GetAutoCommit and not Closed then
+      ExecTransactionStmt(traBegin);
   end;
-
-  inherited SetTransactionIsolation(Level);
-
-  if not Closed then
-    StartTransactionSupport;
 end;
 
 {**
@@ -597,47 +577,10 @@ end;
 }
 function TZSQLiteConnection.GetPlainDriver: IZSQLitePlainDriver;
 begin
-  Result := PlainDriver as IZSQLitePlainDriver;
+  if fPlainDriver = nil then
+    fPlainDriver := PlainDriver as IZSQLitePlainDriver;
+  Result := fPlainDriver;
 end;
-
-{**
-  EgonHugeist:
-  Returns the BinaryString in a Tokenizer-detectable kind
-  If the Tokenizer don't need to predetect it Result := BinaryString
-  @param Value represents the Binary-String
-  @param EscapeMarkSequence represents a Tokenizer detectable EscapeSequence (Len >= 3)
-  @result the detectable Binary String
-}
-function TZSQLiteConnection.GetBinaryEscapeString(const Value: RawByteString): String;
-begin
-  if GetAutoEncodeStrings then
-    Result := GetDriver.GetTokenizer.AnsiGetEscapeString(ZDbcSqLiteUtils.EncodeString(PAnsiChar(Value), Length(Value)))
-  else
-    Result := String(ZDbcSqLiteUtils.EncodeString(PAnsiChar(Value), Length(Value)));
-end;
-
-{**
-  EgonHugeist:
-  Returns the BinaryString in a Tokenizer-detectable kind
-  If the Tokenizer don't need to predetect it Result := BinaryString
-  @param Value represents the Binary-String
-  @param EscapeMarkSequence represents a Tokenizer detectable EscapeSequence (Len >= 3)
-  @result the detectable Binary String
-}
-function TZSQLiteConnection.GetBinaryEscapeString(const Value: TByteDynArray): String;
-begin
-  if GetAutoEncodeStrings then
-    Result := GetDriver.GetTokenizer.AnsiGetEscapeString(ZDbcSqLiteUtils.EncodeString(PAnsiChar(Value), Length(Value)))
-  else
-    Result := String(ZDbcSqLiteUtils.EncodeString(PAnsiChar(Value), Length(Value)));
-end;
-
-{$IFDEF ZEOS_TEST_ONLY}
-constructor TZSQLiteConnection.Create(const ZUrl: TZURL);
-begin
-  inherited Create(ZUrl);
- end;
- {$ENDIF}
 
 function TZSQLiteConnection.GetHostVersion: Integer;
 begin
@@ -651,5 +594,6 @@ finalization
   if DriverManager <> nil then
     DriverManager.DeregisterDriver(SQLiteDriver);
   SQLiteDriver := nil;
-end.
 
+{$ENDIF ZEOS_DISABLE_SQLITE} //if set we have an empty unit
+end.

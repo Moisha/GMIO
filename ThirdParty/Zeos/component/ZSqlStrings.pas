@@ -56,7 +56,8 @@ interface
 {$I ZComponent.inc}
 
 uses
-  Types, Classes, SysUtils, {$IFDEF MSEgui}mclasses,{$ENDIF}Contnrs,
+  Types, Classes, SysUtils, {$IFDEF MSEgui}mclasses,{$ENDIF}
+  {$IFNDEF NO_UNIT_CONTNRS}Contnrs{$ELSE}ZClasses{$ENDIF},
   ZDbcIntfs, ZTokenizer, ZGenericSqlToken, ZCompatibility;
 
 type
@@ -66,6 +67,7 @@ type
     FSQL: string;
     FParamIndices: TIntegerDynArray;
     FParams: TStrings;
+    FParamNamesArray: TStringDynArray;
 
     function GetParamCount: Integer;
     function GetParamName(Index: Integer): string;
@@ -77,7 +79,7 @@ type
     property ParamCount: Integer read GetParamCount;
     property ParamNames[Index: Integer]: string read GetParamName;
     property ParamIndices: TIntegerDynArray read FParamIndices;
-    property ParamNamesArray: TStringDynArray read GetParamNamesArray;
+    property ParamNamesArray: TStringDynArray read FParamNamesArray;
   end;
 
   {** Imlements a string list with SQL statements. }
@@ -106,6 +108,7 @@ type
     procedure Changed; override;
     function FindParam(const ParamName: string): Integer;
     procedure RebuildAll;
+    procedure SetTextStr(const Value: string); override;
   public
     constructor Create;
     destructor Destroy; override;
@@ -139,6 +142,7 @@ begin
   FSQL := SQL;
   FParamIndices := ParamIndices;
   FParams := Params;
+  FParamNamesArray := GetParamNamesArray;
 end;
 
 {**
@@ -232,30 +236,28 @@ end;
 
 function TZSQLStrings.GetTokenizer: IZTokenizer;
 var
-  Tokenizer: IZTokenizer;
   Driver: IZDriver;
 begin
   { Defines a SQL specific tokenizer object. }
-  Tokenizer := CommonTokenizer;
+  Result := nil;
   if FDataset is TZAbstractRODataset then
   begin
     if Assigned(TZAbstractRODataset(FDataset).Connection) then
     begin
       Driver := TZAbstractRODataset(FDataset).Connection.DbcDriver;
       if Assigned(Driver) then
-        Tokenizer := Driver.GetTokenizer;
+        Result := Driver.GetTokenizer;
     end;
   end
   else if FDataset is TZSQLProcessor then
-  begin
     if Assigned(TZSQLProcessor(FDataset).Connection) then
     begin
       Driver := TZSQLProcessor(FDataset).Connection.DbcDriver;
       if Assigned(Driver) then
-        Tokenizer := Driver.GetTokenizer;
+        Result := Driver.GetTokenizer;
     end;
-  end;
-  Result:=Tokenizer;
+  if Result = nil then
+    Result := TZGenericSQLTokenizer.Create; { thread save! Allways return a new Tokenizer! }
 end;
 
 {**
@@ -281,6 +283,12 @@ begin
   end;
 end;
 
+procedure TZSQLStrings.SetTextStr(const Value: string);
+begin
+  if Value <> Text then //prevent rebuildall if nothing changed see:
+    inherited SetTextStr(Value);
+end;
+
 {**
   Sets a new ParamChar value.
   @param Value a new ParamCheck value.
@@ -290,7 +298,7 @@ begin
   if FParamChar <> Value then
   begin
     If not(GetTokenizer.GetCharacterState(Value) is TZSymbolstate) Then
-      raise EZDatabaseError.Create('Ongeldige ParamChar waarde : '+Value);
+      raise EZDatabaseError.Create(cSIncorrectParamChar+' : '+Value);
     FParamChar := Value;
     RebuildAll;
   end;
@@ -377,9 +385,8 @@ begin
     Exit;
   end;
 
-  Tokenizer:=GetTokenizer;
-  Tokens := Tokenizer.TokenizeBufferToList(Text,
-    [toSkipComments, toUnifyWhitespaces]);
+  Tokenizer := GetTokenizer;
+  Tokens := Tokenizer.TokenizeBufferToList(Text, [toSkipComments, toUnifyWhitespaces]);
   try
     TokenIndex := 0;
     repeat
@@ -398,10 +405,7 @@ begin
 
           ParamName := TokenValue;
           if (ParamName <> '') and CharInSet(ParamName[1], [#39, '`', '"', '[']) then
-          begin
-            ParamName := Tokenizer.GetQuoteState.
-              DecodeString(ParamName, ParamName[1]);
-          end;
+            ParamName := Tokenizer.GetQuoteState.DecodeString(ParamName, ParamName[1]);
 
           ParamIndex := FindParam(ParamName);
           if ParamIndex < 0 then

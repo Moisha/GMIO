@@ -55,13 +55,17 @@ interface
 
 {$I ZPlain.inc}
 
+{$IFNDEF ZEOS_DISABLE_INTERBASE}
+
 {$IFDEF UNIX}
 {$IFDEF INTERBASE_CRYPT}
 {$DEFINE ENABLE_INTERBASE_CRYPT}
 {$ENDIF}
 {$ENDIF}
 
-uses ZClasses, ZCompatibility, ZPlainDriver, ZPlainLoader, ZPlainFirebirdInterbaseConstants;
+uses Types,
+  {$IFDEF OLDFPC}ZClasses,{$ENDIF} ZCompatibility, ZPlainDriver, ZPlainLoader,
+  ZPlainFirebirdInterbaseConstants;
 
 const
 
@@ -111,9 +115,7 @@ type
     ['{AE2C4379-4E47-4752-BC01-D405ACC337F5}']
 
     function GetFirebirdAPI: TZFirebird_API;
-
-    function ZPlainString(const AStr: String; ConSettings: PZConSettings; const ToCP: Word): RawByteString; overload;
-    function ZPlainString(const AStr: WideString; ConSettings: PZConSettings; const ToCP: Word): RawByteString; overload;
+    function GetCodePageArray: TWordDynArray;
 
     function isc_attach_database (status_vector: PISC_STATUS;
       db_name_length: Short; db_name: PAnsiChar; db_handle: PISC_DB_HANDLE;
@@ -122,9 +124,12 @@ type
       db_handle: PISC_DB_HANDLE): ISC_STATUS;
     function isc_drop_database(status_vector: PISC_STATUS;
       db_handle: PISC_DB_HANDLE): ISC_STATUS;
+    function isc_create_database(status_vector: PISC_STATUS; db_name_len: Smallint;
+      db_name: PAnsiChar; handle: PISC_DB_HANDLE; dpb_len: Smallint; dpb: PAnsiChar;
+      db_type: Smallint{UNUSED}): ISC_STATUS;
     function isc_database_info(status_vector: PISC_STATUS;
       db_handle: PISC_DB_HANDLE; item_list_buffer_length: Short;
-      item_list_buffer: PAnsiChar; result_buffer_length: Short;
+      item_list_buffer: PByte; result_buffer_length: Short;
       result_buffer: PAnsiChar): ISC_STATUS;
     function isc_array_gen_sdl(status_vector: PISC_STATUS;
       isc_array_desc: PISC_ARRAY_DESC; isc_arg3: PShort;
@@ -218,7 +223,7 @@ type
       blob_handle: PISC_BLOB_HANDLE; seg_buffer_len: Word; seg_buffer: PAnsiChar): ISC_STATUS;
     function isc_event_block(event_buffer: PPAnsiChar; result_buffer: PPAnsiChar;
       id_count: Word; event_list: array of PAnsiChar): ISC_LONG;
-    procedure isc_event_counts(status_vector: PISC_STATUS;
+    procedure isc_event_counts(event_counts: PARRAY_ISC_EVENTCOUNTS;
       buffer_length: Short; event_buffer: PAnsiChar; result_buffer: PAnsiChar);
     function isc_cancel_events(status_vector: PISC_STATUS;
       db_handle: PISC_DB_HANDLE; event_id: PISC_LONG): ISC_STATUS;
@@ -229,6 +234,7 @@ type
     procedure isc_decode_date(ib_date: PISC_QUAD; tm_date: PCTimeStructure);
     procedure isc_encode_date(tm_date: PCTimeStructure; ib_date: PISC_QUAD);
     function isc_vax_integer(buffer: PAnsiChar; length: Short): ISC_LONG;
+    function isc_portable_integer(ptr: pbyte; length: Short): ISC_INT64;
 
     procedure isc_decode_sql_date(ib_date: PISC_DATE; tm_date: PCTimeStructure);
     procedure isc_decode_sql_time(ib_time: PISC_TIME; tm_date: PCTimeStructure);
@@ -240,6 +246,9 @@ type
       ib_time: PISC_TIME);
     procedure isc_encode_timestamp(tm_date: PCTimeStructure;
       ib_timestamp: PISC_TIMESTAMP);
+    function isc_get_client_version: String;
+    function isc_get_client_major_version: Integer;
+    function isc_get_client_minor_version: Integer;
   end;
 
   {** Implements a base driver for Firebird}
@@ -249,12 +258,16 @@ type
   TZFirebirdBaseDriver = class (TZAbstractPlainDriver, IZPlainDriver,
     IZInterbasePlainDriver)
     FIREBIRD_API : TZFIREBIRD_API;
+  private
+    FCodePageArray: TWordDynArray;
   protected
+
     FPreLoader : TZNativeLibraryLoader;
+    procedure FillCodePageArray;
     procedure LoadCodePages; override;
     function GetUnicodeCodePageName: String; override;
     {$IFDEF ENABLE_INTERBASE_CRYPT}
-    procedure Initialize; virtual;
+    procedure Initialize(const Location: String = ''); virtual;
     {$ENDIF}
     procedure LoadApi; override;
   public
@@ -264,6 +277,7 @@ type
     {$ENDIF}
 
     function GetFirebirdAPI: TZFirebird_API;
+    function GetCodePageArray: TWordDynArray;
     function isc_attach_database (status_vector: PISC_STATUS;
       db_name_length: Short; db_name: PAnsiChar; db_handle: PISC_DB_HANDLE;
       parm_buffer_length: Short; parm_buffer: PAnsiChar): ISC_STATUS;
@@ -271,9 +285,14 @@ type
       db_handle: PISC_DB_HANDLE): ISC_STATUS;
     function isc_drop_database(status_vector: PISC_STATUS;
       db_handle: PISC_DB_HANDLE): ISC_STATUS;
+
+    function isc_create_database(status_vector: PISC_STATUS; db_name_len: Smallint;
+      db_name: PAnsiChar; handle: PISC_DB_HANDLE; dpb_len: Smallint; dpb: PAnsiChar;
+      db_type: Smallint{UNUSED}): ISC_STATUS;
+
     function isc_database_info(status_vector: PISC_STATUS;
       db_handle: PISC_DB_HANDLE; item_list_buffer_length: Short;
-      item_list_buffer: PAnsiChar; result_buffer_length: Short;
+      item_list_buffer: PByte; result_buffer_length: Short;
       result_buffer: PAnsiChar): ISC_STATUS;
     function isc_transaction_info(status_vector: PISC_STATUS;
       tr_handle: PISC_TR_HANDLE; item_list_buffer_length: Short;
@@ -350,6 +369,22 @@ type
     function isc_dsql_sql_info(status_vector: PISC_STATUS;
       stmt_handle: PISC_STMT_HANDLE; item_length: Short; items: PAnsiChar;
       buffer_length: Short; buffer: PAnsiChar): ISC_STATUS;
+
+    function fb_dsql_set_timeout(status_vector: PISC_STATUS;
+      stmt_handle: PISC_STMT_HANDLE; milliseconds: ISC_ULONG): ISC_STATUS;
+
+    //this function is commented out in the Firebird 4.0 Beta 1 ibase.h too
+    //fb_get_statement_interface: function(status_vector: PISC_STATUS;
+	  //  api_handle: PFB_API_HANDLE; stmt_interface: Pointer;): ISC_STATUS;
+	  //  {$IFDEF MSWINDOWS} stdcall {$ELSE} cdecl {$ENDIF};
+	{
+    ISC_STATUS ISC_EXPORT fb_get_statement_interface(ISC_STATUS*,
+                            FB_API_HANDLE*,
+                            void**);
+    }
+
+    { Blob processing routines }
+
     function isc_open_blob2(status_vector: PISC_STATUS;
       db_handle: PISC_DB_HANDLE; tran_handle: PISC_TR_HANDLE;
       blob_handle: PISC_BLOB_HANDLE; blob_id: PISC_QUAD; bpb_length: Short;
@@ -372,7 +407,7 @@ type
       blob_handle: PISC_BLOB_HANDLE; seg_buffer_len: Word; seg_buffer: PAnsiChar): ISC_STATUS;
     function isc_event_block(event_buffer: PPAnsiChar; result_buffer: PPAnsiChar;
       id_count: Word; event_list: array of PAnsiChar): ISC_LONG;
-    procedure isc_event_counts(status_vector: PISC_STATUS;
+    procedure isc_event_counts(event_counts: PARRAY_ISC_EVENTCOUNTS;
       buffer_length: Short; event_buffer: PAnsiChar; result_buffer: PAnsiChar);
     function isc_cancel_events(status_vector: PISC_STATUS;
       db_handle: PISC_DB_HANDLE; event_id: PISC_LONG): ISC_STATUS;
@@ -393,6 +428,10 @@ type
     procedure isc_encode_timestamp(tm_date: PCTimeStructure;
       ib_timestamp: PISC_TIMESTAMP);
     function isc_vax_integer(buffer: PAnsiChar; length: Short): ISC_LONG;
+    function isc_portable_integer(ptr: pbyte; length: Short): ISC_INT64;
+    function isc_get_client_version: String;
+    function isc_get_client_major_version: Integer;
+    function isc_get_client_minor_version: Integer;
   end;
 
   {** Implements a native driver for Interbase6}
@@ -439,7 +478,6 @@ type
     function GetDescription: string; override;
   end;
 
-
   {** Implements a native driver for Firebird 2.0}
   TZFirebird20PlainDriver = class (TZFirebirdBaseDriver)
   protected
@@ -453,6 +491,7 @@ type
     function GetDescription: string; override;
   end;
 
+  {** Implements a native driver for Firebird 2.0 Embedded}
   TZFirebirdD20PlainDriver = class (TZFirebird20PlainDriver)
   protected
     function Clone: IZPlainDriver; override;
@@ -465,24 +504,21 @@ type
 
   {** Represents class to Interbase 6+ native API. }
 
-  { TZFirebird21PlainDriver }
-
+  {** Implements a native driver for Firebird 2.1}
   TZFirebird21PlainDriver = class (TZFirebirdBaseDriver)
   protected
     function Clone: IZPlainDriver; override;
   protected
     function GetUnicodeCodePageName: String; override;
     procedure LoadCodePages; override;
-    procedure LoadApi; override;
   public
     constructor Create;
 
     function GetProtocol: string; override;
     function GetDescription: string; override;
-
-    function isc_interprete(buffer: PAnsiChar; status_vector: PPISC_STATUS): ISC_STATUS; override;
   end;
 
+  {** Implements a native driver for Firebird 2.1 Embedded}
   TZFirebirdD21PlainDriver = class (TZFirebird21PlainDriver)
   protected
     function Clone: IZPlainDriver; override;
@@ -493,25 +529,20 @@ type
     function GetDescription: string; override;
   end;
 
-  { TZFirebird25PlainDriver }
-
+  {** Implements a native driver for Firebird 2.5}
   TZFirebird25PlainDriver = class (TZFirebirdBaseDriver)
   protected
     function Clone: IZPlainDriver; override;
     function GetUnicodeCodePageName: String; override;
     procedure LoadCodePages; override;
-    procedure LoadApi; override;
   public
     constructor Create;
 
     function GetProtocol: string; override;
     function GetDescription: string; override;
-
-    function isc_interprete(buffer: PAnsiChar; status_vector: PPISC_STATUS): ISC_STATUS; override;
   end;
 
-  { TZFirebirdD25PlainDriver }
-
+  {** Implements a native driver for Firebird 2.5 Embedded}
   TZFirebirdD25PlainDriver = class (TZFirebird25PlainDriver)
   protected
     function Clone: IZPlainDriver; override;
@@ -522,12 +553,33 @@ type
     function GetDescription: string; override;
   end;
 
+  {** Implements a native driver for Firebird 3.0}
+  TZFirebird30PlainDriver = class (TZFirebird25PlainDriver)
+  protected
+    function Clone: IZPlainDriver; override;
+  public
+    function GetProtocol: string; override;
+    function GetDescription: string; override;
+  end;
+
+  {** Implements a native driver for Firebird 3.0 Embedded}
+  TZFirebirdD30PlainDriver = class (TZFirebirdD25PlainDriver)
+  protected
+    function Clone: IZPlainDriver; override;
+  public
+    function GetProtocol: string; override;
+    function GetDescription: string; override;
+  end;
 
   function XSQLDA_LENGTH(Value: LongInt): LongInt;
 
+{$ENDIF ZEOS_DISABLE_INTERBASE}
+
 implementation
 
-uses SysUtils, ZEncoding;
+{$IFNDEF ZEOS_DISABLE_INTERBASE}
+
+uses SysUtils, ZEncoding, ZFastCode{$IFDEF UNICODE},ZSysUtils{$ENDIF};
 
 function XSQLDA_LENGTH(Value: LongInt): LongInt;
 begin
@@ -553,7 +605,7 @@ begin
   PlainDriver.AddCodePage('ISO8859_9', CS_ISO8859_9, ceAnsi, zCP_L5_ISO_8859_9); {Latin 5}
   PlainDriver.AddCodePage('ISO8859_13', CS_ISO8859_13, ceAnsi, zCP_L7_ISO_8859_13); {Latin 7 — Baltic Rim}
   PlainDriver.AddCodePage('WIN1255', CS_WIN1255, ceAnsi, zCP_WIN1255); {ANSI Hebrew}
-  PlainDriver.AddCodePage('WIN1256', CS_WIN1256, ceAnsi, cCP_WIN1256); {ANSI Arabic}
+  PlainDriver.AddCodePage('WIN1256', CS_WIN1256, ceAnsi, zCP_WIN1256); {ANSI Arabic}
   PlainDriver.AddCodePage('WIN1257', CS_WIN1257, ceAnsi, zCP_WIN1257); {ANSI Baltic}
 end;
 
@@ -569,7 +621,7 @@ procedure AddFireBird21CodePages(PlainDriver: TZAbstractPlainDriver);
 begin
   PlainDriver.AddCodePage('CP943C', CS_CP943C, ceAnsi, 943, '', 2); {Japanese}
   PlainDriver.AddCodePage('GBK', CS_GBK, ceAnsi, zCP_GB2312, '', 2); {Chinese}
-  PlainDriver.AddCodePage('TIS620', CS_TIS620, ceAnsi, zCP_IBM_Thai); {Thai}
+  PlainDriver.AddCodePage('TIS620', CS_TIS620, ceAnsi, zCP_WIN874); {Thai}
 end;
 
 { IZFirebirdPlainDriver }
@@ -579,6 +631,20 @@ begin
   Result := 'UNICODE_FSS';
 end;
 
+function TZFirebirdBaseDriver.fb_dsql_set_timeout(status_vector: PISC_STATUS;
+  stmt_handle: PISC_STMT_HANDLE; milliseconds: ISC_ULONG): ISC_STATUS;
+begin
+  Result := fb_dsql_set_timeout(status_vector, stmt_handle, milliseconds)
+end;
+
+procedure TZFirebirdBaseDriver.FillCodePageArray;
+var I: Integer;
+begin
+  SetLength(FCodePageArray, 70);
+  for i := 0 to High(FCodePages) do
+    FCodePageArray[FCodePages[i].ID] := FCodePages[i].CP;
+end;
+
 procedure TZFirebirdBaseDriver.LoadCodePages;
 begin
   Self.AddCodePage('ASCII', CS_ASCII, ceAnsi, zCP_WIN1252); {English}
@@ -586,7 +652,7 @@ begin
   Self.AddCodePage('CYRL', CS_CYRL, ceAnsi, zCP_WIN1251, '', 2);  {Russian}
   Self.AddCodePage('DOS437', CS_DOS437, ceAnsi, zCP_DOS437); {English (USA)}
   Self.AddCodePage('DOS850', CS_DOS850, ceAnsi, zCP_DOS850); {Latin I (no Euro symbol)}
-  Self.AddCodePage('DOS852', CS_DOS852, ceAnsi, zCP_DOS852); {Latin II}
+  Self.AddCodePage('DOS852', CS_DOS852, ceAnsi, {$IFDEF MSWINDOWS}zCP_L2_ISO_8859_2{$ELSE}zCP_DOS852{$ENDIF}); {Latin II} //need a crack for windows. Don't know why but it seems Win converts cp852 false see: http://zeoslib.sourceforge.net/viewtopic.php?f=38&t=4779&sid=a143d302f1f967b844bea2bee9eb39b8
   Self.AddCodePage('DOS857', CS_DOS857, ceAnsi, zCP_DOS857); {Turkish}
   Self.AddCodePage('DOS860', CS_DOS860, ceAnsi, zCP_DOS860); {Portuguese}
   Self.AddCodePage('DOS861', CS_DOS861, ceAnsi, zCP_DOS861); {Icelandic}
@@ -596,10 +662,10 @@ begin
   Self.AddCodePage('GB_2312', CS_GB_2312, ceAnsi, zCP_GB2312, '', 2); {Simplified Chinese (Hong Kong, PRC)}
   Self.AddCodePage('ISO8859_1', CS_ISO8859_1, ceAnsi, zCP_L1_ISO_8859_1); {Latin 1}
   Self.AddCodePage('KSC_5601', CS_KSC_5601, ceAnsi, zCP_EUCKR, '', 2); {Korean (Unified Hangeul)}
-  Self.AddCodePage('NEXT', CS_NEXT);  {NeXTSTEP encoding}
-  Self.AddCodePage('NONE', CS_NONE, ceAnsi, ZDefaultSystemCodePage, '', 1, False); {Codepage-neutral. Uppercasing limited to ASCII codes 97-122}
-  Self.AddCodePage('OCTETS', CS_BINARY); {Binary character}
-  Self.AddCodePage('SJIS_0208', CS_SJIS_0208, ceAnsi, zCP_EUC_JP, '', 2); {Japanese}
+  Self.AddCodePage('NEXT', CS_NEXT);  {apple NeXTSTEP encoding}
+  Self.AddCodePage('NONE', CS_NONE, ceAnsi, ZOSCodePage, '', 1, False); {Codepage-neutral. Uppercasing limited to ASCII codes 97-122}
+  Self.AddCodePage('OCTETS', CS_BINARY, ceAnsi, $fffd); {Binary character}
+  Self.AddCodePage('SJIS_0208', CS_SJIS_0208, ceAnsi, zCP_SHIFTJS, '', 2); {Japanese} //fixed: https://sourceforge.net/p/zeoslib/tickets/115/
   Self.AddCodePage('UNICODE_FSS', CS_UNICODE_FSS, ceUTF8, zCP_UTF8, '', 3); {UNICODE}
   Self.AddCodePage('WIN1250', CS_WIN1250, ceAnsi, zCP_WIN1250); {ANSI — Central European}
   Self.AddCodePage('WIN1251', CS_WIN1251, ceAnsi, zCP_WIN1251); {ANSI — Cyrillic}
@@ -609,11 +675,11 @@ begin
 end;
 
 {$IFDEF ENABLE_INTERBASE_CRYPT}
-procedure TZFirebirdBaseDriver.Initialize;
+procedure TZFirebirdBaseDriver.Initialize(const Location: String = '');
 begin
   If Assigned(FPreLoader) and not FPreLoader.Loaded then
     FPreLoader.LoadNativeLibrary;
-  inherited Initialize;
+  inherited Initialize(Location);
 end;
 {$ENDIF}
 
@@ -626,6 +692,7 @@ begin
     @FIREBIRD_API.isc_sql_interprete  := GetAddress('isc_sql_interprete');
     @FIREBIRD_API.isc_interprete      := GetAddress('isc_interprete');
     @FIREBIRD_API.isc_vax_integer     := GetAddress('isc_vax_integer');
+    @FIREBIRD_API.isc_portable_integer:= GetAddress('isc_portable_integer');
 
     @FIREBIRD_API.isc_array_gen_sdl   := GetAddress( 'isc_array_gen_sdl');
     @FIREBIRD_API.isc_array_get_slice := GetAddress( 'isc_array_get_slice');
@@ -656,6 +723,8 @@ begin
     @FIREBIRD_API.isc_dsql_describe   := GetAddress('isc_dsql_describe');
     @FIREBIRD_API.isc_dsql_execute_immediate := GetAddress('isc_dsql_execute_immediate');
     @FIREBIRD_API.isc_drop_database   := GetAddress('isc_drop_database');
+    @FIREBIRD_API.isc_create_database := GetAddress('isc_create_database');
+
     @FIREBIRD_API.isc_detach_database := GetAddress('isc_detach_database');
     @FIREBIRD_API.isc_attach_database := GetAddress('isc_attach_database');
     @FIREBIRD_API.isc_database_info   := GetAddress('isc_database_info');
@@ -679,6 +748,11 @@ begin
     @FIREBIRD_API.isc_encode_sql_date := GetAddress('isc_encode_sql_date');
     @FIREBIRD_API.isc_encode_sql_time := GetAddress('isc_encode_sql_time');
     @FIREBIRD_API.isc_encode_timestamp := GetAddress('isc_encode_timestamp');
+
+    @FIREBIRD_API.fb_interpret        := GetAddress('fb_interpret');
+    @FIREBIRD_API.isc_get_client_version := GetAddress('isc_get_client_version');
+    @FIREBIRD_API.isc_get_client_major_version := GetAddress('isc_get_client_major_version');
+    @FIREBIRD_API.isc_get_client_minor_version := GetAddress('isc_get_client_minor_version');
   end;
 end;
 
@@ -702,6 +776,11 @@ end;
 function TZFirebirdBaseDriver.GetFirebirdAPI: TZFirebird_API;
 begin
   result := FIREBIRD_API;
+end;
+
+function TZFirebirdBaseDriver.GetCodePageArray: TWordDynArray;
+begin
+  Result := FCodePageArray;
 end;
 
 function TZFirebirdBaseDriver.isc_array_gen_sdl(status_vector: PISC_STATUS;
@@ -760,10 +839,8 @@ function TZFirebirdBaseDriver.isc_attach_database(status_vector: PISC_STATUS;
   db_name_length: Short; db_name: PAnsiChar; db_handle: PISC_DB_HANDLE;
   parm_buffer_length: Short; parm_buffer: PAnsiChar): ISC_STATUS;
 begin
-
-    Result := FIREBIRD_API.isc_attach_database(status_vector, db_name_length,
+  Result := FIREBIRD_API.isc_attach_database(status_vector, db_name_length,
     db_name, db_handle, parm_buffer_length, parm_buffer);
-
 end;
 
 function TZFirebirdBaseDriver.isc_blob_info(status_vector: PISC_STATUS;
@@ -816,9 +893,17 @@ begin
     tran_handle, blob_handle, blob_id, bpb_length, bpb_address);
 end;
 
+function TZFirebirdBaseDriver.isc_create_database(status_vector: PISC_STATUS;
+  db_name_len: Smallint; db_name: PAnsiChar; handle: PISC_DB_HANDLE;
+  dpb_len: Smallint; dpb: PAnsiChar; db_type: Smallint): ISC_STATUS;
+begin
+  Result := FIREBIRD_API.isc_create_database(status_vector, db_name_len,
+    db_name, handle, dpb_len, dpb, db_type);
+end;
+
 function TZFirebirdBaseDriver.isc_database_info(status_vector: PISC_STATUS;
   db_handle: PISC_DB_HANDLE; item_list_buffer_length: Short;
-  item_list_buffer: PAnsiChar; result_buffer_length: Short;
+  item_list_buffer: PByte; result_buffer_length: Short;
   result_buffer: PAnsiChar): ISC_STATUS;
 begin
   Result := FIREBIRD_API.isc_database_info(status_vector, db_handle,
@@ -1003,10 +1088,10 @@ begin
 end;
 
 procedure TZFirebirdBaseDriver.isc_event_counts(
-  status_vector: PISC_STATUS; buffer_length: Short; event_buffer,
+  event_counts: PARRAY_ISC_EVENTCOUNTS; buffer_length: Short; event_buffer,
   result_buffer: PAnsiChar);
 begin
-  FIREBIRD_API.isc_event_counts(status_vector, buffer_length,
+  FIREBIRD_API.isc_event_counts(event_counts, buffer_length,
     event_buffer, result_buffer);
 end;
 
@@ -1027,7 +1112,10 @@ end;
 function TZFirebirdBaseDriver.isc_interprete(buffer: PAnsiChar;
   status_vector: PPISC_STATUS): ISC_STATUS;
 begin
-  Result := FIREBIRD_API.isc_interprete(buffer, status_vector);
+  if Assigned(FIREBIRD_API.fb_interpret) then
+    Result := FIREBIRD_API.fb_interpret(buffer, IBBigLocalBufferLength, status_vector)
+  else
+    Result := FIREBIRD_API.isc_interprete(buffer, status_vector);
 end;
 
 function TZFirebirdBaseDriver.isc_open_blob2(status_vector: PISC_STATUS;
@@ -1100,7 +1188,44 @@ begin
   Result := FIREBIRD_API.isc_vax_integer(buffer, length);
 end;
 
+function TZFirebirdBaseDriver.isc_portable_integer(ptr: pbyte;
+  length: Short): ISC_INT64;
+begin
+  Result := FIREBIRD_API.isc_portable_integer(ptr, length);
+end;
+
+function TZFirebirdBaseDriver.isc_get_client_version: String;
+var
+  Buff: array[0..50] of AnsiChar;
+begin
+  if Assigned(FIREBIRD_API.isc_get_client_version) then begin
+    FIREBIRD_API.isc_get_client_version(@Buff[0]);
+    {$IFDEF UNICODE}
+    Result := ZSysUtils.ASCII7ToUnicodeString(@Buff[0], ZFastCode.StrLen(PAnsiChar(@Buff[0])));
+    {$ELSE}
+    SetString(Result, PAnsiChar(@Buff[0]), ZFastCode.StrLen(PAnsiChar(@Buff[0])));
+    {$ENDIF}
+  end else begin
+    Result := 'unknown';
+  end;
+end;
+
+function TZFirebirdBaseDriver.isc_get_client_major_version: Integer;
+begin
+  if Assigned(FIREBIRD_API.isc_get_client_major_version) and Assigned(FIREBIRD_API.isc_get_client_minor_version)
+  then Result := FIREBIRD_API.isc_get_client_major_version()
+  else Result := 0;
+end;
+
+function TZFirebirdBaseDriver.isc_get_client_minor_version: Integer;
+begin
+  if Assigned(FIREBIRD_API.isc_get_client_major_version) and Assigned(FIREBIRD_API.isc_get_client_minor_version)
+  then Result := FIREBIRD_API.isc_get_client_minor_version()
+  else Result := 0;
+end;
+
 { TZInterbase6PlainDriver }
+
 function TZInterbase6PlainDriver.Clone: IZPlainDriver;
 begin
   Result := TZInterbase6PlainDriver.Create;
@@ -1118,6 +1243,7 @@ begin
     {$ENDIF}
   {$ENDIF}
   Self.LoadCodePages;
+  FillCodePageArray;
 end;
 
 function TZInterbase6PlainDriver.GetDescription: string;
@@ -1147,6 +1273,7 @@ begin
     {$ENDIF}
   {$ENDIF}
   Self.LoadCodePages;
+  FillCodePageArray;
 end;
 
 function TZFirebird10PlainDriver.GetDescription: string;
@@ -1193,6 +1320,7 @@ begin
     {$ENDIF}
   {$ENDIF}
   Self.LoadCodePages;
+  FillCodePageArray;
 end;
 
 function TZFirebird15PlainDriver.GetDescription: string;
@@ -1279,6 +1407,7 @@ begin
     {$ENDIF}
   {$ENDIF}
   Self.LoadCodePages;
+  FillCodePageArray;
 end;
 
 function TZFirebird20PlainDriver.GetDescription: string;
@@ -1343,16 +1472,6 @@ begin
   AddFireBird21CodePages(Self);
 end;
 
-procedure TZFirebird21PlainDriver.LoadApi;
-begin
-  inherited LoadApi;
-
-  with Loader do
-  begin
-  @FIREBIRD_API.fb_interpret        := GetAddress('fb_interpret');
-  end;
-end;
-
 constructor TZFirebird21PlainDriver.Create;
 begin
    inherited create;
@@ -1375,6 +1494,7 @@ begin
     {$ENDIF}
   {$ENDIF}
   Self.LoadCodePages;
+  FillCodePageArray;
 end;
 
 
@@ -1386,15 +1506,6 @@ end;
 function TZFirebird21PlainDriver.GetProtocol: string;
 begin
   Result := 'firebird-2.1';
-end;
-
-function TZFirebird21PlainDriver.isc_interprete(buffer: PAnsiChar;
-  status_vector: PPISC_STATUS): ISC_STATUS;
-var
-   bufsize : integer;
-begin
-  bufsize := 1024;
-  Result := FIREBIRD_API.fb_interpret(buffer, bufsize, status_vector);
 end;
 
 { IZFirebirdD21PlainDriver }
@@ -1450,16 +1561,6 @@ begin
   Self.AddCodePage('GB18030', CS_GB18030, ceAnsi, zCP_GB18030, '', 4); {Chinese}
 end;
 
-procedure TZFirebird25PlainDriver.LoadApi;
-begin
-  inherited LoadApi;
-
-  with Loader do
-  begin
-    @FIREBIRD_API.fb_interpret        := GetAddress('fb_interpret');
-  end;
-end;
-
 constructor TZFirebird25PlainDriver.Create;
 begin
   inherited create;
@@ -1482,6 +1583,7 @@ begin
     {$ENDIF}
   {$ENDIF}
   Self.LoadCodePages;
+  FillCodePageArray;
 end;
 
 function TZFirebird25PlainDriver.GetProtocol: string;
@@ -1494,10 +1596,20 @@ begin
   Result := 'Native Plain Driver for Firebird 2.5';
 end;
 
-function TZFirebird25PlainDriver.isc_interprete(buffer: PAnsiChar;
-  status_vector: PPISC_STATUS): ISC_STATUS;
+{ TZFirebird30PlainDriver }
+function TZFirebird30PlainDriver.Clone: IZPlainDriver;
 begin
-  Result:=inherited isc_interprete(buffer, status_vector);
+  Result := TZFirebird30PlainDriver.Create;
+end;
+
+function TZFirebird30PlainDriver.GetProtocol: string;
+begin
+  Result := 'firebird-3.0';
+end;
+
+function TZFirebird30PlainDriver.GetDescription: string;
+begin
+  Result := 'Native Plain Driver for Firebird 3.0';
 end;
 
 { TZFirebirdD25PlainDriver }
@@ -1532,4 +1644,20 @@ begin
   Result := 'Native Plain Driver for Firebird Embedded 2.5';
 end;
 
+{ TZFirebirdD30PlainDriver }
+function TZFirebirdD30PlainDriver.Clone: IZPlainDriver;
+begin
+  Result := TZFirebirdD30PlainDriver.Create;
+end;
+
+function TZFirebirdD30PlainDriver.GetProtocol: string;
+begin
+  Result := 'firebirdd-3.0';
+end;
+
+function TZFirebirdD30PlainDriver.GetDescription: string;
+begin
+  Result := 'Native Plain Driver for Firebird Embedded 3.0';
+end;
+{$ENDIF ZEOS_DISABLE_INTERBASE}
 end.

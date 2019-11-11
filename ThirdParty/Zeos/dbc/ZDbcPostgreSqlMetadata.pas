@@ -56,10 +56,11 @@ interface
 
 {$I ZDbc.inc}
 
+{$IFNDEF ZEOS_DISABLE_POSTGRESQL} //if set we have an empty unit
 uses
   Types, Classes, {$IFDEF MSEgui}mclasses,{$ENDIF} SysUtils,
-  ZSysUtils, ZDbcIntfs, ZDbcMetadata, ZCompatibility, ZDbcPostgreSqlUtils,
-  ZDbcConnection, ZSelectSchema;
+  ZDbcIntfs, ZDbcMetadata, ZCompatibility, ZDbcPostgreSqlUtils,
+  ZSelectSchema, ZPlainPostgreSqlDriver;
 
 type
   {** Implements a PostgreSQL Case Sensitive/Unsensitive identifier convertor. }
@@ -103,7 +104,7 @@ type
 //    function GetDriverVersion: string; override; -> Same as parent
     function GetDriverMajorVersion: Integer; override;
     function GetDriverMinorVersion: Integer; override;
-    function GetServerVersion: string;
+    function GetServerVersion: string; override;
     function HasMinimumServerVersion(MajorVersion: Integer;
       MinorVersion: Integer): Boolean; // was TZPostgreSQLDatabaseMetadata.HaveMinimumServerVersion
 
@@ -165,13 +166,13 @@ type
     function SupportsOpenStatementsAcrossCommit: Boolean; override;
     function SupportsOpenStatementsAcrossRollback: Boolean; override;
     function SupportsTransactions: Boolean; override;
-    function SupportsTransactionIsolationLevel(Level: TZTransactIsolationLevel):
+    function SupportsTransactionIsolationLevel(const Level: TZTransactIsolationLevel):
       Boolean; override;
     function SupportsDataDefinitionAndDataManipulationTransactions: Boolean; override;
     function SupportsDataManipulationTransactionsOnly: Boolean; override;
-    function SupportsResultSetType(_Type: TZResultSetType): Boolean; override;
-    function SupportsResultSetConcurrency(_Type: TZResultSetType;
-      Concurrency: TZResultSetConcurrency): Boolean; override;
+    function SupportsResultSetType(const _Type: TZResultSetType): Boolean; override;
+    function SupportsResultSetConcurrency(const _Type: TZResultSetType;
+      const Concurrency: TZResultSetConcurrency): Boolean; override;
 //    function SupportsBatchUpdates: Boolean; override; -> Not implemented
 
     // maxima:
@@ -231,20 +232,34 @@ type
     function GetExtraNameCharacters: string; override;
   end;
 
+  IZPGDatabaseMetadata = Interface(IZDatabaseMetadata)
+    ['{24E96886-F7E3-45F6-86C7-014A3376889F}']
+    function GetColumnsByTableOID(Value: OID): IZResultSet;
+  End;
+
+  TZPGTableOID = record
+    OID: Oid;
+    ColumnRS: IZResultSet;
+  end;
+
   {** Implements PostgreSQL Database Metadata. }
-  TZPostgreSQLDatabaseMetadata = class(TZAbstractDatabaseMetadata)
+  TZPostgreSQLDatabaseMetadata = class(TZAbstractDatabaseMetadata, IZPGDatabaseMetadata)
   private
+    fZPGTableOIDArray: array of TZPGTableOID;
     function GetRuleType(const Rule: String): TZImportedKey;
+    function GetColumnsByTableOID(Value: OID): IZResultSet;
+    function InternalUncachedGetColumns(const Catalog, SchemaPattern,
+      TableNamePattern, ColumnNamePattern, TableOID: string): IZResultSet;
   protected
     function CreateDatabaseInfo: IZDatabaseInfo; override; // technobot 2008-06-27
 
     // (technobot) should any of these be moved to TZPostgreSQLDatabaseInfo?:
-    function GetPostgreSQLType(Oid: Integer): string;
-    function GetSQLTypeByOid(Oid: Integer): TZSQLType;
-    function GetSQLTypeByName(TypeName: string): TZSQLType;
-    function TableTypeSQLExpression(TableType: string; UseSchemas: Boolean):
+    function GetPostgreSQLType(Oid: OID): string;
+    function GetSQLTypeByOid(Oid: OID): TZSQLType;
+    function GetSQLTypeByName(const TypeName: string): TZSQLType;
+    function TableTypeSQLExpression(const TableType: string; UseSchemas: Boolean):
       string;
-    procedure ParseACLArray(List: TStrings; AclString: string);
+    procedure ParseACLArray(List: TStrings; const AclString: string);
     function GetPrivilegeName(Permission: char): string;
     // (technobot) end of questioned section
 
@@ -260,7 +275,7 @@ type
       const TableNamePattern: string): IZResultSet; override;
     function UncachedGetColumnPrivileges(const Catalog: string; const Schema: string;
       const Table: string; const ColumnNamePattern: string): IZResultSet; override;
-    function UncachedGetPrimaryKeys(const Catalog: string; const Schema: string;
+    function UncachedGetPrimaryKeys(const {%H-}Catalog: string; const Schema: string;
       const Table: string): IZResultSet; override;
     function UncachedGetImportedKeys(const Catalog: string; const Schema: string;
       const Table: string): IZResultSet; override;
@@ -269,11 +284,11 @@ type
     function UncachedGetCrossReference(const PrimaryCatalog: string; const PrimarySchema: string;
       const PrimaryTable: string; const ForeignCatalog: string; const ForeignSchema: string;
       const ForeignTable: string): IZResultSet; override;
-    function UncachedGetIndexInfo(const Catalog: string; const Schema: string; const Table: string;
-      Unique: Boolean; Approximate: Boolean): IZResultSet; override;
+    function UncachedGetIndexInfo(const {%H-}Catalog: string; const Schema: string; const Table: string;
+      Unique: Boolean; {%H-}Approximate: Boolean): IZResultSet; override;
      function UncachedGetSequences(const Catalog: string; const SchemaPattern: string;
       const SequenceNamePattern: string): IZResultSet; override;
-    function UncachedGetProcedures(const Catalog: string; const SchemaPattern: string;
+    function UncachedGetProcedures(const {%H-}Catalog: string; const SchemaPattern: string;
       const ProcedureNamePattern: string): IZResultSet; override;
     function UncachedGetProcedureColumns(const Catalog: string; const SchemaPattern: string;
       const ProcedureNamePattern: string; const ColumnNamePattern: string):
@@ -285,13 +300,17 @@ type
 
   public
     destructor Destroy; override;
-    function GetIdentifierConvertor: IZIdentifierConvertor; override; 
+    function GetIdentifierConvertor: IZIdentifierConvertor; override;
+    procedure ClearCache; override;
  end;
 
+{$ENDIF ZEOS_DISABLE_POSTGRESQL} //if set we have an empty unit
 implementation
+{$IFNDEF ZEOS_DISABLE_POSTGRESQL} //if set we have an empty unit
 
 uses
-  ZMessages, ZDbcUtils, ZDbcPostgreSql;
+  //Math,
+  ZFastCode, ZMessages, ZSysUtils, ZDbcPostgreSql;
 
 { TZPostgreSQLDatabaseInfo }
 
@@ -1177,7 +1196,7 @@ end;
   @see Connection
 }
 function TZPostgreSQLDatabaseInfo.SupportsTransactionIsolationLevel(
-  Level: TZTransactIsolationLevel): Boolean;
+  const Level: TZTransactIsolationLevel): Boolean;
 begin
   Result := (Level = tiSerializable) or (Level = tiReadCommitted);
 end;
@@ -1229,7 +1248,7 @@ end;
   @return <code>true</code> if so; <code>false</code> otherwise
 }
 function TZPostgreSQLDatabaseInfo.SupportsResultSetType(
-  _Type: TZResultSetType): Boolean;
+  const _Type: TZResultSetType): Boolean;
 begin
   Result := _Type = rtScrollInsensitive;
 end;
@@ -1243,7 +1262,7 @@ end;
   @return <code>true</code> if so; <code>false</code> otherwise
 }
 function TZPostgreSQLDatabaseInfo.SupportsResultSetConcurrency(
-  _Type: TZResultSetType; Concurrency: TZResultSetConcurrency): Boolean;
+  const _Type: TZResultSetType; const Concurrency: TZResultSetConcurrency): Boolean;
 begin
   Result := (_Type = rtScrollInsensitive) and (Concurrency = rcReadOnly);
 end;
@@ -1280,7 +1299,7 @@ begin
   begin
     if not Next then
       raise Exception.Create(SUnknownError); //CHANGE IT!
-    Result := GetInt(1);
+    Result := GetInt(FirstDbcIndex);
     Close;
   end;
 end;
@@ -1323,6 +1342,12 @@ end;
   internally by the constructor.
   @return the database information object interface
 }
+procedure TZPostgreSQLDatabaseMetadata.ClearCache;
+begin
+  inherited;
+  SetLength(fZPGTableOIDArray, 0);
+end;
+
 function TZPostgreSQLDatabaseMetadata.CreateDatabaseInfo: IZDatabaseInfo;
 begin
   Result := TZPostgreSQLDatabaseInfo.Create(Self);
@@ -1406,7 +1431,7 @@ begin
     SQL := 'SELECT NULL AS PROCEDURE_CAT, n.nspname AS PROCEDURE_SCHEM,'
       + ' p.proname AS PROCEDURE_NAME, NULL AS RESERVED1, NULL AS RESERVED2,'
       + ' NULL AS RESERVED3, d.description AS REMARKS, '
-      + IntToStr(ProcedureReturnsResult) + ' AS PROCEDURE_TYPE '
+      + ZFastCode.IntToStr(Ord(ProcedureReturnsResult)) + ' AS PROCEDURE_TYPE '
       + ' FROM pg_catalog.pg_namespace n, pg_catalog.pg_proc p  '
       + ' LEFT JOIN pg_catalog.pg_description d ON (p.oid=d.objoid) '
       + ' LEFT JOIN pg_catalog.pg_class c ON (d.classoid=c.oid AND'
@@ -1424,7 +1449,7 @@ begin
     SQL := 'SELECT NULL AS PROCEDURE_CAT, NULL AS PROCEDURE_SCHEM,'
       + ' p.proname AS PROCEDURE_NAME, NULL AS RESERVED1, NULL AS RESERVED2,'
       + ' NULL AS RESERVED3, NULL AS REMARKS, '
-      + IntToStr(ProcedureReturnsResult) + ' AS PROCEDURE_TYPE'
+      + ZFastCode.IntToStr(Ord(ProcedureReturnsResult)) + ' AS PROCEDURE_TYPE'
       + ' FROM pg_proc p';
     if ProcedureCondition <> '' then
       SQL := SQL + ' WHERE ' + ProcedureCondition;
@@ -1496,37 +1521,38 @@ function TZPostgreSQLDatabaseMetadata.UncachedGetProcedureColumns(const Catalog:
   const SchemaPattern: string; const ProcedureNamePattern: string;
   const ColumnNamePattern: string): IZResultSet;
 
-  procedure InsertProcedureColumnRow(AResultSet: IZResultSet;
+  procedure InsertProcedureColumnRow(const AResultSet: IZResultSet;
     const ASchema, AProcedureName, AColumnName: string;
     const AColumnType, ADataType: integer; const ATypeName: string;
     const ANullable: integer);
   begin
     AResultSet.MoveToInsertRow;
-    AResultSet.UpdateNullByName('PROCEDURE_CAT');
-    AResultSet.UpdateStringByName('PROCEDURE_SCHEM', ASchema);
-    AResultSet.UpdateStringByName('PROCEDURE_NAME', AProcedureName);
-    AResultSet.UpdateStringByName('COLUMN_NAME', AColumnName);
-    AResultSet.UpdateIntByName('COLUMN_TYPE', AColumnType);
-    AResultSet.UpdateIntByName('DATA_TYPE', ADataType);
-    AResultSet.UpdateStringByName('TYPE_NAME', ATypeName);
-    AResultSet.UpdateNullByName('PRECISION');
-    AResultSet.UpdateNullByName('LENGTH');
-    AResultSet.UpdateNullByName('SCALE');
-    AResultSet.UpdateNullByName('RADIX');
-    AResultSet.UpdateIntByName('NULLABLE', ANullable);
-    AResultSet.UpdateNullByName('REMARKS');
+    //AResultSet.UpdateNull(CatalogNameIndex);
+    AResultSet.UpdateString(SchemaNameIndex, ASchema);
+    AResultSet.UpdateString(ProcColProcedureNameIndex, AProcedureName);
+    AResultSet.UpdateString(ProcColColumnNameIndex, AColumnName);
+    AResultSet.UpdateInt(ProcColColumnTypeIndex, AColumnType);
+    AResultSet.UpdateInt(ProcColDataTypeIndex, ADataType);
+    AResultSet.UpdateString(ProcColTypeNameIndex, ATypeName);
+    AResultSet.UpdateNull(ProcColPrecisionIndex);
+    AResultSet.UpdateNull(ProcColLengthIndex);
+    AResultSet.UpdateNull(ProcColScaleIndex);
+    AResultSet.UpdateNull(ProcColRadixIndex);
+    AResultSet.UpdateInt(ProcColNullableIndex, ANullable);
+    AResultSet.UpdateNull(ProcColRemarksIndex);
     AResultSet.InsertRow;
   end;
 
 var
-  I, ReturnType, ColumnTypeOid, ArgOid: Integer;
+  I, ReturnType: Integer;
+  ColumnTypeOid, ArgOid: OID;
   SQL, ReturnTypeType: string;
   IsInParam, IsOutParam: Boolean;
   ArgTypes, ArgNames, ArgModes: TStrings;
   Ver73Up, Ver80Up: Boolean;
   ResultSet: IZResultSet;
   ColumnsRS: IZResultSet;
-  ArgMode: Char;
+  ArgMode: PChar;
   OutParamCount: Integer;
   ColumnName: string;
   ColumnType: Integer;
@@ -1583,7 +1609,7 @@ begin
     begin
       while Next do
       begin
-        ReturnType := StrToInt(GetStringByName('prorettype'));
+        ReturnType := GetIntByName('prorettype');
         ReturnTypeType := GetStringByName('typtype');
 
         ArgTypes.Clear;
@@ -1602,38 +1628,30 @@ begin
         begin
           IsInParam := True;
           IsOutParam := False;
-          if ArgModes.Count > I then
-          begin
-            ArgMode := ArgModes[I][1];
-            IsInParam := CharInSet(ArgMode, ['i', 'b', 'v']);
-            IsOutParam := CharInSet(ArgMode, ['o', 'b', 't']);
+          if ArgModes.Count > I then begin
+            ArgMode := Pointer(ArgModes[i]);
+            IsInParam := Ord(ArgMode^) in [Ord('i'), Ord('b'), ORd('v')];
+            IsOutParam := Ord(ArgMode^) in [Ord('o'), Ord('b'), Ord('t')];
           end;
 
           if IsOutParam then
             Inc(OutParamCount);
 
           // column name
-          ArgOid := StrToInt(ArgTypes.Strings[i]);
+          ArgOid := {$IFDEF UNICODE}UnicodeToInt64{$ELSE}RawToInt64{$ENDIF}(ArgTypes.Strings[i]);
           if ArgNames.Count > I then
             ColumnName := ArgNames.Strings[I]
           else
-            ColumnName := '$' + IntToStr(I + 1);
+            ColumnName := '$' + ZFastCode.IntToStr(I + 1);
 
           // column type
-          if IsInParam then
-          begin
-            if IsOutParam then
-              ColumnType := Ord(pctInOut)
-            else
-              ColumnType := Ord(pctIn);
-          end
-          else
-          begin
-           if IsOutParam then
-             ColumnType := Ord(pctOut)
-           else
-             ColumnType := Ord(pctUnknown);
-          end;
+          if IsInParam then begin
+            if IsOutParam
+            then ColumnType := Ord(pctInOut)
+            else ColumnType := Ord(pctIn);
+          end else if IsOutParam
+           then ColumnType := Ord(pctOut)
+           else ColumnType := Ord(pctUnknown);
 
           InsertProcedureColumnRow(Result, GetStringByName('nspname'),
             GetStringByName('proname'), ColumnName, ColumnType,
@@ -1644,33 +1662,25 @@ begin
         if (OutParamCount > 0) then
           Continue;
 
-        if (ReturnTypeType = 'c') then // Extract composit type columns
-        begin
+        if (ReturnTypeType = 'c') then begin // Extract composit type columns
           ColumnsRS := GetConnection.CreateStatement.ExecuteQuery(
             Format('SELECT a.attname,a.atttypid'
               + ' FROM pg_catalog.pg_attribute a WHERE a.attrelid=%s'
               + ' ORDER BY a.attnum',
               [ResultSet.GetStringByName('typrelid')]));
-          while ColumnsRS.Next do
-          begin
-            ColumnTypeOid := ColumnsRS.GetIntByName('atttypid');
+          while ColumnsRS.Next do begin
+            ColumnTypeOid := ColumnsRS.GetUIntByName('atttypid');
             InsertProcedureColumnRow(Result, GetStringByName('nspname'),
               GetStringByName('proname'), ColumnsRS.GetStringByName('attname'),
               Ord(pctResultSet), Ord(GetSQLTypeByOid(ColumnTypeOid)),
               GetPostgreSQLType(ColumnTypeOid), Ord(ntNullableUnknown));
           end;
           ColumnsRS.Close;
-        end
-        else
-        begin
-          if (ReturnTypeType <> 'p') then // Single non-pseudotype return value
-          begin
-            InsertProcedureColumnRow(Result, GetStringByName('nspname'),
-              GetStringByName('proname'), 'returnValue', Ord(pctReturn),
-              Ord(GetSQLTypeByOid(ReturnType)), GetPostgreSQLType(ReturnType),
-              Ord(ntNullableUnknown));
-          end;
-        end;
+        end else if (ReturnTypeType <> 'p') then // Single non-pseudotype return value
+          InsertProcedureColumnRow(Result, GetStringByName('nspname'),
+            GetStringByName('proname'), 'returnValue', Ord(pctReturn),
+            Ord(GetSQLTypeByOid(ReturnType)), GetPostgreSQLType(ReturnType),
+            Ord(ntNullableUnknown));
       end;
       Close;
     end;
@@ -1719,15 +1729,16 @@ var
   TableType, OrderBy, SQL: string;
   UseSchemas: Boolean;
   LTypes: TStringDynArray;
-  TableNameCondition, SchemaCondition: string;
+  TableNameCondition, SchemaCondition, CatalogCondition: string;
 begin
+  CatalogCondition := ConstructNameCondition(Catalog,'dn.nspname');
   SchemaCondition := ConstructNameCondition(SchemaPattern,'n.nspname');
   TableNameCondition := ConstructNameCondition(TableNamePattern,'c.relname');
   UseSchemas := True;
 
   if (GetDatabaseInfo as IZPostgreDBInfo).HasMinimumServerVersion(7, 3) then
   begin
-    SQL := ' SELECT NULL AS TABLE_CAT, n.nspname AS TABLE_SCHEM,'
+    SQL := ' SELECT dn.nspname AS TABLE_CAT, n.nspname AS TABLE_SCHEM,'
       + ' c.relname AS TABLE_NAME,  '
       + ' CASE (n.nspname LIKE ''pg\\_%'')'
       + '   OR (n.nspname=''information_schema'')'
@@ -1766,16 +1777,15 @@ begin
       + ' END '
       + ' AS TABLE_TYPE, d.description AS REMARKS '
       + ' FROM pg_catalog.pg_namespace n, pg_catalog.pg_class c '
-      + ' LEFT JOIN pg_catalog.pg_description d'
-      + ' ON (c.oid = d.objoid AND d.objsubid = 0) '
-      + ' LEFT JOIN pg_catalog.pg_class dc ON (d.classoid=dc.oid'
-      + ' AND dc.relname=''pg_class'') LEFT JOIN pg_catalog.pg_namespace dn'
-      + ' ON (dn.oid=dc.relnamespace AND dn.nspname=''pg_catalog'') '
+      + ' LEFT JOIN pg_catalog.pg_description d ON (c.oid = d.objoid AND d.objsubid = 0) '
+      + ' LEFT JOIN pg_catalog.pg_class dc ON (d.classoid=dc.oid AND dc.relname=''pg_class'') '
+      + ' LEFT JOIN pg_catalog.pg_namespace dn ON (dn.oid=dc.relnamespace AND dn.nspname=''pg_catalog'') '
       + ' WHERE c.relnamespace = n.oid ';
+    if CatalogCondition <> '' then
+      SQL := SQL + ' AND ' + CatalogCondition;
     if SchemaPattern <> '' then
-    begin
       SQL := SQL + ' AND ' + SchemaCondition;
-    end;
+
     OrderBy := ' ORDER BY TABLE_TYPE,TABLE_SCHEM,TABLE_NAME';
   end
   else
@@ -1819,8 +1829,7 @@ begin
       + ' NULL AS REMARKS FROM pg_class c WHERE true ';
   end;
 
-  if (Types = nil) or (Length(Types) = 0) then
-  begin
+  if (Pointer(Types) = nil) then begin
     SetLength(LTypes, 3);
     // SetLength(LTypes, 6);
     LTypes[0] := 'TABLE';
@@ -1844,6 +1853,51 @@ begin
   Result := CopyToVirtualResultSet(
     GetConnection.CreateStatement.ExecuteQuery(SQL),
     ConstructVirtualResultSet(TableColumnsDynArray));
+  (*
+  {now let's complete missing catalog informations ... if possible ): i didn't found a way to get it running without the IS}
+  if (GetDatabaseInfo as IZPostgreDBInfo).HasMinimumServerVersion(8, 4) then //information_schema only persits since 8.4
+  begin
+    (Result as IZVirtualResultSet).SetConcurrency(rcUpdatable);
+    SchemaCondition := ConstructNameCondition(SchemaPattern,'information_schema.tables.table_schema');
+    TableNameCondition := ConstructNameCondition(TableNamePattern,'information_schema.tables.table_name');
+    SQL :='SELECT table_catalog,table_schema,table_name from information_schema.tables';
+    if (SchemaCondition <> '') or (TableNameCondition <> '')then
+    begin
+      SQL := SQL + ' where ';
+      if (SchemaCondition <> '') then
+      begin
+        SQL := SQL + SchemaCondition;
+        if (TableNameCondition <> '') then
+          SQL := SQL + ' and '+TableNameCondition;
+      end
+      else
+        SQL := SQL + TableNameCondition;
+    end;
+    SQL := SQL + ' order by table_name, table_schema';
+    with GetConnection.CreateStatement.ExecuteQuery(SQL) do
+    begin
+      while Next do
+      begin
+        Result.Next;
+        TempRes := Result.GetPAnsiChar(TableNameIndex);
+        TempIS := GetPAnsiChar(TableNameIndex);
+        if MemLCompAnsi(TempRes.P, TempIS.P, Max(TempRes.Len, TempIS.Len)) then
+        begin
+          TempRes := Result.GetPAnsiChar(SchemaNameIndex);
+          TempIS := GetPAnsiChar(SchemaNameIndex);
+          if MemLCompAnsi(TempRes.P, TempIS.P, Max(TempRes.Len, TempIS.Len)) then
+          begin
+            Result.UpdatePAnsiChar(CatalogNameIndex, GetPAnsiChar(CatalogNameIndex));
+            Result.UpdateRow;
+          end;
+        end;
+      end;
+      (Result as IZVirtualResultSet).BeforeFirst;
+      (Result as IZVirtualResultSet).SetConcurrency(rcReadOnly);
+      Close;
+    end;
+  end;
+  *)
 end;
 
 {**
@@ -1931,7 +1985,7 @@ begin
  for I := 0 to 10 do
     begin
       Result.MoveToInsertRow;
-      Result.UpdateString(1, Types[I]);
+      Result.UpdateString(TableTypeColumnTableTypeIndex, Types[I]);
       Result.InsertRow;
     end;
 end;
@@ -1990,154 +2044,9 @@ end;
 function TZPostgreSQLDatabaseMetadata.UncachedGetColumns(const Catalog: string;
   const SchemaPattern: string; const TableNamePattern: string;
   const ColumnNamePattern: string): IZResultSet;
-var
-  TypeOid, AttTypMod: Integer;
-  SQL, PgType: string;
-  SQLType: TZSQLType;
-  CheckVisibility: Boolean;
-  ColumnNameCondition, TableNameCondition, SchemaCondition: string;
 begin
-  CheckVisibility := (GetConnection as IZPostgreSQLConnection).CheckFieldVisibility; //http://zeoslib.sourceforge.net/viewtopic.php?f=40&t=11174
-  SchemaCondition := ConstructNameCondition(SchemaPattern,'n.nspname');
-  TableNameCondition := ConstructNameCondition(TableNamePattern,'c.relname');
-  ColumnNameCondition := ConstructNameCondition(ColumnNamePattern,'a.attname');
-  Result:=inherited UncachedGetColumns(Catalog, SchemaPattern, TableNamePattern, ColumnNamePattern);
-
-  if (GetDatabaseInfo as IZPostgreDBInfo).HasMinimumServerVersion(7, 3) then
-  begin
-    SQL := 'SELECT n.nspname,' {nspname_index}
-      + 'c.relname,' {relname_index}
-      + 'a.attname,' {attname_index}
-      + 'a.atttypid,' {atttypid_index}
-      + 'a.attnotnull,' {attnotnull_index}
-      + 'a.atttypmod,' {atttypmod_index}
-      + 'a.attlen,' {attlen_index}
-      + 'a.attnum,' {attnum_index}
-      + 'pg_get_expr(def.adbin, def.adrelid) as adsrc,' {adsrc_index}
-      + 'dsc.description ' {description_index}
-      + ' FROM pg_catalog.pg_namespace n '
-      + ' JOIN pg_catalog.pg_class c ON (c.relnamespace = n.oid) '
-      + ' JOIN pg_catalog.pg_attribute a ON (a.attrelid=c.oid) '
-      + ' LEFT JOIN pg_catalog.pg_attrdef def ON (a.attrelid=def.adrelid'
-      + ' AND a.attnum = def.adnum) LEFT JOIN pg_catalog.pg_description dsc'
-      + ' ON (c.oid=dsc.objoid AND a.attnum = dsc.objsubid) '
-      + ' LEFT JOIN pg_catalog.pg_class dc ON (dc.oid=dsc.classoid'
-      + ' AND dc.relname=''pg_class'') LEFT JOIN pg_catalog.pg_namespace dn'
-      + ' ON (dc.relnamespace=dn.oid AND dn.nspname=''pg_catalog'') '
-      + ' WHERE a.attnum > 0 AND NOT a.attisdropped';
-    if SchemaPattern <> '' then
-      SQL := SQL + ' AND ' + SchemaCondition
-    else
-      //not by default: because of Speed decrease: http://http://zeoslib.sourceforge.net/viewtopic.php?p=16646&sid=130
-      if CheckVisibility then
-        SQL := SQL + ' AND pg_table_is_visible (c.oid) ';
-  end
-  else
-  begin
-    SQL := 'SELECT NULL::text AS nspname,' {1}
-      + 'c.relname,' {2}
-      + 'a.attname,' {3}
-      + 'a.atttypid,' {4}
-      + 'a.attnotnull,' {5}
-      + 'a.atttypmod,' {6}
-      + 'a.attlen,' {7}
-      + 'a.attnum,' {8}
-      + 'NULL AS adsrc,' {9}
-      + 'NULL AS description' {10}
-      + 'FROM pg_class c, pg_attribute a '
-      + ' WHERE a.attrelid=c.oid AND a.attnum > 0 ';
-  end;
-
-  If TableNameCondition <> '' then
-    SQL := SQL + ' AND ' + TableNameCondition;
-  If ColumnNameCondition <> '' then
-    SQL := SQL+ ' AND ' + ColumnNameCondition;
-  SQL := SQL+ ' ORDER BY nspname,relname,attnum';
-
-  with GetConnection.CreateStatement.ExecuteQuery(SQL) do
-  begin
-    while Next do
-    begin
-      AttTypMod := GetInt(6 {atttypmod});
-
-      TypeOid := GetInt(4 {atttypid});
-      PgType := GetPostgreSQLType(TypeOid);
-
-      Result.MoveToInsertRow;
-      Result.UpdateNull(1);
-      Result.UpdateString(2, GetString(1 {nspname}));
-      Result.UpdateString(3, GetString(2 {relname}));
-      Result.UpdateString(4, GetString(3 {attname}));
-      SQLType := GetSQLTypeByOid(TypeOid);
-      Result.UpdateInt(5, Ord(SQLType));
-      Result.UpdateString(6, PgType);
-      Result.UpdateInt(8, 0);
-
-      if (PgType = 'bpchar') or (PgType = 'varchar') or (PgType = 'enum') then
-      begin
-        if AttTypMod <> -1 then
-          Result.UpdateInt(7, GetFieldSize(SQLType, ConSettings, (AttTypMod - 4),
-            ConSettings.ClientCodePage.CharWidth))
-        else
-          if (PgType = 'varchar') then
-            if ( (GetConnection as IZPostgreSQLConnection).GetUndefinedVarcharAsStringLength = 0 ) then
-            begin
-              Result.UpdateInt(5, Ord(GetSQLTypeByOid(25))); //Assume text-lob instead
-              Result.UpdateInt(7, 0); // need no size for streams
-            end
-            else //keep the string type but with user defined count of chars
-              Result.UpdateInt(7, (GetConnection as IZPostgreSQLConnection).GetUndefinedVarcharAsStringLength )
-          else
-            Result.UpdateInt(7, 0);
-      end
-      else if (PgType = 'numeric') or (PgType = 'decimal') then
-      begin
-        Result.UpdateInt(7, ((AttTypMod - 4) div 65536)); //precision
-        Result.UpdateInt(9, ((AttTypMod -4) mod 65536)); //scale
-        Result.UpdateInt(10, 10); //base? ten as default
-      end
-      else if (PgType = 'bit') or (PgType = 'varbit') then
-      begin
-        Result.UpdateInt(7, AttTypMod);
-        Result.UpdateInt(10, 2);
-      end
-      else
-      begin
-        Result.UpdateInt(7, GetInt(7 {attlen}));
-        Result.UpdateInt(10, 2);
-      end;
-
-      Result.UpdateNull(8);
-      if GetBoolean(5 {attnotnull}) then
-      begin
-        Result.UpdateString(18, 'NO');
-        Result.UpdateInt(11, Ord(ntNoNulls));
-      end
-      else
-      begin
-        Result.UpdateString(18, 'YES');
-        Result.UpdateInt(11, Ord(ntNullable));
-      end;
-
-      Result.UpdateString(12, GetString(10 {description}));
-      Result.UpdateString(13, GetString(9 {adsrc}));
-      Result.UpdateNull(14);
-      Result.UpdateNull(15);
-      Result.UpdateInt(16, Result.GetInt(7));
-      Result.UpdateInt(17, GetInt(8 {attnum}));
-
-      Result.UpdateNullByName('AUTO_INCREMENT');
-      Result.UpdateBooleanByName('CASE_SENSITIVE',
-        IC.IsCaseSensitive(GetString(3 {attname})));
-      Result.UpdateBooleanByName('SEARCHABLE', True);
-      Result.UpdateBooleanByName('WRITABLE', True);
-      Result.UpdateBooleanByName('DEFINITELYWRITABLE', True);
-      Result.UpdateBooleanByName('READONLY', False);
-
-      Result.InsertRow;
-    end;
-    Close;
-  end;
+  Result := InternalUncachedGetColumns(Catalog, SchemaPattern, TableNamePattern,
+    ColumnNamePattern, '');
 end;
 
 {**
@@ -2235,14 +2144,13 @@ begin
               Grantable := 'YES'
             else Grantable := 'NO';
             Result.MoveToInsertRow;
-            Result.UpdateNull(1);
-            Result.UpdateString(2, Schema);
-            Result.UpdateString(3, Table);
-            Result.UpdateString(4, Column);
-            Result.UpdateString(5, Owner);
-            Result.UpdateString(6, Grantee);
-            Result.UpdateString(7, GetPrivilegeName(Privileges[J]));
-            Result.UpdateString(8, grantable);
+            Result.UpdateString(SchemaNameIndex, Schema);
+            Result.UpdateString(TableNameIndex, Table);
+            Result.UpdateString(ColumnNameIndex, Column);
+            Result.UpdateString(TableColPrivGrantorIndex, Owner);
+            Result.UpdateString(TableColPrivGranteeIndex, Grantee);
+            Result.UpdateString(TableColPrivPrivilegeIndex, GetPrivilegeName(Privileges[J]));
+            Result.UpdateString(TableColPrivIsGrantableIndex, grantable);
             Result.InsertRow;
           end;
         end;
@@ -2348,13 +2256,13 @@ begin
               Grantable := 'YES'
             else Grantable := 'NO';
             Result.MoveToInsertRow;
-            Result.UpdateNull(1);
-            Result.UpdateString(2, SchemaName);
-            Result.UpdateString(3, TableName);
-            Result.UpdateString(4, Owner);
-            Result.UpdateString(5, Grantee);
-            Result.UpdateString(6, GetPrivilegeName(Privileges[J]));
-            Result.UpdateString(7, grantable);
+            Result.UpdateNull(CatalogNameIndex);
+            Result.UpdateString(SchemaNameIndex, SchemaName);
+            Result.UpdateString(TableNameIndex, TableName);
+            Result.UpdateString(TablePrivGrantorIndex, Owner);
+            Result.UpdateString(TablePrivGranteeIndex, Grantee);
+            Result.UpdateString(TablePrivPrivilegeIndex, GetPrivilegeName(Privileges[J]));
+            Result.UpdateString(TablePrivIsGrantableIndex, grantable);
             Result.InsertRow;
           end;
         end;
@@ -2403,14 +2311,14 @@ begin
     Result:=inherited UncachedGetVersionColumns(Catalog, Schema, Table);
 
     Result.MoveToInsertRow;
-    Result.UpdateNull(1);
-    Result.UpdateString(2, 'ctid');
-    Result.UpdateInt(3, Ord(GetSQLTypeByName('tid')));
-    Result.UpdateString(4, 'tid');
-    Result.UpdateNull(5);
-    Result.UpdateNull(6);
-    Result.UpdateNull(7);
-    Result.UpdateInt(4, Ord(vcPseudo));
+    //Result.UpdateNull(TableColVerScopeIndex);
+    Result.UpdateString(TableColVerColNameIndex, 'ctid');
+    Result.UpdateInt(TableColVerDataTypeIndex, Ord(GetSQLTypeByName('tid')));
+    Result.UpdateString(TableColVerTypeNameIndex, 'tid');
+    //Result.UpdateNull(TableColVerColSizeIndex);
+    //Result.UpdateNull(TableColVerBufLengthIndex);
+    //Result.UpdateNull(TableColVerDecimalDigitsIndex);
+    Result.UpdateInt(TableColVerPseudoColumnIndex, Ord(vcPseudo));
     Result.InsertRow;
 end;
 
@@ -2542,9 +2450,24 @@ end;
 }
 function TZPostgreSQLDatabaseMetadata.UncachedGetImportedKeys(const Catalog: string;
   const Schema: string; const Table: string): IZResultSet;
+const
+  {%H-}tc_constraint_catalog_Index = FirstDbcIndex + 0;
+  tc_constraint_schema_Index       = FirstDbcIndex + 1;
+  ccu_table_name_Index             = FirstDbcIndex + 2;
+  ccu_column_name_Index            = FirstDbcIndex + 3;
+  {%H-}kcu_table_catalog_Index     = FirstDbcIndex + 4;
+  kcu_constraint_schema_Index      = FirstDbcIndex + 5;
+  kcu_table_name_Index             = FirstDbcIndex + 6;
+  kcu_column_name_Index            = FirstDbcIndex + 7;
+  kcu_ordinal_position_Index       = FirstDbcIndex + 8;
+  rf_update_rule_Index             = FirstDbcIndex + 9;
+  rf_delete_rule_Index             = FirstDbcIndex + 10;
+  kcu_constraint_name_Index        = FirstDbcIndex + 11;
+  rf_unique_constraint_name_Index  = FirstDbcIndex + 12;
+  tc_is_deferrable_Index           = FirstDbcIndex + 13;
 var
+  Len: NativeUInt;
   SQL: string;
-  KeySequence: Integer;
   TableNameCondition, SchemaCondition, CatalogCondition: string;
 begin
   CatalogCondition := ConstructNameCondition(Catalog,'kcu.table_catalog');
@@ -2562,10 +2485,11 @@ begin
       'kcu.constraint_schema as FKTABLE_SCHEM, '+
       'kcu.table_name as PKTABLE_NAME, '+
       'kcu.column_name as FKCOLUMN_NAME, '+
+      'kcu.ordinal_position as PK_NAME, '+
       'rf.update_rule as UPDATE_RULE, '+
       'rf.delete_rule as DELETE_RULE, '+
       'kcu.constraint_name as FK_NAME, '+
-      'kcu.ordinal_position as PK_NAME, '+
+      'rf.unique_constraint_name as PK_NAME, '+
       'tc.is_deferrable as DEFERRABILITY '+
       'FROM information_schema.table_constraints AS tc '+
       'JOIN information_schema.key_column_usage AS kcu ON tc.constraint_name = kcu.constraint_name '+
@@ -2579,31 +2503,28 @@ begin
     if Table <> '' then
       SQL := SQL + ' and ' + TableNameCondition;
 
-    KeySequence := 0;
     with GetConnection.CreateStatement.ExecuteQuery(SQL) do
     begin
       while Next do
       begin
-        Inc(KeySequence);
         Result.MoveToInsertRow;
-        Result.UpdateNull(1); //PKTABLE_CAT
-        Result.UpdateString(2, GetString(2)); //PKTABLE_SCHEM
-        Result.UpdateString(3, GetString(3)); //PKTABLE_NAME
-        Result.UpdateString(4, GetString(4)); //PKCOLUMN_NAME
-        //Result.UpdateString(5, GetString(5)); //PKTABLE_CAT
-        Result.UpdateString(5, Catalog); //PKTABLE_CAT
-        Result.UpdateString(6, GetString(6)); //FKTABLE_SCHEM
-        Result.UpdateString(7, GetString(7)); //FKTABLE_NAME
-        Result.UpdateString(8, GetString(8)); //FKCOLUMN_NAME
-        Result.UpdateShort(9, KeySequence); //KEY_SEQ
-        Result.UpdateShort(10, Ord(GetRuleType(GetString(9)))); //UPDATE_RULE
-        Result.UpdateShort(11, Ord(GetRuleType(GetString(10)))); //DELETE_RULE
-        Result.UpdateString(12, GetString(11)); //FK_NAME
-        Result.UpdateString(13, GetString(12)); //PK_NAME
-        if GetString(13) = 'NO' then
-          Result.UpdateShort(14, Ord(ikNotDeferrable)) //DEFERRABILITY
+        //Result.UpdatePAnsiChar(ImportedKeyColPKTableCatalogIndex, GetPAnsiChar(tc_constraint_catalog_Index, Len), @Len);
+        Result.UpdatePAnsiChar(ImportedKeyColPKTableSchemaIndex, GetPAnsiChar(tc_constraint_schema_Index, Len), @Len);
+        Result.UpdatePAnsiChar(ImportedKeyColPKTableNameIndex, GetPAnsiChar(ccu_table_name_Index, Len), @Len);
+        Result.UpdatePAnsiChar(ImportedKeyColPKColumnNameIndex, GetPAnsiChar(ccu_column_name_Index, Len), @Len);
+        //Result.UpdatePAnsiChar(ImportedKeyColFKTableCatalogIndex, GetPAnsiChar(kcu_table_catalog_Index, Len), @Len);
+        Result.UpdatePAnsiChar(ImportedKeyColFKTableSchemaIndex, GetPAnsiChar(kcu_constraint_schema_Index, Len), @Len);
+        Result.UpdatePAnsiChar(ImportedKeyColFKTableNameIndex, GetPAnsiChar(kcu_table_name_Index, Len), @Len);
+        Result.UpdatePAnsiChar(ImportedKeyColFKColumnNameIndex, GetPAnsiChar(kcu_column_name_Index, Len), @Len);
+        Result.UpdateSmall(ImportedKeyColKeySeqIndex, GetSmall(kcu_ordinal_position_Index));
+        Result.UpdateSmall(ImportedKeyColUpdateRuleIndex, Ord(GetRuleType(GetString(rf_update_rule_Index))));
+        Result.UpdateSmall(ImportedKeyColDeleteRuleIndex, Ord(GetRuleType(GetString(rf_delete_rule_Index))));
+        Result.UpdatePAnsiChar(ImportedKeyColFKNameIndex, GetPAnsiChar(kcu_constraint_name_Index, Len), @Len);
+        Result.UpdatePAnsiChar(ImportedKeyColPKNameIndex, GetPAnsiChar(rf_unique_constraint_name_Index, Len), @Len);
+        if GetString(tc_is_deferrable_Index) = 'NO' then
+          Result.UpdateSmall(ImportedKeyColDeferrabilityIndex, Ord(ikNotDeferrable))
         else
-          Result.UpdateShort(14, Ord(ikInitiallyDeferred)); //DEFERRABILITY
+          Result.UpdateSmall(ImportedKeyColDeferrabilityIndex, Ord(ikInitiallyDeferred));
         Result.InsertRow;
       end;
       Close;
@@ -2682,9 +2603,24 @@ end;
 }
 function TZPostgreSQLDatabaseMetadata.UncachedGetExportedKeys(const Catalog: string;
   const Schema: string; const Table: string): IZResultSet;
+const
+  {%H-}tc_constraint_catalog_Index = FirstDbcIndex + 0;
+  tc_constraint_schema_Index       = FirstDbcIndex + 1;
+  ccu_table_name_Index             = FirstDbcIndex + 2;
+  ccu_column_name_Index            = FirstDbcIndex + 3;
+  {%H-}kcu_table_catalog_Index     = FirstDbcIndex + 4;
+  kcu_constraint_schema_Index      = FirstDbcIndex + 5;
+  kcu_table_name_Index             = FirstDbcIndex + 6;
+  kcu_column_name_Index            = FirstDbcIndex + 7;
+  kcu_ordinal_position_Index       = FirstDbcIndex + 8;
+  rf_update_rule_Index             = FirstDbcIndex + 9;
+  rf_delete_rule_Index             = FirstDbcIndex + 10;
+  kcu_constraint_name_Index        = FirstDbcIndex + 11;
+  rf_unique_constraint_name_Index  = FirstDbcIndex + 12;
+  tc_is_deferrable_Index           = FirstDbcIndex + 13;
 var
+  Len: NativeUInt;
   SQL: string;
-  KeySequence: Integer;
   TableNameCondition, SchemaCondition, CatalogCondition: string;
 begin
   CatalogCondition := ConstructNameCondition(Catalog,'tc.constraint_catalog');
@@ -2702,10 +2638,11 @@ begin
       'kcu.constraint_schema as FKTABLE_SCHEM, '+
       'kcu.table_name as PKTABLE_NAME, '+
       'kcu.column_name as FKCOLUMN_NAME, '+
+      'kcu.ordinal_position as KEY_SEQ, '+
       'rf.update_rule as UPDATE_RULE, '+
       'rf.delete_rule as DELETE_RULE, '+
       'kcu.constraint_name as FK_NAME, '+
-      'kcu.ordinal_position as PK_NAME, '+
+      'rf.unique_constraint_name as PK_NAME, '+
       'tc.is_deferrable as DEFERRABILITY '+
       'FROM information_schema.table_constraints AS tc '+
       'JOIN information_schema.key_column_usage AS kcu ON tc.constraint_name = kcu.constraint_name '+
@@ -2720,31 +2657,28 @@ begin
       SQL := SQL + ' and ' + TableNameCondition;
     SQL := SQL + ' order by kcu.table_name;';
 
-    KeySequence := 0;
     with GetConnection.CreateStatement.ExecuteQuery(SQL) do
     begin
       while Next do
       begin
-        Inc(KeySequence);
         Result.MoveToInsertRow;
-        Result.UpdateNull(1); //PKTABLE_CAT
-        Result.UpdateString(2, GetString(2)); //PKTABLE_SCHEM
-        Result.UpdateString(3, GetString(3)); //PKTABLE_NAME
-        Result.UpdateString(4, GetString(4)); //PKCOLUMN_NAME
-        //Result.UpdateString(5, GetString(5)); //PKTABLE_CAT
-        Result.UpdateString(5, Catalog); //PKTABLE_CAT
-        Result.UpdateString(6, GetString(6)); //FKTABLE_SCHEM
-        Result.UpdateString(7, GetString(7)); //FKTABLE_NAME
-        Result.UpdateString(8, GetString(8)); //FKCOLUMN_NAME
-        Result.UpdateShort(9, KeySequence); //KEY_SEQ
-        Result.UpdateShort(10, Ord(GetRuleType(GetString(9)))); //UPDATE_RULE
-        Result.UpdateShort(11, Ord(GetRuleType(GetString(10)))); //DELETE_RULE
-        Result.UpdateString(12, GetString(11)); //FK_NAME
-        Result.UpdateString(13, GetString(12)); //PK_NAME
-        if GetString(13) = 'NO' then
-          Result.UpdateShort(14, Ord(ikNotDeferrable)) //DEFERRABILITY
+        //Result.UpdatePAnsiChar(ExportedKeyColPKTableCatalogIndex, GetPAnsiChar(tc_constraint_catalog_Index, Len), @Len);
+        Result.UpdatePAnsiChar(ExportedKeyColPKTableSchemaIndex, GetPAnsiChar(tc_constraint_schema_Index, Len), @Len);
+        Result.UpdatePAnsiChar(ExportedKeyColPKTableNameIndex, GetPAnsiChar(ccu_table_name_Index, Len), @Len);
+        Result.UpdatePAnsiChar(ExportedKeyColPKColumnNameIndex, GetPAnsiChar(ccu_column_name_Index, Len), @Len);
+        //Result.UpdatePAnsiChar(ExportedKeyColFKTableCatalogIndex, GetPAnsiChar(kcu_table_catalog_Index, Len), @Len);
+        Result.UpdatePAnsiChar(ExportedKeyColFKTableSchemaIndex, GetPAnsiChar(kcu_constraint_schema_Index, Len), @Len);
+        Result.UpdatePAnsiChar(ExportedKeyColFKTableNameIndex, GetPAnsiChar(kcu_table_name_Index, Len), @Len);
+        Result.UpdatePAnsiChar(ExportedKeyColFKColumnNameIndex, GetPAnsiChar(kcu_column_name_Index, Len), @Len);
+        Result.UpdateSmall(ExportedKeyColKeySeqIndex, GetSmall(kcu_ordinal_position_Index));
+        Result.UpdateSmall(ExportedKeyColUpdateRuleIndex, Ord(GetRuleType(GetString(rf_update_rule_Index))));
+        Result.UpdateSmall(ExportedKeyColDeleteRuleIndex, Ord(GetRuleType(GetString(rf_delete_rule_Index))));
+        Result.UpdatePAnsiChar(ExportedKeyColFKNameIndex, GetPAnsiChar(kcu_constraint_name_Index, Len), @Len);
+        Result.UpdatePAnsiChar(ExportedKeyColPKNameIndex, GetPAnsiChar(rf_unique_constraint_name_Index, Len), @Len);
+        if GetString(tc_is_deferrable_Index) = 'NO' then
+          Result.UpdateSmall(ExportedKeyColDeferrabilityIndex, Ord(ikNotDeferrable))
         else
-          Result.UpdateShort(14, Ord(ikInitiallyDeferred)); //DEFERRABILITY
+          Result.UpdateSmall(ExportedKeyColDeferrabilityIndex, Ord(ikInitiallyDeferred));
         Result.InsertRow;
       end;
       Close;
@@ -2832,7 +2766,37 @@ end;
 function TZPostgreSQLDatabaseMetadata.UncachedGetCrossReference(const PrimaryCatalog: string;
   const PrimarySchema: string; const PrimaryTable: string; const ForeignCatalog: string;
   const ForeignSchema: string; const ForeignTable: string): IZResultSet;
+const
+  {%H-}tc_constraint_catalog_Index_74 = FirstDbcIndex + 0;
+  tc_constraint_schema_Index_74       = FirstDbcIndex + 1;
+  ccu_table_name_Index_74             = FirstDbcIndex + 2;
+  ccu_column_name_Index_74            = FirstDbcIndex + 3;
+  {%H-}kcu_table_catalog_Index_74     = FirstDbcIndex + 4;
+  kcu_constraint_schema_Index_74      = FirstDbcIndex + 5;
+  kcu_table_name_Index_74             = FirstDbcIndex + 6;
+  kcu_column_name_Index_74            = FirstDbcIndex + 7;
+  kcu_ordinal_position_Index_74       = FirstDbcIndex + 8;
+  rf_update_rule_Index_74             = FirstDbcIndex + 9;
+  rf_delete_rule_Index_74             = FirstDbcIndex + 10;
+  kcu_constraint_name_Index_74        = FirstDbcIndex + 11;
+  rf_unique_constraint_name_Index_74  = FirstDbcIndex + 12;
+  tc_is_deferrable_Index_74           = FirstDbcIndex + 13;
+
+  pnspname_index             = FirstDbcIndex + 0;
+  fnspname_index             = FirstDbcIndex + 1;
+  prelname_index             = FirstDbcIndex + 2;
+  frelname_index             = FirstDbcIndex + 3;
+  {%H-}t1_tgconstrname_index = FirstDbcIndex + 4;
+  keyseq_index               = FirstDbcIndex + 5;
+  {%H-}fkeyname_index        = FirstDbcIndex + 6;
+  t1_tgdeferrable_index      = FirstDbcIndex + 7;
+  t1_tginitdeferred_index    = FirstDbcIndex + 8;
+  {%H-}t1_tgnargs_index      = FirstDbcIndex + 9;
+  t1_tgargs_index            = FirstDbcIndex + 10;
+  updaterule_index           = FirstDbcIndex + 11;
+  deleterule_index           = FirstDbcIndex + 12;
 var
+  Len: NativeUInt;
   SQL, Select, From, Where: string;
   DeleteRule, UpdateRule, Rule: string;
   {FKeyName, }FKeyColumn, PKeyColumn, Targs: string;
@@ -2855,10 +2819,11 @@ begin
       'kcu.constraint_schema as FKTABLE_SCHEM, '+
       'kcu.table_name as PKTABLE_NAME, '+
       'kcu.column_name as FKCOLUMN_NAME, '+
+      'kcu.ordinal_position as KEY_SEQ, '+
       'rf.update_rule as UPDATE_RULE, '+
       'rf.delete_rule as DELETE_RULE, '+
       'kcu.constraint_name as FK_NAME, '+
-      'kcu.ordinal_position as PK_NAME, '+
+      'rf.unique_constraint_name as PK_NAME, '+
       'tc.is_deferrable as DEFERRABILITY '+
       'FROM information_schema.table_constraints AS tc '+
       'JOIN information_schema.key_column_usage AS kcu ON tc.constraint_name = kcu.constraint_name '+
@@ -2878,32 +2843,28 @@ begin
     if ForeignTable <> '' then
       SQL := SQL + ' and kcu.table_name = '''+ForeignTable+'''';
 
-    KeySequence := 0;
     with GetConnection.CreateStatement.ExecuteQuery(SQL) do
     begin
       while Next do
       begin
-        Inc(KeySequence);
         Result.MoveToInsertRow;
-        //Result.UpdateString(1, GetString(1)); //PKTABLE_CAT
-        Result.UpdateString(1, PrimaryCatalog); //PKTABLE_CAT
-        Result.UpdateString(2, GetString(2)); //PKTABLE_SCHEM
-        Result.UpdateString(3, GetString(3)); //PKTABLE_NAME
-        Result.UpdateString(4, GetString(4)); //PKCOLUMN_NAME
-        //Result.UpdateString(5, GetString(5)); //PKTABLE_CAT
-        Result.UpdateString(5, ForeignCatalog); //PKTABLE_CAT
-        Result.UpdateString(6, GetString(6)); //FKTABLE_SCHEM
-        Result.UpdateString(7, GetString(7)); //FKTABLE_NAME
-        Result.UpdateString(8, GetString(8)); //FKCOLUMN_NAME
-        Result.UpdateShort(9, KeySequence); //KEY_SEQ
-        Result.UpdateShort(10, Ord(GetRuleType(GetString(9)))); //UPDATE_RULE
-        Result.UpdateShort(11, Ord(GetRuleType(GetString(10)))); //DELETE_RULE
-        Result.UpdateString(12, GetString(11)); //FK_NAME
-        Result.UpdateString(13, GetString(12)); //PK_NAME
-        if GetString(13) = 'NO' then
-          Result.UpdateShort(14, Ord(ikNotDeferrable)) //DEFERRABILITY
+        //Result.UpdatePAnsiChar(CrossRefKeyColPKTableCatalogIndex, GetPAnsiChar(tc_constraint_catalog_Index_74, Len), @Len);
+        Result.UpdatePAnsiChar(CrossRefKeyColPKTableSchemaIndex, GetPAnsiChar(tc_constraint_schema_Index_74, Len), @Len);
+        Result.UpdatePAnsiChar(CrossRefKeyColPKTableNameIndex, GetPAnsiChar(ccu_table_name_Index_74, Len), @Len);
+        Result.UpdatePAnsiChar(CrossRefKeyColPKColumnNameIndex, GetPAnsiChar(ccu_column_name_Index_74, Len), @Len);
+        //Result.UpdatePAnsiChar(CrossRefKeyColFKTableCatalogIndex, GetPAnsiChar(kcu_table_catalog_Index_74, Len), @Len);
+        Result.UpdatePAnsiChar(CrossRefKeyColFKTableSchemaIndex, GetPAnsiChar(kcu_constraint_schema_Index_74, Len), @Len);
+        Result.UpdatePAnsiChar(CrossRefKeyColFKTableNameIndex, GetPAnsiChar(kcu_table_name_Index_74, Len), @Len);
+        Result.UpdatePAnsiChar(CrossRefKeyColFKColumnNameIndex, GetPAnsiChar(kcu_column_name_Index_74, Len), @Len);
+        Result.UpdateSmall(CrossRefKeyColKeySeqIndex, GetSmall(kcu_ordinal_position_Index_74));
+        Result.UpdateSmall(CrossRefKeyColUpdateRuleIndex, Ord(GetRuleType(GetString(rf_update_rule_Index_74))));
+        Result.UpdateSmall(CrossRefKeyColDeleteRuleIndex, Ord(GetRuleType(GetString(rf_delete_rule_Index_74))));
+        Result.UpdatePAnsiChar(CrossRefKeyColFKNameIndex, GetPAnsiChar(kcu_constraint_name_Index_74, Len), @Len);
+        Result.UpdatePAnsiChar(CrossRefKeyColPKNameIndex, GetPAnsiChar(rf_unique_constraint_name_Index_74, Len), @Len);
+        if GetString(tc_is_deferrable_Index_74) = 'NO' then
+          Result.UpdateSmall(CrossRefKeyColDeferrabilityIndex, Ord(ikNotDeferrable))
         else
-          Result.UpdateShort(14, Ord(ikInitiallyDeferred)); //DEFERRABILITY
+          Result.UpdateSmall(CrossRefKeyColDeferrabilityIndex, Ord(ikInitiallyDeferred));
         Result.InsertRow;
       end;
       Close;
@@ -2986,13 +2947,13 @@ begin
         while Next do
         begin
           Result.MoveToInsertRow;
-          Result.UpdateString(2, GetString(1));
-          Result.UpdateString(6, GetString(2));
-          Result.UpdateString(3, GetString(3));
-          Result.UpdateString(7, GetString(4));
+          Result.UpdatePAnsiChar(CrossRefKeyColPKTableSchemaIndex, GetPAnsiChar(pnspname_index, Len), @Len);
+          Result.UpdatePAnsiChar(CrossRefKeyColFKTableSchemaIndex, GetPAnsiChar(fnspname_index, Len), @Len);
+          Result.UpdatePAnsiChar(CrossRefKeyColPKTableNameIndex, GetPAnsiChar(prelname_index, Len), @Len);
+          Result.UpdatePAnsiChar(CrossRefKeyColFKTableNameIndex, GetPAnsiChar(frelname_index, Len), @Len);
 
-          //FKeyName := GetString(5);
-          UpdateRule := GetString(12);
+          //FKeyName := GetString(t1_tgconstrname_index);
+          UpdateRule := GetString(updaterule_index);
           if UpdateRule <> '' then
           begin
             Rule := Copy(UpdateRule, 9, Length(UpdateRule) - 12);
@@ -3007,10 +2968,10 @@ begin
               Action := Ord(ikSetDefault);
             if Rule = 'restrict' then
              Action := Ord(ikRestrict);
-            Result.UpdateInt(10, Action);
+            Result.UpdateInt(CrossRefKeyColUpdateRuleIndex, Action);
           end;
 
-          DeleteRule := GetString(13);
+          DeleteRule := GetString(deleterule_index);
           if DeleteRule <> '' then
           begin
             Rule := Copy(DeleteRule, 9, Length(DeleteRule) - 12);
@@ -3023,44 +2984,44 @@ begin
               Action := Ord(ikSetDefault);
             if Rule = 'restrict' then
               Action := Ord(ikRestrict);
-            Result.UpdateInt(11, Action);
+            Result.UpdateInt(CrossRefKeyColDeleteRuleIndex, Action);
           end;
 
-          KeySequence := GetInt(6);
-          Targs := GetString(11);
+          KeySequence := GetInt(keyseq_index);
+          Targs := GetString(t1_tgargs_index);
 
           //<unnamed>\000ww\000vv\000UNSPECIFIED\000m\000a\000n\000b\000
           //for Postgresql 7.3
-          //$1\000ww\000vv\000UNSPECIFIED\000m\000a\000n\000b\000
-          //$2\000ww\000vv\000UNSPECIFIED\000m\000a\000n\000b\000
+          {%H-}//$1\000ww\000vv\000UNSPECIFIED\000m\000a\000n\000b\000
+          {%H-}//$2\000ww\000vv\000UNSPECIFIED\000m\000a\000n\000b\000
 
-          Advance := 4 + (KeySequence - 1) * 2;
+          Advance := 4 + (KeySequence - 1) shl 1; //shl 1 = * 2 but faster
           PutSplitStringEx(List, Targs, '\000');
 
           if Advance <= List.Count-1 then
             FKeyColumn := List.Strings[Advance];
           if Advance + 1 <= List.Count-1 then
             PKeyColumn := List.Strings[Advance+1];
-          Result.UpdateString(4, PKeyColumn);
-          Result.UpdateString(8, FKeyColumn);
-          Result.UpdateString(9, GetString(6)); //KEY_SEQ
+          Result.UpdateString(CrossRefKeyColPKColumnNameIndex, PKeyColumn);
+          Result.UpdateString(CrossRefKeyColFKColumnNameIndex, FKeyColumn);
+          Result.UpdateSmall(CrossRefKeyColKeySeqIndex, GetSmall(keyseq_index));
 
           if List.Strings[0] = '<unnamed>' then
-            Result.UpdateString(12, Targs) //FK_NAME
-          else Result.UpdateString(12, List.Strings[0]); //FK_NAME
+            Result.UpdateString(CrossRefKeyColFKNameIndex, Targs) //FK_NAME
+          else Result.UpdateString(CrossRefKeyColFKNameIndex, List.Strings[0]); //FK_NAME
 
-          Result.UpdateString(13, GetString(6)); //PK_ NAME
+          Result.UpdateString(CrossRefKeyColPKNameIndex, GetString(keyseq_index)); //EH: OLD CODE!!! This is wrong, i know!
 
           Deferrability := Ord(ikNotDeferrable);
-          Deferrable := GetBoolean(8);
-          InitiallyDeferred := GetBoolean(9);
+          Deferrable := GetBoolean(t1_tgdeferrable_index);
+          InitiallyDeferred := GetBoolean(t1_tginitdeferred_index);
           if Deferrable then
           begin
             if InitiallyDeferred then
               Deferrability := Ord(ikInitiallyDeferred)
             else Deferrability := Ord(ikInitiallyImmediate);
           end;
-          Result.UpdateInt(14, Deferrability);
+          Result.UpdateInt(CrossRefKeyColPKNameIndex, Deferrability);
           Result.InsertRow;
         end;
         Close;
@@ -3119,6 +3080,7 @@ end;
 function TZPostgreSQLDatabaseMetadata.UncachedGetTypeInfo: IZResultSet;
 var
   SQL: string;
+  Len: NativeUInt;
 begin
     Result:=inherited UncachedGetTypeInfo;
 
@@ -3131,15 +3093,15 @@ begin
       while Next do
       begin
         Result.MoveToInsertRow;
-        Result.UpdateString(1, GetString(1));
-        Result.UpdateInt(2, Ord(GetSQLTypeByName(GetString(1))));
-        Result.UpdateInt(3, 9);
-        Result.UpdateInt(7, Ord(ntNoNulls));
-        Result.UpdateBoolean(8, False);
-        Result.UpdateBoolean(9, False);
-        Result.UpdateBoolean(11, False);
-        Result.UpdateBoolean(12, False);
-        Result.UpdateInt(18, 10);
+        Result.UpdatePAnsiChar(TypeInfoTypeNameIndex, GetPAnsiChar(FirstDbcIndex, Len), @Len);
+        Result.UpdateInt(TypeInfoDataTypeIndex, Ord(GetSQLTypeByName(GetString(FirstDbcIndex))));
+        Result.UpdateInt(TypeInfoPecisionIndex, 9);
+        Result.UpdateInt(TypeInfoNullAbleIndex, Ord(ntNoNulls));
+        Result.UpdateBoolean(TypeInfoCaseSensitiveIndex, False);
+        Result.UpdateBoolean(TypeInfoSearchableIndex, False);
+        Result.UpdateBoolean(TypeInfoFixedPrecScaleIndex, False);
+        Result.UpdateBoolean(TypeInfoAutoIncrementIndex, False);
+        Result.UpdateInt(TypeInfoNumPrecRadix, 10);
         Result.InsertRow;
       end;
       Close;
@@ -3222,9 +3184,9 @@ begin
 
     SQL := Select + ' ct.relname AS TABLE_NAME, NOT i.indisunique'
       + ' AS NON_UNIQUE, NULL AS INDEX_QUALIFIER, ci.relname AS INDEX_NAME,'
-      + ' CASE i.indisclustered WHEN true THEN ' + IntToStr(Ord(tiClustered))
-      + ' ELSE CASE am.amname WHEN ''hash'' THEN ' + IntToStr(Ord(tiHashed))
-      + ' ELSE ' + IntToStr(Ord(tiOther)) + ' END END AS TYPE,'
+      + ' CASE i.indisclustered WHEN true THEN ' + ZFastCode.IntToStr(Ord(tiClustered))
+      + ' ELSE CASE am.amname WHEN ''hash'' THEN ' + ZFastCode.IntToStr(Ord(tiHashed))
+      + ' ELSE ' + ZFastCode.IntToStr(Ord(tiOther)) + ' END END AS TYPE,'
       + ' a.attnum AS ORDINAL_POSITION, a.attname AS COLUMN_NAME,'
       + ' NULL AS ASC_OR_DESC, ci.reltuples AS CARDINALITY,'
       + ' ci.relpages AS PAGES, NULL AS FILTER_CONDITION'
@@ -3264,21 +3226,21 @@ begin
       while Next do
       begin
         Result.MoveToInsertRow;
-        Result.UpdateNull(1);
-        Result.UpdateString(2, GetStringByName('nspname'));
-        Result.UpdateString(3, GetStringByName('relname'));
+        Result.UpdateNull(CatalogNameIndex);
+        Result.UpdateString(SchemaNameIndex, GetStringByName('nspname'));
+        Result.UpdateString(TableNameIndex, GetStringByName('relname'));
         Result.InsertRow;
       end;
       Close;
     end;
 end;
 
-function TZPostgreSQLDatabaseMetadata.GetPostgreSQLType(Oid: Integer): string;
+function TZPostgreSQLDatabaseMetadata.GetPostgreSQLType(Oid: OID): string;
 begin
   Result := (GetConnection as IZPostgreSQLConnection).GetTypeNameByOid(Oid);
 end;
 
-function TZPostgreSQLDatabaseMetadata.GetSQLTypeByOid(Oid: Integer): TZSQLType;
+function TZPostgreSQLDatabaseMetadata.GetSQLTypeByOid(Oid: OID): TZSQLType;
 var
   PostgreSQLConnection: IZPostgreSQLConnection;
 begin
@@ -3287,15 +3249,209 @@ begin
     PostgreSQLConnection.GetTypeNameByOid(Oid));
 end;
 
+function TZPostgreSQLDatabaseMetadata.InternalUncachedGetColumns(const Catalog,
+  SchemaPattern, TableNamePattern, ColumnNamePattern,
+  TableOID: string): IZResultSet;
+const
+  nspname_index     = FirstDbcIndex + 0;
+  relname_index     = FirstDbcIndex + 1;
+  attname_index     = FirstDbcIndex + 2;
+  atttypid_index    = FirstDbcIndex + 3;
+  attnotnull_index  = FirstDbcIndex + 4;
+  atttypmod_index   = FirstDbcIndex + 5;
+  attlen_index      = FirstDbcIndex + 6;
+  attnum_index      = FirstDbcIndex + 7;
+  adsrc_index       = FirstDbcIndex + 8;
+  description_index = FirstDbcIndex + 9;
+  cnspname_index    = FirstDbcIndex + 10;
+var
+  Len: NativeUInt;
+  TypeOid: Cardinal;
+  AttTypMod, Precision: Integer;
+  SQL, PgType: string;
+  SQLType: TZSQLType;
+  CheckVisibility: Boolean;
+  ColumnNameCondition, TableNameCondition, SchemaCondition, CatalogCondition: string;
+label FillSizes;
+begin
+  CheckVisibility := (GetConnection as IZPostgreSQLConnection).CheckFieldVisibility; //http://zeoslib.sourceforge.net/viewtopic.php?f=40&t=11174
+  if TableOID = '' then begin
+    CatalogCondition := ConstructNameCondition(Catalog,'dn.relname');
+    SchemaCondition := ConstructNameCondition(SchemaPattern,'n.nspname');
+    TableNameCondition := ConstructNameCondition(TableNamePattern,'c.relname');
+    ColumnNameCondition := ConstructNameCondition(ColumnNamePattern,'a.attname');
+  end;
+  Result:=inherited UncachedGetColumns(Catalog, SchemaPattern, TableNamePattern, ColumnNamePattern);
+
+  if (GetDatabaseInfo as IZPostgreDBInfo).HasMinimumServerVersion(7, 3) then
+  begin
+    SQL := 'SELECT n.nspname,' {nspname_index}
+      + 'c.relname,' {relname_index}
+      + 'a.attname,' {attname_index}
+      + 'a.atttypid,' {atttypid_index}
+      + 'a.attnotnull,' {attnotnull_index}
+      + 'a.atttypmod,' {atttypmod_index}
+      + 'a.attlen,' {attlen_index}
+      + 'a.attnum,' {attnum_index}
+      + 'pg_get_expr(def.adbin, def.adrelid) as adsrc,' {adsrc_index}
+      + 'dsc.description, ' {description_index}
+      + 'dn.nspname as cnspname' {cnspname_index}
+      + ' FROM pg_catalog.pg_namespace n '
+      + ' JOIN pg_catalog.pg_class c ON (c.relnamespace = n.oid) '
+      + ' JOIN pg_catalog.pg_attribute a ON (a.attrelid=c.oid) '
+      + ' LEFT JOIN pg_catalog.pg_attrdef def ON (a.attrelid=def.adrelid AND a.attnum = def.adnum)'
+      + ' LEFT JOIN pg_catalog.pg_description dsc ON (c.oid=dsc.objoid AND a.attnum = dsc.objsubid) '
+      + ' LEFT JOIN pg_catalog.pg_class dc ON (dc.oid=dsc.classoid AND dc.relname=''pg_class'') '
+      + ' LEFT JOIN pg_catalog.pg_namespace dn ON (dc.relnamespace=dn.oid AND dn.nspname=''pg_catalog'') ';
+    if TableOID <> '' then
+      SQL := SQL + ' WHERE a.attnum > 0 AND c.oid = '+TableOID
+    else begin
+        SQL := SQL + ' WHERE a.attnum > 0 AND NOT a.attisdropped';
+      if Catalog <> '' then
+        SQL := SQL + ' AND ' + CatalogCondition;
+      if SchemaPattern <> '' then
+        SQL := SQL + ' AND ' + SchemaCondition;
+      //not by default: because of Speed decrease: http://http://zeoslib.sourceforge.net/viewtopic.php?p=16646&sid=130
+      if CheckVisibility then
+        SQL := SQL + ' AND pg_table_is_visible (c.oid) ';
+    end;
+  end
+  else
+  begin
+    SQL := 'SELECT NULL::text AS nspname,' {nspname_index}
+      + 'c.relname,' {relname_index}
+      + 'a.attname,' {attname_index}
+      + 'a.atttypid,' {atttypid_index}
+      + 'a.attnotnull,' {attnotnull_index}
+      + 'a.atttypmod,' {atttypmod_index}
+      + 'a.attlen,' {attlen_index}
+      + 'a.attnum,' {attnum_index}
+      + 'NULL AS adsrc,' {adsrc_index}
+      + 'NULL AS description, ' {description_index}
+      + 'NULL::text AS cnspname' {cnspname_index}
+      + 'FROM pg_class c, pg_attribute a ';
+    if TableOID <> '' then
+      SQL := SQL + ' WHERE c.oid = '+TableOID
+    else
+      SQL := SQL + ' WHERE a.attrelid=c.oid AND a.attnum > 0 ';
+  end;
+
+  if TableOID = '' then begin
+    If TableNameCondition <> '' then
+      SQL := SQL + ' AND ' + TableNameCondition;
+    If ColumnNameCondition <> '' then
+      SQL := SQL+ ' AND ' + ColumnNameCondition;
+  end;
+  SQL := SQL+ ' ORDER BY nspname,relname,attnum';
+
+  with GetConnection.CreateStatement.ExecuteQuery(SQL) do
+  begin
+    while Next do
+    begin
+      AttTypMod := GetInt(atttypmod_index);
+
+      TypeOid := GetUInt(atttypid_index);
+      PgType := GetPostgreSQLType(TypeOid);
+
+      Result.MoveToInsertRow;
+      if not IsNull(cnspname_index) then
+        Result.UpdatePAnsiChar(CatalogNameIndex, GetPAnsiChar(cnspname_index, Len), @Len);
+      if not IsNull(nspname_index) then
+        Result.UpdatePAnsiChar(SchemaNameIndex, GetPAnsiChar(nspname_index, Len), @Len);
+      Result.UpdatePAnsiChar(TableNameIndex, GetPAnsiChar(relname_index, Len), @Len);
+      Result.UpdatePAnsiChar(ColumnNameIndex, GetPAnsiChar(attname_index, Len), @Len);
+      SQLType := GetSQLTypeByOid(TypeOid);
+      Result.UpdateInt(TableColColumnTypeIndex, Ord(SQLType));
+      Result.UpdateString(TableColColumnTypeNameIndex, PgType);
+
+      Result.UpdateInt(TableColColumnBufLengthIndex, 0);
+
+      if (PgType = 'bpchar') or (PgType = 'varchar') or (PgType = 'enum') then
+      begin
+        if AttTypMod <> -1 then begin
+          Precision := AttTypMod - 4;
+FillSizes:
+          Result.UpdateInt(TableColColumnSizeIndex, Precision);
+          if SQLType = stString then begin
+            Result.UpdateInt(TableColColumnBufLengthIndex, Precision * ConSettings^.ClientCodePage^.CharWidth +1);
+            Result.UpdateInt(TableColColumnCharOctetLengthIndex, Precision * ConSettings^.ClientCodePage^.CharWidth);
+          end else if SQLType = stUnicodeString then begin
+            Result.UpdateInt(TableColColumnBufLengthIndex, (Precision+1) shl 1);
+            Result.UpdateInt(TableColColumnCharOctetLengthIndex, Precision shl 1);
+          end;
+        end else
+          if (PgType = 'varchar') then
+            if ( (GetConnection as IZPostgreSQLConnection).GetUndefinedVarcharAsStringLength = 0 ) then
+            begin
+              Result.UpdateInt(TableColColumnTypeIndex, Ord(GetSQLTypeByOid(25))); //Assume text-lob instead
+              Result.UpdateInt(TableColColumnSizeIndex, 0); // need no size for streams
+            end
+            else begin //keep the string type but with user defined count of chars
+              Precision := (GetConnection as IZPostgreSQLConnection).GetUndefinedVarcharAsStringLength;
+              goto FillSizes;
+            end
+          else
+            Result.UpdateInt(TableColColumnSizeIndex, 0);
+      end
+      else if (PgType = 'uuid') then
+      begin
+        // I set break point and see code reaching here. Below assignments, I have no idea what I am doing.
+        Result.UpdateInt(TableColColumnBufLengthIndex, 16); // MSSQL returns 16 here - which makes sense since a GUID is 16 bytes long.
+        // TableColColumnCharOctetLengthIndex is removed - PG returns 0 and in the dblib driver 0 is also used, although MSSQL returns null...
+      end
+      else if (PgType = 'numeric') or (PgType = 'decimal') then
+      begin
+        Result.UpdateInt(TableColColumnSizeIndex, ((AttTypMod - 4) div 65536)); //precision
+        Result.UpdateInt(TableColColumnDecimalDigitsIndex, ((AttTypMod -4) mod 65536)); //scale
+        Result.UpdateInt(TableColColumnNumPrecRadixIndex, 10); //base? ten as default
+      end
+      else if (PgType = 'bit') or (PgType = 'varbit') then
+      begin
+        Result.UpdateInt(TableColColumnSizeIndex, AttTypMod);
+        Result.UpdateInt(TableColColumnNumPrecRadixIndex, 2);
+      end
+      else
+      begin
+        Result.UpdateInt(TableColColumnSizeIndex, GetInt(attlen_index));
+        Result.UpdateInt(TableColColumnNumPrecRadixIndex, 2);
+      end;
+      if GetBoolean(attnotnull_index) then
+      begin
+        Result.UpdateString(TableColColumnIsNullableIndex, 'NO');
+        Result.UpdateInt(TableColColumnNullableIndex, Ord(ntNoNulls));
+      end
+      else
+      begin
+        Result.UpdateString(TableColColumnIsNullableIndex, 'YES');
+        Result.UpdateInt(TableColColumnNullableIndex, Ord(ntNullable));
+      end;
+
+      Result.UpdatePAnsiChar(TableColColumnRemarksIndex, GetPAnsiChar(description_index {description}, Len), @Len);
+      Result.UpdatePAnsiChar(TableColColumnColDefIndex, GetPAnsiChar(adsrc_index {adsrc}, Len), @Len);
+      Result.UpdateInt(TableColColumnCharOctetLengthIndex, Result.GetInt(attlen_index));
+      Result.UpdateInt(TableColColumnOrdPosIndex, GetInt(attnum_index));
+
+      Result.UpdateBoolean(TableColColumnCaseSensitiveIndex, IC.IsCaseSensitive(GetString(attname_index)));
+      Result.UpdateBoolean(TableColColumnSearchableIndex, True);
+      Result.UpdateBoolean(TableColColumnWritableIndex, True);
+      Result.UpdateBoolean(TableColColumnDefinitelyWritableIndex, True);
+      Result.UpdateBoolean(TableColColumnReadonlyIndex, False);
+
+      Result.InsertRow;
+    end;
+    Close;
+  end;
+end;
+
 function TZPostgreSQLDatabaseMetadata.GetSQLTypeByName(
-  TypeName: string): TZSQLType;
+  const TypeName: string): TZSQLType;
 begin
   Result := PostgreSQLToSQLType(
     GetConnection as IZPostgreSQLConnection, TypeName);
 end;
 
 function TZPostgreSQLDatabaseMetadata.TableTypeSQLExpression(
-  TableType: string; UseSchemas: Boolean): string;
+  const TableType: string; UseSchemas: Boolean): string;
 begin
   if UseSchemas then
   begin
@@ -3355,36 +3511,36 @@ begin
 end;
 
 procedure TZPostgreSQLDatabaseMetadata.ParseACLArray(
-  List: TStrings; AclString: string);
+  List: TStrings; const AclString: string);
 var
   PrevChar: Char;
   InQuotes: Boolean;
   I, BeginIndex: Integer;
+  P: PChar;
 begin
   if AclString = '' then Exit;
   InQuotes := False;
   PrevChar := ' ';
   BeginIndex := 2;
-  for I := BeginIndex to Length(AclString) do
-  begin
-    if (AclString[I] = '"') and (PrevChar <> '\' ) then
-      InQuotes := not InQuotes
-    else if (AclString[I] = ',') and not InQuotes then
-    begin
+  P := Pointer(AclString);
+  for I := BeginIndex to Length(AclString) do begin
+    Inc(P);
+    if (P^ = '"') and (PrevChar <> '\' )
+    then InQuotes := not InQuotes
+    else if (P^ = ',') and not InQuotes then begin
       List.Add(Copy(AclString, BeginIndex, I - BeginIndex));
       BeginIndex := I+1;
     end;
-    PrevChar := AclString[I];
+    PrevChar := P^;
   end;
 
   // add last element removing the trailing "}"
   List.Add(Copy(AclString, BeginIndex, Length(AclString) - BeginIndex));
 
   // Strip out enclosing quotes, if any.
-  for I := 0 to List.Count-1 do
-  begin
-    if (List.Strings[i][1] = '"')
-      and (List.Strings[i][Length(List.Strings[i])] = '"') then
+  for I := 0 to List.Count-1 do begin
+    P := Pointer(List.Strings[i]);
+    if (P^ = '"') and ((P+Length(List.Strings[i])-1)^ = '"') then
       List.Strings[i] := Copy(List.Strings[i], 2, Length(List.Strings[i])-2);
   end;
 end;
@@ -3407,9 +3563,40 @@ begin
  end;
 end;
 
+function TZPostgreSQLDatabaseMetadata.GetColumnsByTableOID(
+  Value: OID): IZResultSet;
+var I: Integer;
+  Key: String;
+begin
+  Result := nil;
+  for i := low(fZPGTableOIDArray) to high(fZPGTableOIDArray) do
+    with fZPGTableOIDArray[i] do
+      if OID = Value then begin
+        Result := ColumnRS;
+        Break;
+      end;
+  if Result = nil then begin
+    Result := InternalUncachedGetColumns('', '', '', '', ZFastCode.{$IFDEF UNICODE}IntToUnicode{$ELSE}IntToRaw{$ENDIF}(Value));
+    if Result.Next then begin
+      Key := GetColumnsCacheKey(
+        Result.GetString(CatalogNameIndex), Result.GetString(SchemaNameIndex),
+        AddEscapeCharToWildcards(IC.Quote(Result.GetString(TableNameIndex))),''); //use same analogy for key_gen as done in the RS_Metadat
+      Result.BeforeFirst;
+      if not HasKey(Key) then
+        AddResultSetToCache(Key, Result); // so others may use the result too
+    end;
+    SetLength(fZPGTableOIDArray, Length(fZPGTableOIDArray)+1);
+    with fZPGTableOIDArray[High(fZPGTableOIDArray)] do begin
+      OID := Value;
+      ColumnRS := Result;
+    end;
+  end;
+end;
+
 function TZPostgreSQLDatabaseMetadata.GetIdentifierConvertor: IZIdentifierConvertor;
 begin
-  Result:=TZPostgreSQLIdentifierConvertor.Create(Self);
+  Result := TZDefaultIdentifierConvertor.Create(Self);
+  //Result:= TZPostgreSQLIdentifierConvertor.Create(Self);
 end;
 
 {**
@@ -3417,6 +3604,10 @@ end;
   @return <code>ResultSet</code> - each row is a CharacterSetName and it's ID
 }
 function TZPostgreSQLDatabaseMetadata.UncachedGetCharacterSets: IZResultSet; //EgonHugeist
+const
+  enc_Index  = FirstDbcIndex + 0;
+  name_Index = FirstDbcIndex + 1;
+var Len: NativeUInt;
 begin
   Self.GetConnection.CreateStatement.Execute(
   ' CREATE OR REPLACE FUNCTION get_encodings() RETURNS INTEGER AS '''+
@@ -3447,8 +3638,8 @@ begin
     while Next do
     begin
       Result.MoveToInsertRow;
-      Result.UpdateString(1, GetString(2)); //CHARACTER_SET_NAME
-      Result.UpdateShort(2, GetShort(1)); //CHARACTER_SET_ID
+      Result.UpdatePAnsiChar(CharacterSetsNameIndex, GetPAnsiChar(name_Index, Len), @Len); //CHARACTER_SET_NAME
+      Result.UpdateSmall(CharacterSetsIDIndex, GetSmall(enc_Index)); //CHARACTER_SET_ID
       Result.InsertRow;
     end;
     CLose;
@@ -3461,29 +3652,29 @@ function TZPostgreSQLIdentifierConvertor.ExtractQuote(
   const Value: string): string;
 var
   QuoteDelim: string;
+  P: PChar absolute QuoteDelim;
 begin
-  QuoteDelim := Metadata.GetDatabaseInfo.GetIdentifierQuoteString;
-  Result := Value;
-  if (QuoteDelim <> '') and (Value <> '') then
-    if (Value[1]=QuoteDelim[1]) and
-      (Value[PLongInt(NativeUInt(Value) - 4)^{fast Length()}]=QuoteDelim[1]) then
-    begin
-      Result:=copy(Value,2,length(Value)-2);
-      Result:=StringReplace(Result,QuoteDelim+QuoteDelim,QuoteDelim,[rfReplaceAll]);
-    end
-    else
-      Result := AnsiLowerCase(Value);
-
+  if IsQuoted(Value) then begin
+    QuoteDelim := Metadata.GetDatabaseInfo.GetIdentifierQuoteString;
+    case Length(QuoteDelim) of
+      1: Result := SQLDequotedStr(Value, P^);
+      2: Result := SQLDequotedStr(Value, P^, (P+1)^);
+      else Result := Value;
+    end;
+  end else
+    Result := AnsiLowerCase(Value);
 end;
 
 function TZPostgreSQLIdentifierConvertor.IsQuoted(const Value: string): Boolean;
 var
   QuoteDelim: string;
+  pQ, pV: PChar;
 begin
   QuoteDelim := Metadata.GetDatabaseInfo.GetIdentifierQuoteString;
-  Result := (QuoteDelim <> '') and (Value <> '') and
-            (Value[1]=QuoteDelim[1]) and
-            (Value[PLongInt(NativeUInt(Value) - 4)^{fast Length()}]=QuoteDelim[1]);
+  pQ := Pointer(QuoteDelim);
+  pV := Pointer(Value);
+  Result := (pQ <> nil) and (pV <> nil) and (pQ^ = pV^) and
+            ((pV+Length(Value)-1)^ = (pQ+Length(QuoteDelim)-1)^);
 end;
 
 function TZPostgreSQLIdentifierConvertor.IsSpecialCase(
@@ -3510,15 +3701,19 @@ end;
 function TZPostgreSQLIdentifierConvertor.Quote(const Value: string): string;
 var
   QuoteDelim: string;
+  P: PChar absolute QuoteDelim;
 begin
   Result := Value;
-  if IsCaseSensitive(Value) then
-  begin
+  if IsCaseSensitive(Value) then begin
     QuoteDelim := Metadata.GetDatabaseInfo.GetIdentifierQuoteString;
-    Result := QuoteDelim +
-              StringReplace(Result,QuoteDelim,QuoteDelim+QuoteDelim,[rfReplaceAll]) +
-              QuoteDelim;
+    case Length(QuoteDelim) of
+      0: Result := Value;
+      1: Result := SQLQuotedStr(Value, P^);
+      2: Result := SQLQuotedStr(Value, P^, (P+1)^);
+      else Result := Value;
+    end;
   end;
 end;
 
+{$ENDIF ZEOS_DISABLE_POSTGRESQL} //if set we have an empty unit
 end.

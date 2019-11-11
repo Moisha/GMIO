@@ -55,38 +55,29 @@ interface
 
 {$I ZParseSql.inc}
 
+{$IFNDEF ZEOS_DISABLE_DBLIB}
+
 uses
   Classes, {$IFDEF MSEgui}mclasses,{$ENDIF} SysUtils,
-  ZTokenizer, ZCompatibility, ZGenericSqlToken;
+  ZTokenizer, ZGenericSqlToken;
 
 type
 
   {** Implements a Sybase-specific number state object. }
-  TZSybaseNumberState = class (TZNumberState)
-  public
-    function NextToken(Stream: TStream; FirstChar: Char;
-      Tokenizer: TZTokenizer): TZToken; override;
-  end;
+  TZSybaseNumberState = TZGenericSQLHexNumberState;
 
   {** Implements a Sybase-specific quote string state object. }
   TZSybaseQuoteState = class (TZQuoteState)
   public
     function NextToken(Stream: TStream; FirstChar: Char;
-      Tokenizer: TZTokenizer): TZToken; override;
+      {%H-}Tokenizer: TZTokenizer): TZToken; override;
 
     function EncodeString(const Value: string; QuoteChar: Char): string; override;
     function DecodeString(const Value: string; QuoteChar: Char): string; override;
   end;
 
-  {**
-    This state will either delegate to a comment-handling
-    state, or return a token with just a slash in it.
-  }
-  TZSybaseCommentState = class (TZCppCommentState)
-  public
-    function NextToken(Stream: TStream; FirstChar: Char;
-      Tokenizer: TZTokenizer): TZToken; override;
-  end;
+  {** Implements a comment state object. }
+  TZSybaseCommentState = TZGenericSQLCommentState;
 
   {** Implements a symbol state object. }
   TZSybaseSymbolState = class (TZSymbolState)
@@ -102,128 +93,16 @@ type
 
   {** Implements a default tokenizer object. }
   TZSybaseTokenizer = class (TZTokenizer)
-  public
-    constructor Create;
+  protected
+    procedure CreateTokenStates; override;
   end;
 
+{$ENDIF ZEOS_DISABLE_DBLIB}
 implementation
+{$IFNDEF ZEOS_DISABLE_DBLIB}
 
-{ TZSybaseNumberState }
-
-{**
-  Return a number token from a reader.
-  @return a number token from a reader
-}
-function TZSybaseNumberState.NextToken(Stream: TStream; FirstChar: Char;
-  Tokenizer: TZTokenizer): TZToken;
-var
-  HexDecimal: Boolean;
-  FloatPoint: Boolean;
-  LastChar: Char;
-
-  function ReadHexDigits: string;
-  begin
-    Result := '';
-    LastChar := #0;
-    while Stream.Read(LastChar, SizeOf(Char)) > 0 do
-    begin
-      if CharInSet(LastChar, ['0'..'9','a'..'f','A'..'F']) then
-      begin
-        Result := Result + LastChar;
-        HexDecimal := HexDecimal or CharInSet(LastChar, ['a'..'f','A'..'F']);
-        LastChar := #0;
-      end
-      else
-      begin
-        Stream.Seek(-SizeOf(Char), soFromCurrent);
-        Break;
-      end;
-    end;
-  end;
-
-  function ReadDecDigits: string;
-  begin
-    Result := '';
-    LastChar := #0;
-    while Stream.Read(LastChar, SizeOf(Char)) > 0 do
-    begin
-      if CharInSet(LastChar, ['0'..'9']) then
-      begin
-        Result := Result + LastChar;
-        LastChar := #0;
-      end
-      else
-      begin
-        Stream.Seek(-SizeOf(Char), soFromCurrent);
-        Break;
-      end;
-    end;
-  end;
-
-begin
-  HexDecimal := False;
-  FloatPoint := FirstChar = '.';
-  LastChar := #0;
-
-  Result.Value := FirstChar;
-  Result.TokenType := ttUnknown;
-
-  { Reads the first part of the number before decimal point }
-  if not FloatPoint then
-  begin
-    Result.Value := Result.Value + ReadDecDigits;
-    FloatPoint := (LastChar = '.') and not HexDecimal;
-    if FloatPoint then
-    begin
-      Stream.Read(LastChar, SizeOf(Char));
-      Result.Value := Result.Value + LastChar;
-    end;
-  end;
-
-  { Reads the second part of the number after decimal point }
-  if FloatPoint then
-    Result.Value := Result.Value + ReadDecDigits;
-
-  { Reads a power part of the number }
-  if not HexDecimal and CharInSet(LastChar, ['e','E']) then
-  begin
-    Stream.Read(LastChar, SizeOf(Char));
-    Result.Value := Result.Value + LastChar;
-    FloatPoint := True;
-
-    Stream.Read(LastChar, SizeOf(Char));
-    if CharInSet(LastChar, ['0'..'9','-','+']) then
-      Result.Value := Result.Value + LastChar + ReadDecDigits
-    else
-    begin
-      Result.Value := Copy(Result.Value, 1, Length(Result.Value) - 1);
-      Stream.Seek(-2*SizeOf(Char), soFromCurrent);
-    end;
-  end;
-
-  { Reads the nexdecimal number }
-  if (Result.Value = '0') and CharInSet(LastChar, ['x','X']) then
-  begin
-    Stream.Read(LastChar, SizeOf(Char));
-    Result.Value := Result.Value + LastChar + ReadHexDigits;
-    HexDecimal := True;
-  end;
-
-  { Prepare the result }
-  if Result.Value = '.' then
-  begin
-    if Tokenizer.SymbolState <> nil then
-      Result := Tokenizer.SymbolState.NextToken(Stream, FirstChar, Tokenizer);
-  end
-  else
-  begin
-    if HexDecimal then
-      Result.TokenType := ttHexDecimal
-    else if FloatPoint then
-      Result.TokenType := ttFloat
-    else Result.TokenType := ttInteger;
-  end;
-end;
+uses ZCompatibility
+{$IFDEF FAST_MOVE},ZFastCode{$ENDIF};
 
 { TZSybaseQuoteState }
 
@@ -240,9 +119,10 @@ var
   ReadChar: Char;
   LastChar: Char;
 begin
-  Result.Value := FirstChar;
+  Result.Value := '';
+  InitBuf(FirstChar);
   LastChar := #0;
-  while Stream.Read(ReadChar, SizeOf(Char)) > 0 do
+  while Stream.Read(ReadChar{%H-}, SizeOf(Char)) > 0 do
   begin
     if ((LastChar = FirstChar) and (ReadChar <> FirstChar)
       and (FirstChar <> '[')) or ((FirstChar = '[') and (LastChar = ']')) then
@@ -250,11 +130,12 @@ begin
       Stream.Seek(-SizeOf(Char), soFromCurrent);
       Break;
     end;
-    Result.Value := Result.Value + ReadChar;
+    ToBuf(ReadChar, Result.Value);
     if (LastChar = FirstChar) and (ReadChar = FirstChar) then
       LastChar := #0
     else LastChar := ReadChar;
   end;
+  FlushBuf(Result.Value);
 
   if CharInSet(FirstChar, ['"', '[']) then
     Result.TokenType := ttWord
@@ -300,55 +181,6 @@ begin
   end;
 end;
 
-{ TZSybaseCommentState }
-
-{**
-  Gets a Sybase specific comments like # or /* */.
-  @return either just a slash token, or the results of
-    delegating to a comment-handling state
-}
-function TZSybaseCommentState.NextToken(Stream: TStream; FirstChar: Char;
-  Tokenizer: TZTokenizer): TZToken;
-var
-  ReadChar: Char;
-  ReadNum: Integer;
-begin
-  Result.Value := FirstChar;
-  Result.TokenType := ttUnknown;
-
-  if FirstChar = '-' then
-  begin
-    ReadNum := Stream.Read(ReadChar, SizeOf(Char));
-    if (ReadNum > 0) and (ReadChar = '-') then
-    begin
-      Result.TokenType := ttComment;
-      Result.Value := '--' + GetSingleLineComment(Stream);
-    end
-    else
-    begin
-      if ReadNum > 0 then
-        Stream.Seek(-SizeOf(Char), soFromCurrent);
-    end;
-  end
-  else if FirstChar = '/' then
-  begin
-    ReadNum := Stream.Read(ReadChar, SizeOf(Char));
-    if (ReadNum > 0) and (ReadChar = '*') then
-    begin
-      Result.TokenType := ttComment;
-      Result.Value := '/*' + GetMultiLineComment(Stream);
-    end
-    else
-    begin
-      if ReadNum > 0 then
-        Stream.Seek(-SizeOf(Char), soFromCurrent);
-    end;
-  end;
-
-  if (Result.TokenType = ttUnknown) and (Tokenizer.SymbolState <> nil) then
-    Result := Tokenizer.SymbolState.NextToken(Stream, FirstChar, Tokenizer);
-end;
-
 { TZSybaseSymbolState }
 
 {**
@@ -386,12 +218,10 @@ end;
 { TZSybaseTokenizer }
 
 {**
-  Constructs a tokenizer with a default state table (as
-  described in the class comment).
+  Constructs a default state table (as described in the class comment).
 }
-constructor TZSybaseTokenizer.Create;
+procedure TZSybaseTokenizer.CreateTokenStates;
 begin
-  EscapeState := TZEscapeState.Create;
   WhitespaceState := TZWhitespaceState.Create;
 
   SymbolState := TZSybaseSymbolState.Create;
@@ -423,6 +253,5 @@ begin
   SetCharacterState('-', '-', CommentState);
 end;
 
+{$ENDIF ZEOS_DISABLE_DBLIB}
 end.
-
-

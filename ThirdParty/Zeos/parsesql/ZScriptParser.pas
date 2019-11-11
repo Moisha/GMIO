@@ -77,7 +77,7 @@ type
 
   public
     constructor Create;
-    constructor CreateWithTokenizer(Tokenizer: IZTokenizer);
+    constructor CreateWithTokenizer(const Tokenizer: IZTokenizer);
     destructor Destroy; override;
 
     procedure Clear;
@@ -100,7 +100,7 @@ type
 
 implementation
 
-uses ZMessages, ZSysUtils;
+uses ZMessages, ZSysUtils, ZFastCode;
 
 { TZSQLScriptParser }
 
@@ -119,7 +119,7 @@ end;
   Creates this object and assignes a tokenizer object.
   @param Tokenizer a tokenizer object.
 }
-constructor TZSQLScriptParser.CreateWithTokenizer(Tokenizer: IZTokenizer);
+constructor TZSQLScriptParser.CreateWithTokenizer(const Tokenizer: IZTokenizer);
 begin
   Create;
   FTokenizer := Tokenizer;
@@ -201,21 +201,23 @@ var
   Tokens: TStrings;
   TokenType: TZTokenType;
   TokenValue: string;
-  TokenIndex, LastStmtEndingIndex, iPos: Integer;
+  TokenIndex, iPos: Integer;
   SQL, Temp: string;
   EndOfStatement: Boolean;
   Extract: Boolean;
   LastComment: String;
+  P1: PChar;
+  P2: PChar absolute Temp;
 
   function CountChars(const Str: string; Chr: Char): Integer;
-  var
-    I: Integer;
+  var P, PEnd: PChar;
   begin
     Result := 0;
-    for I := 1 to Length(Str) do
-    begin
-      if Str[I] = Chr then
-        Inc(Result);
+    P := Pointer(Str);
+    PEnd := P+Length(Str);
+    while P < PEnd do begin
+      Inc(Result, Ord(P^ = Chr));
+      Inc(P);
     end;
   end;
 
@@ -224,8 +226,6 @@ var
     TokenValue := Tokens[TokenIndex];
     TokenType := TZTokenType({$IFDEF FPC}Pointer({$ENDIF}
       Tokens.Objects[TokenIndex]{$IFDEF FPC}){$ENDIF});
-    if TokenValue = Delimiter  then
-      LastStmtEndingIndex := TokenIndex;
     Inc(TokenIndex);
   end;
 
@@ -308,12 +308,10 @@ begin
               begin
                 Temp := TokenValue;
                 Extract := True;
-                while (Delimiter[1]=Temp[1]) and
-                      (Length(Delimiter) > Length(Temp))
-                       and not (TokenType in [ttWhitespace, ttEOF]) do
-                begin
+                P1 := Pointer(Delimiter);
+                while (P1^=P2^) and (Length(Delimiter) > Length(Temp)) and
+                      not (TokenType in [ttWhitespace, ttEOF]) do begin
                   SetNextToken;
-
                   if not (TokenType in [ttWhitespace, ttEOF]) then
                   begin
                     Temp := Temp + TokenValue;
@@ -350,9 +348,9 @@ begin
           if (DelimiterType = dtSetTerm) and StartsWith(UpperCase(Temp), SetTerm) then
               Delimiter := Copy(Temp, 10, Length(Temp) - 9)
             else
-              if (DelimiterType = dtSetTerm) and ( Pos(SetTerm, UpperCase(Temp)) > 0) then
+              if (DelimiterType = dtSetTerm) and ( ZFastCode.Pos(SetTerm, UpperCase(Temp)) > 0) then
               begin
-                iPos := Pos(SetTerm, UpperCase(Temp))+8;
+                iPos := ZFastCode.Pos(SetTerm, UpperCase(Temp))+8;
                 Delimiter := Copy(Temp, iPos+1, Length(Temp) - iPos);
                 LastComment := TrimRight(Copy(Temp, 1, iPos-9));
               end

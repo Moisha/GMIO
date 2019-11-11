@@ -55,8 +55,10 @@ interface
 
 {$I ZDbc.inc}
 
+{$IFNDEF ZEOS_DISABLE_MYSQL} //if set we have an empty unit
 uses
-  Types, Classes, {$IFDEF MSEgui}mclasses,{$ENDIF} SysUtils,
+  Classes, {$IFDEF MSEgui}mclasses,{$ENDIF} SysUtils,
+  {$IF defined(UNICODE) and not defined(WITH_UNICODEFROMLOCALECHARS)}Windows,{$IFEND}
   ZCompatibility, ZDbcIntfs, ZDbcConnection, ZPlainMySqlDriver, ZPlainDriver,
   ZURL, ZDbcLogging, ZTokenizer, ZGenericSqlAnalyser, ZPlainMySqlConstants;
 
@@ -65,7 +67,6 @@ type
   {** Implements MySQL Database Driver. }
 
   { TZMySQLDriver }
-  {$WARNINGS OFF}
   TZMySQLDriver = class(TZAbstractDriver)
   protected
     function GetPlainDriver(const Url: TZURL; const InitDriver: Boolean = True): IZPlainDriver; override;
@@ -79,26 +80,33 @@ type
     function GetStatementAnalyser: IZStatementAnalyser; override;
     function GetClientVersion(const Url: string): Integer; override;
   end;
-  {$WARNINGS ON}
 
   {** Represents a MYSQL specific connection interface. }
   IZMySQLConnection = interface (IZConnection)
     ['{68E33DD3-4CDC-4BFC-8A28-E9F2EE94E457}']
 
     function GetPlainDriver: IZMySQLPlainDriver;
-    function GetConnectionHandle: PZMySQLConnect;
+    function GetConnectionHandle: PMySQL;
+    function EscapeString(From: PAnsiChar; Len: ULong; Quoted: Boolean): RawByteString; overload;
+    function GetDatabaseName: String;
+    function MySQL_FieldType_Bit_1_IsBoolean: Boolean;
+    function SupportsFieldTypeBit: Boolean;
   end;
 
   {** Implements MySQL Database Connection. }
   TZMySQLConnection = class(TZAbstractConnection, IZMySQLConnection)
   private
     FCatalog: string;
-    FHandle: PZMySQLConnect;
+    FHandle: PMySQL;
+    FMaxLobSize: ULong;
+    FDatabaseName: String;
+    FIKnowMyDatabaseName, FMySQL_FieldType_Bit_1_IsBoolean,
+    FSupportsBitType: Boolean;
+    FPlainDriver: IZMySQLPlainDriver;
+    procedure InternalSetIsolationLevel(Level: TZTransactIsolationLevel);
   protected
     procedure InternalCreate; override;
   public
-    destructor Destroy; override;
-
     function CreateRegularStatement(Info: TStrings): IZStatement; override;
     function CreatePreparedStatement(const SQL: string; Info: TStrings):
       IZPreparedStatement; override;
@@ -109,37 +117,43 @@ type
     procedure Rollback; override;
 
     function PingServer: Integer; override;
-    function EscapeString(Value: RawByteString): RawByteString; override;
+    function EscapeString(const Value: RawByteString): RawByteString; overload; override;
+    function EscapeString(From: PAnsiChar; Len: ULong; Quoted: Boolean): RawByteString; overload;
 
     procedure Open; override;
-    procedure Close; override;
+    procedure InternalClose; override;
 
     procedure SetCatalog(const Catalog: string); override;
     function GetCatalog: string; override;
 
     procedure SetTransactionIsolation(Level: TZTransactIsolationLevel); override;
-    procedure SetAutoCommit(AutoCommit: Boolean); override;
+    procedure SetAutoCommit(Value: Boolean); override;
     {ADDED by fduenas 15-06-2006}
     function GetClientVersion: Integer; override;
     function GetHostVersion: Integer; override;
     {END ADDED by fduenas 15-06-2006}
     function GetPlainDriver: IZMySQLPlainDriver;
-    function GetConnectionHandle: PZMySQLConnect;
+    function GetConnectionHandle: PMySQL;
     function GetEscapeString(const Value: ZWideString): ZWideString; override;
     function GetEscapeString(const Value: RawByteString): RawByteString; override;
+    function GetDatabaseName: String;
+    function MySQL_FieldType_Bit_1_IsBoolean: Boolean;
+    function SupportsFieldTypeBit: Boolean;
   end;
-
 
 var
   {** The common driver manager object. }
   MySQLDriver: IZDriver;
 
+{$ENDIF ZEOS_DISABLE_MYSQL} //if set we have an empty unit
 implementation
+{$IFNDEF ZEOS_DISABLE_MYSQL} //if set we have an empty unit
 
 uses
-  ZMessages, ZSysUtils, ZDbcUtils, ZDbcMySqlStatement, ZMySqlToken,
+  ZMessages, ZSysUtils, ZDbcMySqlStatement, ZMySqlToken, ZFastCode,
   ZDbcMySqlUtils, ZDbcMySqlMetadata, ZMySqlAnalyser, TypInfo, Math,
-  ZEncoding;
+  {$IFDEF FPC}syncobjs{$ELSE}SyncObjs{$ENDIF},
+  ZEncoding, ZClasses;
 
 { TZMySQLDriver }
 
@@ -149,12 +163,13 @@ uses
 constructor TZMySQLDriver.Create;
 begin
   inherited Create;
-  AddSupportedProtocol(AddPlainDriverToCache(TZMySQL5PlainDriver.Create(GetTokenizer), 'mysql'));
-  AddSupportedProtocol(AddPlainDriverToCache(TZMySQL41PlainDriver.Create(GetTokenizer)));
-  AddSupportedProtocol(AddPlainDriverToCache(TZMySQL5PlainDriver.Create(GetTokenizer)));
-  AddSupportedProtocol(AddPlainDriverToCache(TZMySQLD41PlainDriver.Create(GetTokenizer)));
-  AddSupportedProtocol(AddPlainDriverToCache(TZMySQLD5PlainDriver.Create(GetTokenizer)));
-  AddSupportedProtocol(AddPlainDriverToCache(TZMariaDB5PlainDriver.Create(GetTokenizer)));
+  AddSupportedProtocol(AddPlainDriverToCache(TZMySQL5PlainDriver.Create, 'mysql'));
+  AddSupportedProtocol(AddPlainDriverToCache(TZMySQL41PlainDriver.Create));
+  AddSupportedProtocol(AddPlainDriverToCache(TZMySQL5PlainDriver.Create));
+  AddSupportedProtocol(AddPlainDriverToCache(TZMySQLD41PlainDriver.Create));
+  AddSupportedProtocol(AddPlainDriverToCache(TZMySQLD5PlainDriver.Create));
+  AddSupportedProtocol(AddPlainDriverToCache(TZMariaDB5PlainDriver.Create));
+  AddSupportedProtocol(AddPlainDriverToCache(TZMariaDB10PlainDriver.Create));
 end;
 
 {**
@@ -180,12 +195,10 @@ end;
   @return a <code>Connection</code> object that represents a
     connection to the URL
 }
-{$WARNINGS OFF}
 function TZMySQLDriver.Connect(const Url: TZURL): IZConnection;
 begin
   Result := TZMySQLConnection.Create(Url);
 end;
-{$WARNINGS ON}
 
 {**
   Gets the driver's major version number. Initially this should be 1.
@@ -211,9 +224,7 @@ end;
 }
 function TZMySQLDriver.GetTokenizer: IZTokenizer;
 begin
-  if Tokenizer = nil then
-    Tokenizer := TZMySQLTokenizer.Create;
-  Result := Tokenizer;
+  Result := TZMySQLTokenizer.Create;
 end;
 
 {**
@@ -222,9 +233,7 @@ end;
 }
 function TZMySQLDriver.GetStatementAnalyser: IZStatementAnalyser;
 begin
-  if Analyser = nil then
-    Analyser := TZMySQLStatementAnalyser.Create;
-  Result := Analyser;
+  Result := TZMySQLStatementAnalyser.Create; { thread save! Allways return a new Analyser! }
 end;
 
 {**
@@ -272,23 +281,52 @@ end;
 }
 procedure TZMySQLConnection.InternalCreate;
 begin
-  FMetaData := TZMySQLDatabaseMetadata.Create(Self, Url);
+  FIKnowMyDatabaseName := False;
   if Self.Port = 0 then
      Self.Port := MYSQL_PORT;
-  AutoCommit := True;
-  TransactIsolationLevel := tiNone;
-  FHandle := nil;
-
-  { Processes connection properties. }
-  Open;
+  inherited SetTransactionIsolation(tiRepeatableRead);
+  FMetaData := TZMySQLDatabaseMetadata.Create(Self, Url);
 end;
 
-{**
-  Destroys this object and cleanups the memory.
-}
-destructor TZMySQLConnection.Destroy;
+const
+  MySQLSessionTransactionIsolation: array[TZTransactIsolationLevel] of
+    {$IFNDEF NO_ANSISTRING}AnsiString{$ELSE}RawByteString{$ENDIF} = (
+    'SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ',
+    'SET SESSION TRANSACTION ISOLATION LEVEL READ UNCOMMITTED',
+    'SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED',
+    'SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ',
+    'SET SESSION TRANSACTION ISOLATION LEVEL SERIALIZABLE');
+procedure TZMySQLConnection.InternalSetIsolationLevel(
+  Level: TZTransactIsolationLevel);
 begin
-  inherited Destroy;
+  if GetPlainDriver.ExecRealQuery(FHandle,
+    Pointer(MySQLSessionTransactionIsolation[Level]), Length(MySQLSessionTransactionIsolation[Level])) <> 0 then
+      CheckMySQLError(GetPlainDriver, FHandle, lcExecute, MySQLSessionTransactionIsolation[Level], ConSettings);
+  if DriverManager.HasLoggingListener then
+    DriverManager.LogMessage(lcExecute, ConSettings^.Protocol, MySQLSessionTransactionIsolation[Level]);
+end;
+
+function TZMySQLConnection.MySQL_FieldType_Bit_1_IsBoolean: Boolean;
+begin
+  Result := FMySQL_FieldType_Bit_1_IsBoolean;
+end;
+
+function TZMySQLConnection.EscapeString(From: PAnsiChar;
+  Len: ULong; Quoted: Boolean): RawByteString;
+var
+  Buf: array[0..2048] of AnsiChar;
+  P: PAnsichar;
+begin
+  if ((Len+Byte(Ord(Quoted))) shl 1) > (SizeOf(Buf)-1) then begin
+    SetLength(Result, (Len+Byte(Ord(Quoted))) shl 1);
+    SetLength(Result, GetPlainDriver.EscapeString(FHandle, PAnsiChar(Pointer(Result))+Ord(Quoted), From, Len)+(Byte(Ord(Quoted)) shl 1));
+  end else
+    ZSetString(@Buf[0], GetPlainDriver.EscapeString(FHandle, @Buf[0+Ord(Quoted)], From, Len)+(Byte(Ord(Quoted) shl 1)), Result);
+  if Quoted then begin
+    P := Pointer(Result);
+    P^ := #39;
+    (P+Length(Result)-1)^ := #39;
+  end;
 end;
 
 {**
@@ -296,9 +334,7 @@ end;
 }
 procedure TZMySQLConnection.Open;
 var
-  LogMessage: string;
-  OldLevel: TZTransactIsolationLevel;
-  OldAutoCommit: Boolean;
+  LogMessage: RawByteString;
   UIntOpt: UInt;
   MyBoolOpt: Byte;
   ClientFlag : Cardinal;
@@ -308,26 +344,26 @@ var
   my_client_Opt:TMYSQL_CLIENT_OPTIONS;
   sMy_client_Opt, sMy_client_Char_Set:String;
   ClientVersion: Integer;
-  SQL: PAnsiChar;
+  SQL: RawByteString;
 label setuint;
 begin
-   if not Closed then
-      Exit;
+  if not Closed then
+    Exit;
 
-  LogMessage := Format('CONNECT TO "%s" AS USER "%s"', [Database, User]);
-  FHandle := GetPlainDriver.Init(FHandle);
-  {EgonHugeist: Arrange Client-CodePage/CharacterSet first
-    Now we know if UTFEncoding is neccessary or not}
-  sMy_client_Char_Set := String(GetPlainDriver.GetConnectionCharacterSet(FHandle));
-  ConSettings^.ClientCodePage := GetPlainDriver.ValidateCharEncoding(sMy_client_Char_Set);
-  ZEncoding.SetConvertFunctions(ConSettings);
-  {EgonHugeist:
-    Now we know in which kind of CharacterSet we have to send the next Connection-Properties
-    before we can change to the CharacterSet we want to have here..
-    This sets also all environment-variables to the Codepaged Object.
-    Now the compatibility-functions ZString/ZPlainString working like
-    Database-expected Data has to be!!. }
-
+  LogMessage := 'CONNECT TO "'+ConSettings^.Database+'" AS USER "'+ConSettings^.User+'"';
+  GlobalCriticalSection.Enter;
+  try
+    FHandle := GetPlainDriver.Init(FHandle); //is not threadsave!
+  finally
+    GlobalCriticalSection.Leave;
+  end;
+  {EgonHugeist: get current characterset first }
+  sMy_client_Char_Set := {$IFDEF UNICODE}ASCII7ToUnicodeString{$ENDIF}(GetPlainDriver.character_set_name(FHandle));
+  if (sMy_client_Char_Set <> '') {mysql 4down doesn't have this function } and
+     (sMy_client_Char_Set <> FClientCodePage) then begin
+    ConSettings^.ClientCodePage := GetPlainDriver.ValidateCharEncoding(sMy_client_Char_Set);
+    ZEncoding.SetConvertFunctions(ConSettings);
+  end;
   try
     { Sets a default port number. }
     if Port = 0 then
@@ -355,11 +391,11 @@ begin
           MYSQL_OPT_PROTOCOL,
           MYSQL_OPT_READ_TIMEOUT,
           MYSQL_OPT_WRITE_TIMEOUT:
-      if Info.Values[sMyOpt] <> '' then
+            if Info.Values[sMyOpt] <> '' then
             begin
 setuint:      UIntOpt := StrToIntDef(Info.Values[sMyOpt], 0);
               GetPlainDriver.SetOptions(FHandle, myopt, @UIntOpt);
-    end;
+            end;
           MYSQL_OPT_LOCAL_INFILE: {optional empty or unsigned int}
             if Info.Values[sMyOpt] <> '' then
               goto setuint
@@ -403,100 +439,127 @@ setuint:      UIntOpt := StrToIntDef(Info.Values[sMyOpt], 0);
     { Set ClientFlag }
     ClientFlag := 0;
     if Not StrToBoolEx(Info.Values['dbless'])
-       then ClientFlag := trunc(power(2, GetEnumValue(   TypeInfo(TMYSQL_CLIENT_OPTIONS),'_CLIENT_CONNECT_WITH_DB')));
+       then ClientFlag := {$IFDEF USE_FAST_TRUNC}ZFastCode.{$ENDIF}trunc(power(2, GetEnumValue(TypeInfo(TMYSQL_CLIENT_OPTIONS),'_CLIENT_CONNECT_WITH_DB')));
 
     for my_client_Opt := low(TMYSQL_CLIENT_OPTIONS) to high(TMYSQL_CLIENT_OPTIONS) do
     begin
       sMy_client_Opt:= GetEnumName(typeInfo(TMYSQL_CLIENT_OPTIONS), integer(my_client_Opt));
       if StrToBoolEx(Info.Values[sMy_client_Opt]) then
-          ClientFlag:= ClientFlag or trunc(power(2, GetEnumValue(TypeInfo(TMYSQL_CLIENT_OPTIONS),sMy_client_Opt)));
+          ClientFlag:= ClientFlag or {$IFDEF USE_FAST_TRUNC}ZFastCode.{$ENDIF}trunc(power(2, GetEnumValue(TypeInfo(TMYSQL_CLIENT_OPTIONS),sMy_client_Opt)));
     end;
 
   { Set SSL properties before connect}
   SslKey := nil; SslCert := nil; SslCa := nil; SslCaPath := nil; SslCypher := nil;
-  {EgonHugeist: If these Paramters MUST BE UTF8 then leave Param ceUTF8 in the
-    ZPlainString-function like else remove it and it adapts to default codepage}
   if StrToBoolEx(Info.Values['MYSQL_SSL']) then
     begin
        if Info.Values['MYSQL_SSL_KEY'] <> '' then
-          SslKey := PAnsiChar(ZPlainString(Info.Values['MYSQL_SSL_KEY'], ceUTF8));
+          SslKey := PAnsiChar(ConSettings^.ConvFuncs.ZStringToRaw(
+            Info.Values['MYSQL_SSL_KEY'], ConSettings^.CTRL_CP, ConSettings^.ClientCodePage^.CP));
        if Info.Values['MYSQL_SSL_CERT'] <> '' then
-          SslCert := PAnsiChar(ZPlainString(Info.Values['MYSQL_SSL_CERT'], ceUTF8));
+          SslCert := PAnsiChar(ConSettings^.ConvFuncs.ZStringToRaw(
+            Info.Values['MYSQL_SSL_CERT'], ConSettings^.CTRL_CP, ConSettings^.ClientCodePage^.CP));
        if Info.Values['MYSQL_SSL_CA'] <> '' then
-          SslCa := PAnsiChar(ZPlainString(Info.Values['MYSQL_SSL_CA'], ceUTF8));
+          SslCa := PAnsiChar(ConSettings^.ConvFuncs.ZStringToRaw(
+            Info.Values['MYSQL_SSL_CA'], ConSettings^.CTRL_CP, ConSettings^.ClientCodePage^.CP));
        if Info.Values['MYSQL_SSL_CAPATH'] <> '' then
-          SslCaPath := PAnsiChar(ZPlainString(Info.Values['MYSQL_SSL_CAPATH'], ceUTF8));
+          SslCaPath := PAnsiChar(ConSettings^.ConvFuncs.ZStringToRaw(
+            Info.Values['MYSQL_SSL_CAPATH'], ConSettings^.CTRL_CP, ConSettings^.ClientCodePage^.CP));
        if Info.Values['MYSQL_SSL_CYPHER'] <> '' then
-          SslCypher := PAnsiChar(ZPlainString(Info.Values['MYSQL_SSL_CYPHER'], ceUTF8));
+          SslCypher := PAnsiChar(ConSettings^.ConvFuncs.ZStringToRaw(
+            Info.Values['MYSQL_SSL_CYPHER'], ConSettings^.CTRL_CP, ConSettings^.ClientCodePage^.CP));
        GetPlainDriver.SslSet(FHandle, SslKey, SslCert, SslCa, SslCaPath,
           SslCypher);
-       DriverManager.LogMessage(lcConnect, PlainDriver.GetProtocol,
+       DriverManager.LogMessage(lcConnect, ConSettings^.Protocol,
           'SSL options set');
     end;
 
     { Connect to MySQL database. }
-    if GetPlainDriver.RealConnect(FHandle, PAnsiChar(ZPlainString(HostName)),
-                              PAnsiChar(ZPlainString(User)), PAnsiChar(ZPlainString(Password)),
-                              PAnsiChar(ZPlainString(Database)), Port, nil,
-                              ClientFlag) = nil then
-
-    begin
-      CheckMySQLError(GetPlainDriver, FHandle, lcConnect, LogMessage);
-      DriverManager.LogError(lcConnect, PlainDriver.GetProtocol, LogMessage,
-        0, SUnknownError);
+    {$IFDEF UNICODE}
+    if GetPlainDriver.RealConnect(FHandle, PAnsiChar(ConSettings^.ConvFuncs.ZStringToRaw(HostName, ConSettings^.CTRL_CP, ConSettings^.ClientCodePage^.CP)),
+                              PAnsiChar(ConSettings^.User), PAnsiChar(ConSettings^.ConvFuncs.ZStringToRaw(Password, ConSettings^.CTRL_CP, ConSettings^.ClientCodePage^.CP)),
+    {$ELSE}
+    if GetPlainDriver.RealConnect(FHandle, PAnsiChar(HostName),
+                              PAnsiChar(ConSettings^.User), PAnsiChar(Password),
+    {$ENDIF}
+                              PAnsiChar(ConSettings^.Database), Port, nil,
+                              ClientFlag) = nil then begin
+      CheckMySQLError(GetPlainDriver, FHandle, lcConnect, LogMessage, ConSettings);
+      DriverManager.LogError(lcConnect, ConSettings^.Protocol, LogMessage,
+        0, ConSettings.ConvFuncs.ZStringToRaw(SUnknownError,
+          ConSettings^.CTRL_CP, ConSettings^.ClientCodePage^.CP));
       raise EZSQLException.Create(SCanNotConnectToServer);
     end;
-    DriverManager.LogMessage(lcConnect, PlainDriver.GetProtocol, LogMessage);
+    DriverManager.LogMessage(lcConnect, ConSettings^.Protocol, LogMessage);
 
     { Fix Bugs in certain Versions where real_conncet resets the Reconnect flag }
     if (Info.Values['MYSQL_OPT_RECONNECT'] <> '') and
       ((ClientVersion>=50013) and (ClientVersion<50019)) or
-      ((ClientVersion>=50100) and (ClientVersion<50106)) then
-    begin
+      ((ClientVersion>=50100) and (ClientVersion<50106)) then begin
       MyBoolOpt := Ord(StrToBoolEx(Info.Values['MYSQL_OPT_RECONNECT']));
       GetPlainDriver.SetOptions(FHandle, MYSQL_OPT_RECONNECT, @MyBoolOpt);
     end;
     if (FClientCodePage = '') and (sMy_client_Char_Set <> '') then
       FClientCodePage := sMy_client_Char_Set;
 
-    if (FClientCodePage <> sMy_client_Char_Set) then
-    begin
-      SQL := PAnsiChar(ZPlainString(Format('SET NAMES %s', [FClientCodePage])));
-      GetPlainDriver.ExecQuery(FHandle, SQL);
-      CheckMySQLError(GetPlainDriver, FHandle, lcExecute, String(SQL));
-      DriverManager.LogMessage(lcExecute, PlainDriver.GetProtocol, String(SQL));
+    //EH: MariaDB needs a explizit set of charset to be synced on Client<>Server!
+    if (FClientCodePage <> sMy_client_Char_Set) or (FPlainDriver.IsMariaDBDriver and (FClientCodePage <> '')) then begin
+      //http://dev.mysql.com/doc/refman/5.7/en/mysql-set-character-set.html
+      //take care mysql_real_escape_string works like expected!
+      SQL := {$IFDEF UNICODE}UnicodeStringToAscii7{$ENDIF}(FClientCodePage);
+      if GetPlainDriver.set_character_set(FHandle, Pointer(SQL)) <> 0 then begin //failed? might be possible the function does not exists
+        SQL := 'SET NAMES '+SQL;
+        GetPlainDriver.ExecRealQuery(FHandle, Pointer(SQL), Length(SQL));
+        CheckMySQLError(GetPlainDriver, FHandle, lcExecute, SQL, ConSettings);
+        DriverManager.LogMessage(lcExecute, ConSettings^.Protocol, SQL);
+      end;
+      CheckCharEncoding(FClientCodePage);
     end;
-    Self.CheckCharEncoding(FClientCodePage);
+
+    FMaxLobSize := {$IFDEF UNICODE}UnicodeToIntDef{$ELSE}RawToIntDef{$ENDIF}(Info.Values['MaxLobSize'], 0);
+    if FMaxLobSize <> 0 then begin
+      SQL := 'SET GLOBAL max_allowed_packet='+IntToRaw(FMaxLobSize);
+      GetPlainDriver.ExecRealQuery(FHandle, Pointer(SQL), Length(SQL));
+      CheckMySQLError(GetPlainDriver, FHandle, lcExecute, SQL, ConSettings);
+      DriverManager.LogMessage(lcExecute, ConSettings^.Protocol, SQL);
+    end else
+      FMaxLobSize := MaxBlobSize;
+
 
     { Sets transaction isolation level. }
-    OldLevel := TransactIsolationLevel;
-    TransactIsolationLevel := tiNone;
-    SetTransactionIsolation(OldLevel);
+    if not (TransactIsolationLevel in [tiNone,tiRepeatableRead]) then
+      InternalSetIsolationLevel(TransactIsolationLevel);
 
     { Sets an auto commit mode. }
-    OldAutoCommit := AutoCommit;
-    AutoCommit := True;
-    SetAutoCommit(OldAutoCommit);
+    if not GetAutoCommit then begin
+      GetPlaindriver.SetAutocommit(FHandle, GetAutoCommit);
+      CheckMySQLError(GetPlainDriver, FHandle, lcExecute, 'Native SetAutoCommit '+BoolToRawEx(AutoCommit)+'call', ConSettings);
+    end;
+
+    inherited Open;
+    //no real version check required -> the user can simply switch off treading
+    //enum('Y','N')
+    FMySQL_FieldType_Bit_1_IsBoolean := StrToBoolEx(Info.Values['MySQL_FieldType_Bit_1_IsBoolean']);
+    (GetMetadata as IZMySQLDatabaseMetadata).SetMySQL_FieldType_Bit_1_IsBoolean(FMySQL_FieldType_Bit_1_IsBoolean);
+    FSupportsBitType := (
+      (    GetPlainDriver.IsMariaDBDriver and (ClientVersion >= 100109) ) or
+      (not GetPlainDriver.IsMariaDBDriver and (ClientVersion >=  50003) ) ) and (GetHostVersion >= EncodeSQLVersioning(5,0,3));
+
+    (GetMetadata as IZMySQLDatabaseMetadata).SetDataBaseName(GetDatabaseName);
   except
     GetPlainDriver.Close(FHandle);
-    GetPlainDriver.Despose(FHandle);
     FHandle := nil;
     raise;
   end;
 
-  inherited Open;
-
-  if FClientCodePage = '' then //workaround for MySQL 4 down
-  begin
-    with CreateStatement.ExecuteQuery('show variables like "character_set_database"') do
-    begin
+  if FClientCodePage = '' then begin //workaround for MySQL 4 down
+    with CreateStatement.ExecuteQuery('show variables like "character_set_database"') do begin
       if Next then
-        FClientCodePage := GetString(2);
+        FClientCodePage := GetString(FirstDbcIndex+1);
       Close;
     end;
     ConSettings^.ClientCodePage := GetPlainDriver.ValidateCharEncoding(FClientCodePage);
     ZEncoding.SetConvertFunctions(ConSettings);
-  end
+  end;
 end;
 
 {**
@@ -522,9 +585,9 @@ end;
   @param value string that should be escaped
   @return Escaped string
 }
-function TZMySQLConnection.EscapeString(Value: RawByteString): RawByteString;
+function TZMySQLConnection.EscapeString(const Value: RawByteString): RawByteString;
 begin
-  Result := PlainDriver.EscapeString(Self.FHandle,  Value, ConSettings);
+  Result := EscapeString(Pointer(Value), Length(Value), True);
 end;
 
 {**
@@ -632,12 +695,13 @@ end;
 }
 procedure TZMySQLConnection.Commit;
 begin
-  if (TransactIsolationLevel <> tiNone) and (AutoCommit <> True)
-    and not Closed then
-  begin
-    If not GEtPlaindriver.Commit(FHandle) then
-      CheckMySQLError(GetPlainDriver, FHandle, lcExecute, 'Native Commit call');
-    DriverManager.LogMessage(lcExecute, PlainDriver.GetProtocol, 'Native Commit call');
+  if GetAutoCommit then
+    raise Exception.Create(SInvalidOpInAutoCommit);
+
+  if not Closed then begin
+    If not GetPlaindriver.Commit(FHandle) then
+      CheckMySQLError(GetPlainDriver, FHandle, lcExecute, 'Native Commit call', ConSettings);
+    DriverManager.LogMessage(lcExecute, ConSettings.Protocol, 'Native Commit call');
   end;
 end;
 
@@ -650,12 +714,13 @@ end;
 }
 procedure TZMySQLConnection.Rollback;
 begin
-  if (TransactIsolationLevel <> tiNone) and (AutoCommit <> True)
-    and not Closed then
-  begin
+  if GetAutoCommit then
+    raise Exception.Create(SInvalidOpInAutoCommit);
+
+  if not Closed then begin
     If not GetPlaindriver.Rollback(FHandle) then
-      CheckMySQLError(GetPlainDriver, FHandle, lcExecute, 'Native Rollback call');
-    DriverManager.LogMessage(lcExecute, PlainDriver.GetProtocol, 'Native Rollback call');
+      CheckMySQLError(GetPlainDriver, FHandle, lcExecute, 'Native Rollback call', ConSettings);
+    DriverManager.LogMessage(lcExecute, ConSettings.Protocol, 'Native Rollback call');
   end;
 end;
 
@@ -668,19 +733,16 @@ end;
   garbage collected. Certain fatal errors also result in a closed
   Connection.
 }
-procedure TZMySQLConnection.Close;
+procedure TZMySQLConnection.InternalClose;
 var
-  LogMessage: string;
+  LogMessage: RawByteString;
 begin
   if ( Closed ) or (not Assigned(PlainDriver)) then
     Exit;
-
   GetPlainDriver.Close(FHandle);
-  GetPlainDriver.Despose(FHandle);
   FHandle := nil;
-  LogMessage := Format('DISCONNECT FROM "%s"', [Database]);
-  DriverManager.LogMessage(lcDisconnect, GetPlainDriver.GetProtocol, LogMessage);
-  inherited Close;
+  LogMessage := 'DISCONNECT FROM "'+ConSettings^.Database+'"';
+  DriverManager.LogMessage(lcDisconnect, ConSettings^.Protocol, LogMessage);
 end;
 
 {**
@@ -707,46 +769,19 @@ end;
 }
 procedure TZMySQLConnection.SetTransactionIsolation(
   Level: TZTransactIsolationLevel);
-var
-  SQL: PAnsiChar;
-  testResult: Integer;
 begin
-  if TransactIsolationLevel <> Level then
-  begin
+  if TransactIsolationLevel <> Level then begin
     inherited SetTransactionIsolation(Level);
-    testResult := 1;
     if not Closed then
-    begin
-      case TransactIsolationLevel of
-        tiNone, tiReadUncommitted:
-          begin
-            SQL := 'SET SESSION TRANSACTION ISOLATION LEVEL READ UNCOMMITTED';
-            testResult := GetPlainDriver.ExecQuery(FHandle, SQL);
-          end;
-        tiReadCommitted:
-          begin
-            SQL := 'SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED';
-            testResult := GetPlainDriver.ExecQuery(FHandle, SQL);
-          end;
-        tiRepeatableRead:
-          begin
-            SQL := 'SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ';
-            testResult := GetPlainDriver.ExecQuery(FHandle, SQL);
-          end;
-        tiSerializable:
-          begin
-            SQL := 'SET SESSION TRANSACTION ISOLATION LEVEL SERIALIZABLE';
-            testResult := GetPlainDriver.ExecQuery(FHandle, SQL);
-          end;
-        else
-          SQL := '';
-      end;
-      if (testResult <> 0) then
-          CheckMySQLError(GetPlainDriver, FHandle, lcExecute, String(SQL));
-      if SQL <> '' then
-        DriverManager.LogMessage(lcExecute, PlainDriver.GetProtocol, String(SQL));
-    end;
+      InternalSetIsolationLevel(Level);
   end;
+end;
+
+function TZMySQLConnection.SupportsFieldTypeBit: Boolean;
+begin
+  if Closed then
+    Open;
+  Result := FSupportsBitType;
 end;
 
 {**
@@ -769,17 +804,14 @@ end;
 
   @param autoCommit true enables auto-commit; false disables auto-commit.
 }
-procedure TZMySQLConnection.SetAutoCommit(AutoCommit: Boolean);
+procedure TZMySQLConnection.SetAutoCommit(Value: Boolean);
 begin
-  if AutoCommit <> Self.AutoCommit then
-  begin
-    inherited SetAutoCommit(AutoCommit);
-
-    if not Closed then
-    begin
-      if not GetPlaindriver.SetAutocommit(FHandle, AutoCommit) then
-        CheckMySQLError(GetPlainDriver, FHandle, lcExecute, 'Native SetAutoCommit '+BoolToStrEx(AutoCommit)+'call');
-      DriverManager.LogMessage(lcExecute, PlainDriver.GetProtocol, 'Native SetAutoCommit '+BoolToStrEx(AutoCommit)+'call');
+  if GetAutoCommit <> Value then begin
+    inherited SetAutoCommit(Value);
+    if not Closed then begin
+      if not GetPlaindriver.SetAutocommit(FHandle, Value) then
+        CheckMySQLError(GetPlainDriver, FHandle, lcExecute, 'Native SetAutoCommit '+BoolToRawEx(AutoCommit)+'call', ConSettings);
+      DriverManager.LogMessage(lcExecute, ConSettings^.Protocol, 'Native SetAutoCommit '+BoolToRawEx(AutoCommit)+'call');
     end;
   end;
 end;
@@ -808,14 +840,14 @@ end;
 function TZMySQLConnection.GetHostVersion: Integer;
 begin
  Result := ConvertMySQLVersionToSQLVersion( GetPlainDriver.GetServerVersion(FHandle) );
- CheckMySQLError(GetPlainDriver, FHandle, lcExecute, 'mysql_get_server_version()');
+ CheckMySQLError(GetPlainDriver, FHandle, lcExecute, 'mysql_get_server_version()', ConSettings);
 end;
 
 {**
   Gets a reference to MySQL connection handle.
   @return a reference to MySQL connection handle.
 }
-function TZMySQLConnection.GetConnectionHandle: PZMySQLConnect;
+function TZMySQLConnection.GetConnectionHandle: PMySQL;
 begin
   Result := FHandle;
 end;
@@ -826,7 +858,9 @@ end;
 }
 function TZMySQLConnection.GetPlainDriver: IZMySQLPlainDriver;
 begin
-  Result := Self.PlainDriver as IZMySQLPlainDriver;
+  if FPlainDriver = nil then
+    fPlainDriver := PLainDriver as IZMySQLPlainDriver;
+  Result := fPlainDriver;
 end;
 
 {**
@@ -838,13 +872,30 @@ end;
   @result the detectable Binary String
 }
 function TZMySQLConnection.GetEscapeString(const Value: ZWideString): ZWideString;
+var tmp: RawByteString;
 begin
-  Result := inherited GetEscapeString(GetPlainDriver.EscapeString(FHandle, Value, ConSettings));
+  tmp := GetEscapeString(PUnicodeToRaw(Pointer(Value), Length(Value), ConSettings^.ClientCodePage^.CP));
+  Result := PRawToUnicode(Pointer(tmp), Length(tmp), ConSettings^.ClientCodePage^.CP);
 end;
 
 function TZMySQLConnection.GetEscapeString(const Value: RawByteString): RawByteString;
 begin
-  Result := inherited GetEscapeString(GetPlainDriver.EscapeString(FHandle, Value, ConSettings));
+  Result := inherited GetEscapeString(EscapeString(Pointer(Value), Length(Value), True));
+end;
+
+function TZMySQLConnection.GetDatabaseName: String;
+var
+  ResultSet: IZResultSet;
+begin
+  if not FIKnowMyDatabaseName then begin
+    ResultSet := CreateStatement.ExecuteQuery('select database() as ''DATABASE''');
+    if ResultSet.Next
+    then FDatabaseName := ResultSet.GetStringByName('DATABASE');
+    FIKnowMyDatabaseName := True;
+    ResultSet.Close;
+    ResultSet := nil;
+  end;
+  Result := FDatabaseName;
 end;
 
 initialization
@@ -854,5 +905,6 @@ finalization
   if DriverManager <> nil then
     DriverManager.DeregisterDriver(MySQLDriver);
   MySQLDriver := nil;
-end.
 
+  {$ENDIF ZEOS_DISABLE_MYSQL} //if set we have an empty unit
+end.

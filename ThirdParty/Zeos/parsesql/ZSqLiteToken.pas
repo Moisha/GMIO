@@ -55,6 +55,7 @@ interface
 
 {$I ZParseSql.inc}
 
+{$IFNDEF ZEOS_DISABLE_SQLITE}
 uses
   Classes, {$IFDEF MSEgui}mclasses,{$ENDIF}
   ZTokenizer, ZGenericSqlToken;
@@ -62,17 +63,13 @@ uses
 type
 
   {** Implements a SQLite-specific number state object. }
-  TZSQLiteNumberState = class (TZNumberState)
-  public
-    function NextToken(Stream: TStream; FirstChar: Char;
-      Tokenizer: TZTokenizer): TZToken; override;
-  end;
+  TZSQLiteNumberState = TZGenericSQLNoHexNumberState;
 
   {** Implements a SQLite-specific quote string state object. }
   TZSQLiteQuoteState = class (TZQuoteState)
   public
     function NextToken(Stream: TStream; FirstChar: Char;
-      Tokenizer: TZTokenizer): TZToken; override;
+      {%H-}Tokenizer: TZTokenizer): TZToken; override;
 
     function EncodeString(const Value: string; QuoteChar: Char): string; override;
     function DecodeString(const Value: string; QuoteChar: Char): string; override;
@@ -82,11 +79,7 @@ type
     This state will either delegate to a comment-handling
     state, or return a token with just a slash in it.
   }
-  TZSQLiteCommentState = class (TZCppCommentState)
-  public
-    function NextToken(Stream: TStream; FirstChar: Char;
-      Tokenizer: TZTokenizer): TZToken; override;
-  end;
+  TZSQLiteCommentState = TZGenericSQLCommentState;
 
   {** Implements a symbol state object. }
   TZSQLiteSymbolState = class (TZSymbolState)
@@ -102,98 +95,16 @@ type
 
   {** Implements a default tokenizer object. }
   TZSQLiteTokenizer = class (TZTokenizer)
-  public
-    constructor Create;
+  protected
+    procedure CreateTokenStates; override;
   end;
 
+{$ENDIF ZEOS_DISABLE_SQLITE}
 implementation
+{$IFNDEF ZEOS_DISABLE_SQLITE}
 
-uses SysUtils, ZCompatibility;
-
-{ TZSQLiteNumberState }
-
-{**
-  Return a number token from a reader.
-  @return a number token from a reader
-}
-function TZSQLiteNumberState.NextToken(Stream: TStream; FirstChar: Char;
-  Tokenizer: TZTokenizer): TZToken;
-var
-  TempChar: Char;
-  FloatPoint: Boolean;
-  LastChar: Char;
-
-  function ReadDecDigits: string;
-  begin
-    Result := '';
-    LastChar := #0;
-    while Stream.Read(LastChar, SizeOf(Char)) > 0 do
-    begin
-      if CharInSet(LastChar, ['0'..'9']) then
-      begin
-        Result := Result + LastChar;
-        LastChar := #0;
-      end
-      else
-      begin
-        Stream.Seek(-SizeOf(Char), soFromCurrent);
-        Break;
-      end;
-    end;
-  end;
-
-begin
-  FloatPoint := FirstChar = '.';
-  Result.Value := FirstChar;
-  Result.TokenType := ttUnknown;
-  LastChar := #0;
-
-  { Reads the first part of the number before decimal point }
-  if not FloatPoint then
-  begin
-    Result.Value := Result.Value + ReadDecDigits;
-    FloatPoint := LastChar = '.';
-    if FloatPoint then
-    begin
-      Stream.Read(TempChar, SizeOf(Char));
-      Result.Value := Result.Value + TempChar;
-    end;
-  end;
-
-  { Reads the second part of the number after decimal point }
-  if FloatPoint then
-    Result.Value := Result.Value + ReadDecDigits;
-
-  { Reads a power part of the number }
-  if CharInSet(LastChar, ['e','E']) then
-  begin
-    Stream.Read(TempChar, SizeOf(Char));
-    Result.Value := Result.Value + TempChar;
-    FloatPoint := True;
-
-    Stream.Read(TempChar, SizeOf(Char));
-    if CharInSet(TempChar, ['0'..'9','-','+']) then
-      Result.Value := Result.Value + TempChar + ReadDecDigits
-    else
-    begin
-      Result.Value := Copy(Result.Value, 1, Length(Result.Value) - 1);
-      Stream.Seek(-2*SizeOf(Char), soFromCurrent);
-    end;
-  end;
-
-  { Prepare the result }
-  if Result.Value = '.' then
-  begin
-    if Tokenizer.SymbolState <> nil then
-      Result := Tokenizer.SymbolState.NextToken(Stream, FirstChar, Tokenizer);
-  end
-  else
-  begin
-    if FloatPoint then
-      Result.TokenType := ttFloat
-    else Result.TokenType := ttInteger;
-  end;
-end;
+uses SysUtils, ZCompatibility
+ {$IFDEF FAST_MOVE},ZFastCode{$ENDIF};
 
 { TZSQLiteQuoteState }
 
@@ -210,9 +121,10 @@ var
   ReadChar: Char;
   LastChar: Char;
 begin
-  Result.Value := FirstChar;
+  Result.Value := '';
+  InitBuf(FirstChar);
   LastChar := #0;
-  while Stream.Read(ReadChar, SizeOf(Char)) > 0 do
+  while Stream.Read(ReadChar{%H-}, SizeOf(Char)) > 0 do
   begin
     if ((LastChar = FirstChar) and (ReadChar <> FirstChar)
       and (FirstChar <> '[')) or ((FirstChar = '[') and (LastChar = ']')) then
@@ -220,11 +132,12 @@ begin
       Stream.Seek(-SizeOf(Char), soFromCurrent);
       Break;
     end;
-    Result.Value := Result.Value + ReadChar;
+    ToBuf(ReadChar, Result.Value);
     if (LastChar = FirstChar) and (ReadChar = FirstChar) then
       LastChar := #0
     else LastChar := ReadChar;
   end;
+  FlushBuf(Result.Value);
 
   if CharInSet(FirstChar, ['"', '[']) then
     Result.TokenType := ttWord
@@ -270,55 +183,6 @@ begin
   end;
 end;
 
-{ TZSQLiteCommentState }
-
-{**
-  Gets a SQLite specific comments like # or /* */.
-  @return either just a slash token, or the results of
-    delegating to a comment-handling state
-}
-function TZSQLiteCommentState.NextToken(Stream: TStream; FirstChar: Char;
-  Tokenizer: TZTokenizer): TZToken;
-var
-  ReadChar: Char;
-  ReadNum: Integer;
-begin
-  Result.Value := FirstChar;
-  Result.TokenType := ttUnknown;
-
-  if FirstChar = '-' then
-  begin
-    ReadNum := Stream.Read(ReadChar, SizeOf(Char));
-    if (ReadNum > 0) and (ReadChar = '-') then
-    begin
-      Result.TokenType := ttComment;
-      Result.Value := '--' + GetSingleLineComment(Stream);
-    end
-    else
-    begin
-      if ReadNum > 0 then
-        Stream.Seek(-SizeOf(Char), soFromCurrent);
-    end;
-  end
-  else if FirstChar = '/' then
-  begin
-    ReadNum := Stream.Read(ReadChar, SizeOf(Char));
-    if (ReadNum > 0) and (ReadChar = '*') then
-    begin
-      Result.TokenType := ttComment;
-      Result.Value := '/*' + GetMultiLineComment(Stream);
-    end
-    else
-    begin
-      if ReadNum > 0 then
-        Stream.Seek(-SizeOf(Char), soFromCurrent);
-    end;
-  end;
-
-  if (Result.TokenType = ttUnknown) and (Tokenizer.SymbolState <> nil) then
-    Result := Tokenizer.SymbolState.NextToken(Stream, FirstChar, Tokenizer);
-end;
-
 { TZSQLiteSymbolState }
 
 {**
@@ -357,9 +221,8 @@ end;
   Constructs a tokenizer with a default state table (as
   described in the class comment).
 }
-constructor TZSQLiteTokenizer.Create;
+procedure TZSQLiteTokenizer.CreateTokenStates;
 begin
-  EscapeState := TZEscapeState.Create;
   WhitespaceState := TZWhitespaceState.Create;
 
   SymbolState := TZSQLiteSymbolState.Create;
@@ -387,6 +250,8 @@ begin
   SetCharacterState('/', '/', CommentState);
   SetCharacterState('-', '-', CommentState);
 end;
+
+{$ENDIF ZEOS_DISABLE_SQLITE}
 
 end.
 

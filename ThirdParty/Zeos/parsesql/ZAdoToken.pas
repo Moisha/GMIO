@@ -55,6 +55,12 @@ interface
 
 {$I ZParseSql.inc}
 
+{$IF not defined(MSWINDOWS)}
+  {$DEFINE ZEOS_DISABLE_ADO}
+{$IFEND}
+
+{$IFNDEF ZEOS_DISABLE_ADO}
+
 uses
   Classes, SysUtils, ZTokenizer, ZGenericSqlToken, ZCompatibility;
 
@@ -63,7 +69,7 @@ type
   TZAdoSQLQuoteState = class (TZQuoteState)
   public
     function NextToken(Stream: TStream; FirstChar: Char;
-      Tokenizer: TZTokenizer): TZToken; override;
+      {%H-}Tokenizer: TZTokenizer): TZToken; override;
 
     function EncodeString(const Value: string; QuoteChar: Char): string; override;
     function DecodeString(const Value: string; QuoteChar: Char): string; override;
@@ -71,11 +77,19 @@ type
 
   {** Implements a default tokenizer object. }
   TZAdoSQLTokenizer = class (TZGenericSQLTokenizer)
-  public
-    constructor Create;
+  protected
+    procedure CreateTokenStates; override;
   end;
 
+{$ENDIF ZEOS_DISABLE_ADO}
+
 implementation
+
+{$IFNDEF ZEOS_DISABLE_ADO}
+
+{$IFDEF FAST_MOVE}
+uses ZFastCode;
+{$ENDIF}
 
 { TZAdoSQLQuoteState }
 
@@ -92,9 +106,10 @@ var
   ReadChar: Char;
   LastChar: Char;
 begin
-  Result.Value := FirstChar;
+  Result.Value := '';
+  InitBuf(FirstChar);
   LastChar := #0;
-  while Stream.Read(ReadChar, SizeOf(Char)) > 0 do
+  while Stream.Read(ReadChar{%H-}, SizeOf(Char)) > 0 do
   begin
     if ((LastChar = FirstChar) and (ReadChar <> FirstChar)
       and (FirstChar <> '[')) or ((FirstChar = '[') and (LastChar = ']')) then
@@ -102,13 +117,14 @@ begin
       Stream.Seek(-SizeOf(Char), soFromCurrent);
       Break;
     end;
-    Result.Value := Result.Value + ReadChar;
+    ToBuf(ReadChar, Result.Value);
     if (LastChar = FirstChar) and (ReadChar = FirstChar) then
       LastChar := #0
     else LastChar := ReadChar;
   end;
+  FlushBuf(Result.Value);
 
-  if CharInSet(FirstChar, ['"', '[']) then
+  if (FirstChar = '"') or (FirstChar='[') then
     Result.TokenType := ttQuotedIdentifier
   else Result.TokenType := ttQuoted;
 end;
@@ -154,13 +170,12 @@ end;
 
 
 { TZAdoSQLTokenizer }
+
 {**
-  Constructs a tokenizer with a default state table (as
-  described in the class comment).
+  Constructs a default state table (as described in the class comment).
 }
-constructor TZAdoSQLTokenizer.Create;
+procedure TZAdoSQLTokenizer.CreateTokenStates;
 begin
-  EscapeState := TZEscapeState.Create;
   NumberState := TZNumberState.Create;
   QuoteState := TZAdoSQLQuoteState.Create;
   WhitespaceState := TZWhitespaceState.Create;
@@ -188,7 +203,7 @@ begin
   SetCharacterState(']', ']', QuoteState);
 
   SetCharacterState('/', '/', CommentState);
-
 end;
+{$ENDIF ZEOS_DISABLE_ADO}
 
 end.
