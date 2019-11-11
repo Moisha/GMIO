@@ -1,16 +1,12 @@
 del out.txt
 cd ..
 
-call rsvars.bat
-
 set PROJECTSROOT=%CD%
-set OPTS=-w-SYMBOL_PLATFORM -B -$D- -Q -H -W -$Q+ -$R+ -U"%DXVCL%\Library\RS18"  -NSSystem.Win;Data.Win;Datasnap.Win;Web.Win;Soap.Win;Xml.Win;Bde;System;Xml;Data;Datasnap;Web;Soap;Winapi;Vcl;Vcl.Samples;Web.Win;Vcl.Imaging
 set ERR=0
 set LOGFILE=%PROJECTSROOT%\build\out.txt
 set RELEASEDIR=%PROJECTSROOT%\Release
 
-if exist "C:\Program Files (x86)\Embarcadero\RAD Studio\11.0\bin\dcc32.exe" set DELPHIBIN=C:\Program Files (x86)\Embarcadero\RAD Studio\11.0\bin
-if exist "C:\Program Files\Embarcadero\RAD Studio\11.0\bin\dcc32.exe" set DELPHIBIN=C:\Program Files\Embarcadero\RAD Studio\11.0\bin
+if exist "%ProgramFiles(x86)%\Embarcadero\Studio\20.0\bin\dcc32.exe" set DELPHIBIN=%ProgramFiles(x86)%\Embarcadero\Studio\20.0\bin
 call "%DELPHIBIN%\rsvars.bat"
 
 echo on
