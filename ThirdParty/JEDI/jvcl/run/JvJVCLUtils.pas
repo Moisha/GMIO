@@ -5286,7 +5286,9 @@ var
   ColorCount: Integer;
   SourceBitmapFormat: TPixelFormat;
 begin
+{$IFNDEF DELPHIRIO_UP}
   Result := nil;
+{$ENDIF}
   if Bitmap.Handle = 0 then
     InvalidBitmap;
   SourceBitmapFormat := GetBitmapPixelFormat(Bitmap);

@@ -103,7 +103,6 @@ var
   sl: TSTringList;
   s: string;
 begin
-  Result := 0;
   sl := TSTringList.Create();
   try
     CaptureConsoleOutput('rev-list head --count', sl);
@@ -143,7 +142,6 @@ function FindRevision(const sha: string): int;
 var
   sl: TSTringList;
 begin
-  Result := 0;
   sl := TSTringList.Create();
   try
     CaptureConsoleOutput('rev-list head', sl);

@@ -124,7 +124,8 @@ implementation
 
 uses Devices.UBZ, DB, Devices.Vacon, HTTPApp, XMLDoc, GMBlockValues,
   Devices.Ancom, Threads.AncomGPRS, ProgramLogFile, ClientResponce, UsefulQueries, Devices.TR101, Threads.Base,
-  Threads.ReqSpecDevTemplate, DateUtils, Connection.TCP, Connection.Base, RequestThreadsContainer, Winapi.ActiveX;
+  Threads.ReqSpecDevTemplate, DateUtils, Connection.TCP, Connection.Base, RequestThreadsContainer, Winapi.ActiveX,
+  System.NetEncoding;
 
 { TGeomerSocket }
 
@@ -248,7 +249,7 @@ begin
         v.Val := 0;
 
       res := res + Format('<chn id="%d" opctag="%s" val="%s" utime="%d"/>',
-        [id_prm, HTMLEncode(q.FieldByName('OpcTag').AsString), IfThen(glv <> nil, MyFloatToStr(v.Val), '0'),
+        [id_prm, TNetEncoding.HTML.Encode(q.FieldByName('OpcTag').AsString), IfThen(glv <> nil, MyFloatToStr(v.Val), '0'),
         IfThen(glv <> nil, v.UTime, 0)]);
       q.Next();
     end;

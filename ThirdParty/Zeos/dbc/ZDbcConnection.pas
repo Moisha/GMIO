@@ -84,7 +84,7 @@ type
     function GetSupportedClientCodePages(const Url: TZURL;
       Const {$IFNDEF UNICODE}AutoEncode, {$ENDIF} SupportedsOnly: Boolean;
       CtrlsCPType: TZControlsCodePage = cCP_UTF16): TStringDynArray;
-    function Connect(const Url: string; Info: TStrings = nil): IZConnection; overload; deprecated;
+    function Connect(const Url: string; Info: TStrings = nil): IZConnection; overload;
     function Connect(const {%H-}Url: TZURL): IZConnection; overload; virtual;
     function AcceptsURL(const Url: string): Boolean; virtual;
 
@@ -372,7 +372,6 @@ end;
   @return a <code>Connection</code> object that represents a
     connection to the URL
 }
-{$WARN SYMBOL_DEPRECATED OFF}
 function TZAbstractDriver.Connect(const Url: string; Info: TStrings): IZConnection;
 var
   TempURL:  TZURL;
@@ -384,7 +383,6 @@ begin
     TempUrl.Free;
   end;
 end;
-{$WARN SYMBOL_DEPRECATED ON}
 
 {**
   Attempts to make a database connection to the given URL.

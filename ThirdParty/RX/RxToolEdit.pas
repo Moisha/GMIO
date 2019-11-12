@@ -2121,7 +2121,7 @@ begin
     inherited Text := ExtFilename(Value);
     ClearFileList;
   end
-  else raise EComboEditError.CreateFmt(ResStr(SInvalidFilename), [Value]);
+  else raise EComboEditError.CreateFmt(ResStr({$IFDEF RX_D26}SInvalidKnownFilename{$ELSE}SInvalidFilename{$ENDIF}), [Value]);
 end;
 
 {$IFNDEF VER80}

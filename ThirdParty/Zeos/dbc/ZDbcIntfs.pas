@@ -1783,7 +1783,9 @@ var
   Driver: IZDriver;
 begin
   FDriversCS.Enter;
+  {$if CompilerVersion < 33}
   Result := 0;
+  {$ifend}
   try
     Driver := InternalGetDriver(URL);
     if Driver = nil then

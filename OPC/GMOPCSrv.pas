@@ -63,7 +63,6 @@ begin
   {Return a handle that will subsequently identify ItemID}
   {raise exception of type EOpcError if Item ID not recognised}
   
-  Result := 0; // kill warning
   lstChannels.synch.BeginRead();
   try
     c := lstChannels.ByTag[ItemID];

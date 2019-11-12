@@ -423,7 +423,6 @@ begin
     end;
     Exit;
   end;
-  Result := DefaultDateOrder; { default }
 end;
 
 function ExpandYear(Year: Integer): Integer;

@@ -1297,7 +1297,9 @@ var AModifiersInt : integer) : boolean;
   Result := true;
   IsOn := true;
 {$IFDEF CPUX86}
+{$IFNDEF SYN_DELPHI_RIO_UP}
   Mask := 0; // prevent compiler warning
+{$ENDIF}
 {$ENDIF}
   for i := 1 to length (AModifiers) do
    if AModifiers [i] = '-'
