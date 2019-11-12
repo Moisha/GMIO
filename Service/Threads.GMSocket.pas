@@ -14,16 +14,25 @@ type TGMSocketThread = class(TServerClientThread)
   public
     procedure ClientExecute; override;
     constructor Create(CreateSuspended: Boolean; ASocket: TServerClientWinSocket);
+    destructor Destroy; override;
     property GMSocket: TGeomerSocket read GetGMSocket;
   end;
 
 implementation
 
-uses ProgramLogFile, ActiveX;
+uses ProgramLogFile, ActiveX{$ifdef SQL_APP}, GMSqlQuery{$endif};
 
 constructor TGMSocketThread.Create(CreateSuspended: Boolean; ASocket: TServerClientWinSocket);
 begin
   inherited Create(CreateSuspended, ASocket);
+end;
+
+destructor TGMSocketThread.Destroy;
+begin
+  inherited;
+{$ifdef SQL_APP}
+  DropThreadConnection(ThreadID);
+{$endif}
 end;
 
 procedure TGMSocketThread.ClientExecute;

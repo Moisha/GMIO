@@ -246,6 +246,9 @@ begin
   conn.Database := params.Database;
   conn.Protocol := 'postgresql-9';
   conn.ClientCodepage := 'WIN1251';
+  // должно работать, но почему-то это недопустимый параметр соединения
+  // придется делать костылем через SetAppNameForConnection
+  // conn.Properties.Values['application_name'] := Paramstr(0);
   if params.LibraryLocation <> '' then
     conn.LibraryLocation := params.LibraryLocation;
 end;
@@ -253,7 +256,7 @@ end;
 procedure TGMSqlQuery.SetAppNameForConnection;
 begin
   if (q.Connection <> nil) and q.Connection.Connected then
-    q.Connection.ExecuteDirect('set application_name to ' + AnsiQuotedStr(Paramstr(0), '"'));
+    q.Connection.ExecuteDirect(CommentQueryText('set application_name to ' + AnsiQuotedStr(Paramstr(0), '"')));
 end;
 
 procedure TGMSqlQuery.Connect_Own();
