@@ -11,7 +11,7 @@ uses Windows, SysUtils, GMGlobals, ADODB, INIFiles, ActiveX, GM485,
 type
   TRequestCOMDevices = class (TRequestSpecDevices)
   protected
-    procedure ConfigurePort(ri: TSpecDevReqListItem); override;
+    function ConfigurePort(ri: TSpecDevReqListItem): bool; override;
   public
     procedure AfterConstruction; override;
     constructor Create(id_obj: int);
@@ -29,9 +29,9 @@ begin
   inherited;
 end;
 
-procedure TRequestCOMDevices.ConfigurePort(ri: TSpecDevReqListItem);
+function TRequestCOMDevices.ConfigurePort(ri: TSpecDevReqListItem): bool;
 begin
-  inherited;
+  Result := inherited;
 
   ConnectionObject.FreePort();
 

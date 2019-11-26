@@ -49,7 +49,7 @@ type
     procedure LoadCommands(); overload;
     procedure CycleProc();
     procedure DoOneRequest(ri: TSpecDevReqListItem); virtual;
-    procedure ConfigurePort(ri: TSpecDevReqListItem); virtual;
+    function ConfigurePort(ri: TSpecDevReqListItem): bool; virtual;
     property CurrentRequest: TRequestDetails read FCurrentRequest;
     function CheckGetAllData: bool; virtual;
     procedure SafeExecute; override;
@@ -126,7 +126,8 @@ end;
 procedure TRequestSpecDevices.DoOneRequest(ri: TSpecDevReqListItem);
 var ext: TPrepareRequestBufferInfo;
 begin
-  ConfigurePort(ri);
+  if not ConfigurePort(ri) then
+    Exit;
 
   FCurrentRequest := ri.ReqDetails;
 
@@ -260,9 +261,10 @@ begin
   Result := Terminated;
 end;
 
-procedure TRequestSpecDevices.ConfigurePort(ri: TSpecDevReqListItem);
+function TRequestSpecDevices.ConfigurePort(ri: TSpecDevReqListItem): bool;
 begin
   FConnectionObject.WaitFirst := ri.ReqDetails.TimeOut;
+  Result := true;
 end;
 
 { TRequestListBuilder }

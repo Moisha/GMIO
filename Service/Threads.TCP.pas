@@ -11,7 +11,7 @@ uses Windows, SysUtils, GMGlobals, GM485,
 type
   TRequestTCPDevicesBase = class (TRequestSpecDevices)
   protected
-    procedure ConfigurePort(ri: TSpecDevReqListItem); override;
+    function ConfigurePort(ri: TSpecDevReqListItem): bool; override;
   public
     procedure AfterConstruction; override;
   end;
@@ -34,9 +34,9 @@ begin
   inherited;
 end;
 
-procedure TRequestTCPDevicesBase.ConfigurePort(ri: TSpecDevReqListItem);
+function TRequestTCPDevicesBase.ConfigurePort(ri: TSpecDevReqListItem): bool;
 begin
-  inherited;
+  Result := inherited;
   TConnectionObjectTCP_OwnSocket(ConnectionObject).Host := ri.ReqDetails.IP;
   TConnectionObjectTCP_OwnSocket(ConnectionObject).Port := ri.ReqDetails.IPPort;
 end;

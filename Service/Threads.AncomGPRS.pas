@@ -10,7 +10,7 @@ uses Windows, Threads.ReqSpecDevTemplate, ScktComp, GMGlobals, SysUtils, GM485;
 type
   TRequestAncomGPRS = class(TRequestSpecDevices)
   protected
-    procedure ConfigurePort(ri: TSpecDevReqListItem); override;
+    function ConfigurePort(ri: TSpecDevReqListItem): bool; override;
   public
     constructor Create(id_obj: int);
   end;
@@ -38,10 +38,14 @@ end;
 
 { TRequestAncomGPRS }
 
-procedure TRequestAncomGPRS.ConfigurePort(ri: TSpecDevReqListItem);
+function TRequestAncomGPRS.ConfigurePort(ri: TSpecDevReqListItem): bool;
 var Sckt: TGeomerSocket;
 begin
   Sckt := lstSockets.SocketByIdObj(ID_Obj);
+  if Sckt = nil then
+    Exit(false);
+
+  Result := inherited;
   TConnectionObjectTCP_IncomingSocket(ConnectionObject).Socket := Sckt;
   if Sckt <> nil then
     ConnectionObject.LogPrefix := 'Ancom_' + IntToStr(Sckt.N_Car)

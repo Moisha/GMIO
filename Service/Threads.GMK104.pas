@@ -12,7 +12,7 @@ uses Windows, SysUtils, GMGlobals, GM485,
 type
   TRequestK104Devices = class (TRequestSpecDevices)
   protected
-    procedure ConfigurePort(ri: TSpecDevReqListItem); override;
+    function ConfigurePort(ri: TSpecDevReqListItem): bool; override;
   public
     procedure AfterConstruction; override;
     constructor Create(id_obj: int);
@@ -30,9 +30,9 @@ begin
   inherited;
 end;
 
-procedure TRequestK104Devices.ConfigurePort(ri: TSpecDevReqListItem);
+function TRequestK104Devices.ConfigurePort(ri: TSpecDevReqListItem): bool;
 begin
-  inherited;
+  Result := inherited;
   TConnectionObjectUDP(ConnectionObject).UDPObject.Active := false;
   TConnectionObjectUDP(ConnectionObject).UDPObject.Host := ri.ReqDetails.IP;
   TConnectionObjectUDP(ConnectionObject).UDPObject.Port := ri.ReqDetails.IPPort;
