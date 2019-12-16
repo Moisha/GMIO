@@ -18,10 +18,10 @@ BEGIN
             VALUE "LegalCopyright", "© Sirius ATM\000"
             VALUE "CompanyName", "ООО «Сириус АТМ», Екатеринбург\000"
             VALUE "Comments", "www.siriusatm.ru\000"
-            VALUE "ProductVersion", "Инженерные сети онлайн $MAJOR$.$MINOR$\000"
+            VALUE "ProductVersion", "$MAJOR$.$MINOR$ ($GITSHA$)\000"
             VALUE "FileVersion", "$MAJOR$.$MINOR$.$SUBMINOR$.$WCREV$\000"
-            VALUE "ProductName",      "Сервис ввода-вывода Инженерные сети онлайн\000"
-            VALUE "FileDescription",  "$GITSHA$\000"
+            VALUE "ProductName",      "Инженерные сети онлайн\000"
+            VALUE "FileDescription",  "Сервис ввода-вывода Инженерные сети онлайн\000"
             VALUE "OriginalFilename", "GMIOPSvc.exe\000"
             VALUE "Build Date", "$DATETIME$\000"
         END
