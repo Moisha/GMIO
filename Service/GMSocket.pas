@@ -25,6 +25,7 @@ type
 
   TGeomerSocket = class(TServerClientWinSocket)
   private
+    FLastReadUTime: int64;
     RmSrvRec: TRemoteSrvRecords;
     FAncomThread: TThread;
     FExecSQLThread: TGeomerSocketSQLExecuteThread;
@@ -43,6 +44,7 @@ type
     procedure ProcessRemoteServerReport(report: IXMLGMIOResponceType);
     function RequestUniversal_SimpleResponce(req: IXMLGMIORequestType): IXMLGMIOResponceType;
     procedure SetChannelValue(var bufs: TTwoBuffers);
+    procedure UpdateLastReadTime;
 
   const
     MAX_REQUESTS_IN_DEVICE = 32;
@@ -84,6 +86,7 @@ type
     constructor Create(Socket: TSocket; ServerWinSocket: TServerWinSocket; AglvBuffer: TGeomerLastValuesBuffer);
     destructor Destroy; override;
 
+    property LastReadUTime: int64 read FLastReadUTime;
     property SocketObjectType: int read FSocketObjectType;
     property N_Car: int read FNCar write SetNCar;
 
@@ -841,6 +844,7 @@ begin
   RmSrvRec := TRemoteSrvRecords.Create();
   glvBuffer := AglvBuffer;
   FExecSQLThread := nil;
+  FLastReadUTime := NowGM();
 end;
 
 function TGeomerSocket.ProcessAncomID(buf: array of byte; cnt: int): bool;
@@ -1038,6 +1042,11 @@ begin
   until (cnt <= 0) or (iProcessed <= 0);
 end;
 
+procedure TGeomerSocket.UpdateLastReadTime();
+begin
+  FLastReadUTime := NowGM();
+end;
+
 procedure TGeomerSocket.ReadAndParseDataBlock();
 var
   cnt: int;
@@ -1055,6 +1064,7 @@ begin
       if conn.ExchangeBlockData(etRec) <> ccrBytes then
         Exit;
 
+      UpdateLastReadTime();
       action := 'SetLength';
       cnt := conn.buffers.NumberOfBytesRead;
       SetLength(buf, cnt);

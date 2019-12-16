@@ -83,15 +83,11 @@ begin
 end;
 
 procedure TGMThread.SleepThread(TimeoutMs: int);
-var n, step: int;
 begin
-  step := max(min(TimeoutMs div 10, 100), 10);
-  n := 0;
-  while not Terminated and (n < TimeoutMs) do
-  begin
-    Sleep(step);
-    inc(n, step);
-  end;
+  if TimeoutMs <= 0 then
+    Exit;
+
+  WaitForSingleObject(Handle, TimeoutMs);
 end;
 
 function TGMThread.WaitForTimeout(TimeOut: int; KillUnterminated: bool = true): int;

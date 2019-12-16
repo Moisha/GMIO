@@ -65,25 +65,41 @@ function TConnectionObjectTCP.WaitForData(wss: TWinSocketStream; TimeOutMs: int;
 var t: int64;
     nRead: int;
     LocalBuf: array[0..102400] of byte;
+    action: string;
 begin
+  action := '1';
   t := GetTickCount();
   Result := ccrEmpty;
 
-  repeat
-    nRead := 0;
-    if wss.WaitForData(100) then
-      nRead := wss.Read(LocalBuf, High(LocalBuf));
+  try
+    repeat
+      nRead := 0;
+      action := 'wss.WaitForData';
+      if wss.WaitForData(100) then
+      begin
+        action := 'wss.Read';
+        nRead := wss.Read(LocalBuf, High(LocalBuf));
+      end;
 
-    if nRead > 0 then
+      if nRead > 0 then
+      begin
+        Result := ccrBytes;
+        action := 'WriteBuf';
+        WriteBuf(buffers.BufRec, buffers.NumberOfBytesRead, LocalBuf, nRead);
+        buffers.NumberOfBytesRead := buffers.NumberOfBytesRead + nRead;
+        action := 'CheckGetAllData';
+        if FirstByteOnly or CheckGetAllData() then break;
+
+        if ParentTerminated then break;
+      end;
+    until Abs(GetTickCount() - t) >= TimeOutMs;
+  except
+    on e: Exception do
     begin
-      Result := ccrBytes;
-      WriteBuf(buffers.BufRec, buffers.NumberOfBytesRead, LocalBuf, nRead);
-      buffers.NumberOfBytesRead := buffers.NumberOfBytesRead + nRead;
-      if FirstByteOnly or CheckGetAllData() then break;
-
-      if ParentTerminated then break;
+      HandleException(e, 'ReadFromWinSocketStream.WaitForData.' + action);
+      Result := ccrError;
     end;
-  until Abs(GetTickCount() - t) >= TimeOutMs;
+  end;
 end;
 
 function TConnectionObjectTCP.ExceptionLogInfo(e: Exception): string;

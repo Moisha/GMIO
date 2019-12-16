@@ -23,6 +23,18 @@ type
     procedure SafeExecute(); override;
   end;
 
+  TCheckSocketThread = class(TGMThread)
+  private
+    const ObjectTypeArray: array [0..3] of int = (OBJ_TYPE_GM, OBJ_TYPE_REMOTE_SRV, OBJ_TYPE_REMOTE_SRV_XML, OBJ_TYPE_ANCOM);
+  private
+    FGMObjectCount: int;
+    procedure CountGMObjects;
+    function CheckGMSockets: bool;
+    function IsSocketTypeIncoming(objectType: int): bool;
+  protected
+    procedure SafeExecute(); override;
+  end;
+
   TGMIOPService = class(TService)
     ssGeomer: TServerSocket;
     udpSrv: TIdUDPServer;
@@ -51,6 +63,7 @@ type
     glvBuffer: TGeomerLastValuesBuffer;
     thrObjectOnlineState: TObjectOnlineThread;
     thrMessageHandler: TSvcMessageHandleThread;
+    FCheckSocketThread: TCheckSocketThread;
 
     bBadName: bool;
 
@@ -60,7 +73,7 @@ type
     function ReadAndCheckSQLParams: bool;
     function CheckConnectionParams(params: TZConnectionParams): bool;
     procedure SleepMainThread(sleepTimeMs: int);
-    function OpenTCPIPPorts: bool;
+    function OpenIPPorts: bool;
     procedure ManageService(action: TManageServicetype; Silent: Boolean);
     procedure InstallService(SvcMgr: SC_HANDLE);
     procedure UninstallService(SvcMgr: SC_HANDLE);
@@ -70,6 +83,8 @@ type
     procedure ObjectOnline(ID_Obj: int; ObjType: int = -1; N_Car: int = 0);
     procedure ProcessK105Autorization(bufs: TTwoBuffers; ABinding: TIdSocketHandle);
     procedure ProcessTeconReply(bufs: TTwoBuffers; ABinding: TIdSocketHandle);
+    procedure RestartIPPorts();
+    procedure CloseIPPorts;
 {$ifdef Application}
   public
 {$endif}
@@ -101,7 +116,7 @@ begin
   Result := ServiceController;
 end;
 
-function TGMIOPService.OpenTCPIPPorts: bool;
+function TGMIOPService.OpenIPPorts: bool;
 begin
   Result := false;
 
@@ -232,8 +247,21 @@ begin
       f.Free();
     end;
 
-    Result := OpenTCPIPPorts()
+    Result := OpenIPPorts()
   end;
+end;
+
+procedure TGMIOPService.CloseIPPorts();
+begin
+  ssGeomer.Close();
+  udpSrv.Active := false;
+end;
+
+procedure TGMIOPService.RestartIPPorts;
+begin
+  ProgramLog.AddError('RestartIPPorts');
+  CloseIPPorts();
+  OpenIPPorts();
 end;
 
 procedure TGMIOPService.SleepMainThread(sleepTimeMs: int);
@@ -270,13 +298,13 @@ begin
   ProgramLog.AddMessage('========== Starting Service ==========');
 
   ThreadsContainer := TRequestThreadsContainer.Create();
-
   thrResponceParser := TResponceParserThread.Create(glvBuffer);
   thrNIUpdater := TNIUpdateThread.Create(glvBuffer);
   thrObjectOnlineState := TObjectOnlineThread.Create();
   thrMessageHandler := TSvcMessageHandleThread.Create();
   Tag := thrMessageHandler.ThreadID;
   ThreadForMessagesHandle := thrMessageHandler.ThreadID;
+  FCheckSocketThread := TCheckSocketThread.Create();
 end;
 
 function TGMIOPService.StartAsManageService(): bool;
@@ -540,6 +568,7 @@ end;
 procedure TGMIOPService.ServiceDestroy(Sender: TObject);
 begin
   FreeAndNil(thrMessageHandler);
+  FreeAndNil(FCheckSocketThread);
   FreeAndNil(thrNIUpdater);
   FreeAndNil(rmSrvData);
   FreeAndNil(thrResponceParser);
@@ -776,6 +805,78 @@ end;
 procedure TSvcMessageHandleThread.WMGeomerBlockReceived(var Msg: TMessage);
 begin
   GMIOPService.WMGeomerBlockReceived(Msg);
+end;
+
+{ TCheckSocketThread }
+
+procedure TCheckSocketThread.CountGMObjects();
+var
+  i: int;
+  sql, res: string;
+begin
+  sql := 'select count(*) from Objects where coalesce(ObjType, 0) in (';
+  for i := Low(ObjectTypeArray) to High(ObjectTypeArray) do
+    sql := sql + IntToStr(ObjectTypeArray[i]) + ',';
+
+  sql[Length(sql)] := ')';
+  try
+    res := QueryResult(sql);
+  except
+    res := '0';
+  end;
+
+  FGMObjectCount := StrToIntDef(res, 0);
+  ProgramLog().AddMessage(ClassName + ' ObjectCount = ' + IntToStr(FGMObjectCount));
+end;
+
+function TCheckSocketThread.IsSocketTypeIncoming(objectType: int): bool;
+var
+  i: int;
+begin
+  for i := Low(ObjectTypeArray) to High(ObjectTypeArray) do
+    if objectType = ObjectTypeArray[i] then
+      Exit(true);
+
+  Result := false;
+end;
+
+function TCheckSocketThread.CheckGMSockets: bool;
+var
+  i: int;
+begin
+  if FGMObjectCount <= 0 then
+    Exit(true);
+
+  Result := false;
+  for i := 0 to lstSockets.Count - 1 do
+    if IsSocketTypeIncoming(lstSockets[i].SocketObjectType) and (Abs(NowGM() - lstSockets[i].LastReadUTime) < 30 * UTC_MINUTE) then
+    begin
+      ProgramLog().AddMessage(ClassName + ': Socket is alive, N_Car = ' + IntToStr(lstSockets[i].N_Car));
+      Exit(true);
+    end;
+end;
+
+procedure TCheckSocketThread.SafeExecute;
+begin
+  CountGMObjects();
+
+  if FGMObjectCount > 0 then
+  begin
+    // дадим 10 минут на выход на связь хоть кого-нибудь
+    SleepThread(600 * 1000);
+  end;
+
+  while not Terminated do
+  begin
+    CountGMObjects();
+    if not CheckGMSockets() then
+    begin
+      GMIOPService.RestartIPPorts();
+      SleepThread(600 * 1000);
+    end;
+
+    SleepThread(60 * 1000);
+  end;
 end;
 
 end.
