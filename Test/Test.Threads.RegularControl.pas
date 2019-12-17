@@ -63,8 +63,8 @@ var thrReq: TRequestSpecDevices;
     i: int;
 begin
   thr.Process();
-  Check(ThreadsContainer.ThreadList[0] is TMultiObjectRequestThreadForTest);
-  thrReq := TRequestSpecDevices(TMultiObjectRequestThreadForTest(ThreadsContainer.ThreadList[0]).ThreadPool.ThreadList[0]);
+  Check(ThreadsContainer[0] is TMultiObjectRequestThreadForTest);
+  thrReq := TRequestSpecDevices(TMultiObjectRequestThreadForTest(ThreadsContainer[0]).ThreadPool[0]);
   Check(thrReq is TRequestTCPDevices);
   TRequestTCPDevicesHack(thrReq).LoadCommands();
   Check(TRequestTCPDevicesForTest(thrReq).RequestList.Count = 2);
@@ -102,7 +102,7 @@ end;
 
 procedure TRequestThreadsContainerForTest.CreateThreads;
 begin
-  ThreadList.Add(TMultiObjectRequestThreadForTest.Create());
+  Add(TMultiObjectRequestThreadForTest.Create());
 end;
 
 { TRequestTCPDevicesForTest }
@@ -127,8 +127,8 @@ end;
 
 procedure TMultiObjectRequestThreadForTest.UpdateThreadList;
 begin
-  ThreadPool.ThreadList.Add(TRequestTCPDevicesForTest.Create(4)); // ID_Obj = 4 для теста управления по TCP
-  ThreadPool.ThreadList.Add(TRequestCOMDevicesForTest.Create(6)); // ID_Obj = 6 для теста управления по COM
+  ThreadPool.Add(TRequestTCPDevicesForTest.Create(4)); // ID_Obj = 4 для теста управления по TCP
+  ThreadPool.Add(TRequestCOMDevicesForTest.Create(6)); // ID_Obj = 6 для теста управления по COM
 end;
 
 { TRequestCOMDevicesForTest }

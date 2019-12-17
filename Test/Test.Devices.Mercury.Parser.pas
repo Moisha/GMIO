@@ -121,7 +121,7 @@ begin
   buf := Examples_LastArchAddr();
   Check(FParser.SetLastArchAddrBuffer(buf, Length(buf)), 'buf');
   Check(FParser.ReadLastArchAddr() = $FD20, 'ReadLastArchAddr');
-  Check(FParser.ReadLastArchUDT() = EncodeDateTimeUTC(2014, 11, 15, 19, 00, ));
+  Check(FParser.ReadLastArchUDT() = EncodeDateTimeUTC(2014, 11, 15, 19, 00, 00));
 end;
 
 procedure TMercury230ParserTest.ParseMeterInfo;

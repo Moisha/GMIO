@@ -7,7 +7,6 @@ uses Windows, Classes, SysUtils, GMGlobals, Math, Generics.Collections;
 type
   TGMThread = class(TThread)
   private
-    FDone: bool;
     FTag: NativeInt;
   protected
     procedure SleepThread(TimeoutMs: int);
@@ -18,21 +17,19 @@ type
   public
     property Description: string read GetDescription;
     property Tag: NativeInt read FTag write FTag;
-    property Done: bool read FDone;
-    procedure AfterConstruction; override;
     function WaitForTimeout(TimeOut: int; KillUnterminated: bool = true): int; virtual;
     destructor Destroy; override;
   end;
 
-  TGMThreadPool<T: TGMThread> = class
+  TGMThreadPool<T: TGMThread> = class(TList<T>)
   private
-    FThreadList: TList<T>;
+    FTimeOut: int;
   public
+    property TimeOut: int read FTimeOut write FTimeOut;
     constructor Create();
     destructor Destroy(); override;
     procedure Terminate();
-    procedure WaitFor();
-    property ThreadList: TList<T> read FThreadList;
+    procedure WaitFor(timeoutMs: int = -1; killUnfinished: bool = true);
     procedure DropThread(Index: int);
   end;
 
@@ -41,12 +38,6 @@ implementation
 uses ProgramLogFile, GMConst{$ifdef SQL_APP}, GMSqlQuery{$endif};
 
 { TGMThread }
-
-procedure TGMThread.AfterConstruction;
-begin
-  FDone := false;
-  inherited;
-end;
 
 destructor TGMThread.Destroy;
 begin
@@ -69,7 +60,6 @@ begin
       ProgramLog.AddException('TGMThread(' + ClassName() + ').Execute - ' + e.Message);
     end;
   end;
-  FDone := true;
 end;
 
 function TGMThread.GetDescription: string;
@@ -92,7 +82,7 @@ end;
 
 function TGMThread.WaitForTimeout(TimeOut: int; KillUnterminated: bool = true): int;
 begin
-  if FDone then
+  if Finished then
   begin
     Result := WAIT_OBJECT_0;
     Exit;
@@ -104,10 +94,7 @@ begin
     Result := WaitForSingleObject(Handle, INFINITE);
 
   if (Result <> WAIT_OBJECT_0) and KillUnterminated then
-  begin
     TerminateThread(Handle, 0);
-    FDone := true;
-  end;
 end;
 
 { TGMThreadPool }
@@ -115,16 +102,17 @@ end;
 constructor TGMThreadPool<T>.Create;
 begin
   inherited;
-  FThreadList := TList<T>.Create();
+  FTimeOut := 30000;
 end;
 
 destructor TGMThreadPool<T>.Destroy;
 var thr: TGMThread;
 begin
-  for thr in FThreadList do
-    thr.Free();
+  Terminate();
+  WaitFor();
 
-  FThreadList.Free();
+  for thr in self do
+    thr.Free();
 
   inherited;
 end;
@@ -132,26 +120,46 @@ end;
 procedure TGMThreadPool<T>.DropThread(Index: int);
 begin
   try
-    FThreadList[Index].Terminate();
-    FThreadList[Index].WaitForTimeout(20000);
-    FThreadList[Index].Free();
+    Items[Index].Terminate();
+    Items[Index].WaitForTimeout(FTimeOut);
+    Items[Index].Free();
   except end;
 
-  FThreadList.Delete(Index);
+  Delete(Index);
 end;
 
 procedure TGMThreadPool<T>.Terminate;
 var thr: TGMThread;
 begin
-  for thr in FThreadList do
+  for thr in self do
     thr.Terminate();
 end;
 
-procedure TGMThreadPool<T>.WaitFor;
-var thr: TGMThread;
+procedure TGMThreadPool<T>.WaitFor(timeoutMs: int = -1; killUnfinished: bool = true);
+var
+  H: TWOHandleArray;
 begin
-  for thr in FThreadList do
-    thr.WaitForTimeout(30000);
+  var n := 0;
+  for var i := 0 to Count - 1 do
+    if not Items[i].Finished then
+    begin
+      H[n] := Items[i].Handle;
+      inc(n);
+      if n > High(H) then
+        break;
+    end;
+
+  if n = 0 then
+    Exit;
+
+  // ограничение на ожидание - 64 неостановленных потока, используем первые 64 в списке, веруя,
+  // что потоков или меньше, а остальные будут останавливаться быстрее первых или не остановятся совсем
+  var res: DWORD := WaitForMultipleObjects(n, @H, true, IfThen(timeoutMs > 0, timeoutMs, FTimeout));
+  if res = WAIT_FAILED then
+    ProgramLog().AddError(ClassName() + '.WaitFor.WaitForMultipleObjects: ' + GetGoodLastError());
+
+  for var thr in self do
+    thr.WaitForTimeout(1);
 end;
 
 end.

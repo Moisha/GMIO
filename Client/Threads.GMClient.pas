@@ -1220,11 +1220,11 @@ begin
   repeat
     bWait := false;
     for i := 0 to Count - 1 do
-      bWait := bWait or not GetInstance()[i].Done;
+      bWait := bWait or not GetInstance()[i].Finished;
   until not bWait or (Abs(GetTickCount - t) > 30000);
 
   for i := 0 to Count - 1 do
-    if GetInstance()[i].Done then
+    if GetInstance()[i].Finished then
       GetInstance()[i].Free();
 
   Clear();

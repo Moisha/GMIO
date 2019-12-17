@@ -62,7 +62,7 @@ begin
   end;
 
   if Result <> nil then
-    FThreadPool.ThreadList.Add(Result);
+    FThreadPool.Add(Result);
 end;
 
 procedure TMultiObjectRequestThread.UpdateOneObjectThread(q: TGMSqlQuery; obj: pointer);
@@ -89,7 +89,7 @@ end;
 procedure TMultiObjectRequestThread.DropUpdateFlag();
 var thr: TGMThread;
 begin
-  for thr in FThreadPool.ThreadList do
+  for thr in FThreadPool do
     thr.Tag := THREAD_TAG_ODD;
 end;
 
@@ -97,8 +97,8 @@ procedure TMultiObjectRequestThread.DropOddThreads();
 var
   i: int;
 begin
-  for i := FThreadPool.ThreadList.Count - 1 downto 0 do
-    if FThreadPool.ThreadList[i].Tag = THREAD_TAG_ODD then
+  for i := FThreadPool.Count - 1 downto 0 do
+    if FThreadPool[i].Tag = THREAD_TAG_ODD then
       FThreadPool.DropThread(i);
 end;
 
@@ -106,8 +106,8 @@ procedure TMultiObjectRequestThread.DropStoppedThreads();
 var
   i: int;
 begin
-  for i := FThreadPool.ThreadList.Count - 1 downto 0 do
-    if FThreadPool.ThreadList[i].Done then
+  for i := FThreadPool.Count - 1 downto 0 do
+    if FThreadPool[i].Finished then
       FThreadPool.DropThread(i);
 end;
 
@@ -136,7 +136,7 @@ var
   thr: TRequestSpecDevices;
 begin
   Result := nil;
-  for thr in FThreadPool.ThreadList do
+  for thr in FThreadPool do
     if (thr.ObjType = objType) and (thr.ID_Obj = ID_Obj) then
     begin
       Result := thr;

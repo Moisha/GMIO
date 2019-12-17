@@ -67,7 +67,8 @@ uses
   Test.Devices.DRK.ReqCreator in 'Test.Devices.DRK.ReqCreator.pas',
   Test.Devices.DRK.ReqParser in 'Test.Devices.DRK.ReqParser.pas',
   Test.Devices.ADCPChannelMaster in 'Test.Devices.ADCPChannelMaster.pas',
-  Test.RequestListBuilder in 'Test.RequestListBuilder.pas';
+  Test.RequestListBuilder in 'Test.RequestListBuilder.pas',
+  Test.Threads.Base in 'Test.Threads.Base.pas';
 
 {$R *.res}
 

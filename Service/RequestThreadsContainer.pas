@@ -28,13 +28,13 @@ uses Threads.GMCOM, Threads.GMK104, GMSqlQuery, Threads.RegularControl, Threads.
 
 procedure TRequestThreadsContainer.CreateThreads();
 begin
-  ThreadList.Add(TMultiObjectRequestThread.Create());
-  ThreadList.Add(TRegularControl.Create());
+  Add(TMultiObjectRequestThread.Create());
+  Add(TRegularControl.Create());
 end;
 
 function TRequestThreadsContainer.GetMultiObjectRequestThread: TMultiObjectRequestThread;
 begin
-  Result := TMultiObjectRequestThread(ThreadList[0]);
+  Result := TMultiObjectRequestThread(Items[0]);
 end;
 
 constructor TRequestThreadsContainer.Create();
