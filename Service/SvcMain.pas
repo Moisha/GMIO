@@ -25,7 +25,7 @@ type
 
   TCheckSocketThread = class(TGMThread)
   private
-    const ObjectTypeArray: array [0..3] of int = (OBJ_TYPE_GM, OBJ_TYPE_REMOTE_SRV, OBJ_TYPE_ANCOM);
+    const ObjectTypeArray: array [0..2] of int = (OBJ_TYPE_GM, OBJ_TYPE_REMOTE_SRV, OBJ_TYPE_ANCOM);
   private
     FGMObjectCount: int;
     FLastRestartTick: int64;
