@@ -25,12 +25,14 @@ type
 
   TCheckSocketThread = class(TGMThread)
   private
-    const ObjectTypeArray: array [0..3] of int = (OBJ_TYPE_GM, OBJ_TYPE_REMOTE_SRV, OBJ_TYPE_REMOTE_SRV_XML, OBJ_TYPE_ANCOM);
+    const ObjectTypeArray: array [0..3] of int = (OBJ_TYPE_GM, OBJ_TYPE_REMOTE_SRV, OBJ_TYPE_ANCOM);
   private
     FGMObjectCount: int;
+    FLastRestartTick: int64;
     procedure CountGMObjects;
     function CheckGMSockets: bool;
     function IsSocketTypeIncoming(objectType: int): bool;
+    procedure ReopenSocket(const reason: string);
   protected
     procedure SafeExecute(); override;
   end;
@@ -566,14 +568,24 @@ begin
 end;
 
 procedure TGMIOPService.ServiceDestroy(Sender: TObject);
+var
+  pool: TGMThreadPool<TGMThread>;
 begin
-  FreeAndNil(thrMessageHandler);
-  FreeAndNil(FCheckSocketThread);
-  FreeAndNil(thrNIUpdater);
-  FreeAndNil(rmSrvData);
-  FreeAndNil(thrResponceParser);
-  FreeAndNil(thrObjectOnlineState);
   FreeAndNil(glvBuffer);
+
+  pool := TGMThreadPool<TGMThread>.Create();
+  try
+    pool.Add(thrMessageHandler);
+    pool.Add(FCheckSocketThread);
+    pool.Add(thrNIUpdater);
+    pool.Add(rmSrvData);
+    pool.Add(thrResponceParser);
+    pool.Add(thrObjectOnlineState);
+    pool.Free();
+  except
+  end;
+  pool.Free();
+
   FreeAndNil(ThreadsContainer);
 end;
 
@@ -851,14 +863,23 @@ begin
   for i := 0 to lstSockets.Count - 1 do
     if IsSocketTypeIncoming(lstSockets[i].SocketObjectType) and (Abs(NowGM() - lstSockets[i].LastReadUTime) < 30 * UTC_MINUTE) then
     begin
-      ProgramLog().AddMessage(ClassName + ': Socket is alive, N_Car = ' + IntToStr(lstSockets[i].N_Car));
+      ProgramLog().AddMessage(ClassName + Format(': Socket is alive, N_Car = %d, type = %d', [lstSockets[i].N_Car, lstSockets[i].SocketObjectType]));
       Exit(true);
     end;
+end;
+
+procedure TCheckSocketThread.ReopenSocket(const reason: string);
+begin
+  ProgramLog().AddMessage(ClassName + ': Reopen sockets - ' + reason);
+  FLastRestartTick := GetTickCount();
+  GMIOPService.RestartIPPorts();
+  SleepThread(600 * 1000);
 end;
 
 procedure TCheckSocketThread.SafeExecute;
 begin
   CountGMObjects();
+  FLastRestartTick := GetTickCount;
 
   if FGMObjectCount > 0 then
   begin
@@ -870,12 +891,12 @@ begin
   begin
     CountGMObjects();
     if not CheckGMSockets() then
-    begin
-      GMIOPService.RestartIPPorts();
-      SleepThread(600 * 1000);
-    end;
-
-    SleepThread(60 * 1000);
+      ReopenSocket('no alive')
+    else
+    if GetTickDiff64(FLastRestartTick, GetTickCount()) > 3600 * 1000 then
+      ReopenSocket('timer')
+    else
+      SleepThread(60 * 1000);
   end;
 end;
 
