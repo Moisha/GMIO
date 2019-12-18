@@ -8,6 +8,7 @@ type
   TGMThread = class(TThread)
   private
     FTag: NativeInt;
+    FRestartOnError: bool;
   protected
     procedure SleepThread(TimeoutMs: int);
     procedure SafeExecute(); virtual; abstract;
@@ -17,6 +18,7 @@ type
   public
     property Description: string read GetDescription;
     property Tag: NativeInt read FTag write FTag;
+    property RestartOnError: bool read FRestartOnError write FRestartOnError;
     function WaitForTimeout(TimeOut: int; KillUnterminated: bool = true): int; virtual;
     destructor Destroy; override;
   end;
@@ -49,17 +51,25 @@ end;
 
 procedure TGMThread.Execute;
 begin
-  try
-    if ProgramLog <> nil then
-      ProgramLog.AddMessage(ClassName() + '.SafeExecute');
-    SafeExecute();
-  except
-    on e: Exception do
-    begin
-      GMPostMessage(WM_THREAD_EXCEPTION, IfThen(FreeOnTerminate, 0, WParam(self)), WParam(ClassType));
-      ProgramLog.AddException('TGMThread(' + ClassName() + ').Execute - ' + e.Message);
+  var done := false;
+  var error := false;
+  repeat
+    try
+      if ProgramLog <> nil then
+        ProgramLog.AddMessage(ClassName() + '.SafeExecute');
+
+      error := false;
+      SafeExecute();
+      done := true;
+    except
+      on e: Exception do
+      begin
+        error := true;
+        GMPostMessage(WM_THREAD_EXCEPTION, IfThen(FreeOnTerminate, 0, WParam(self)), WParam(ClassType));
+        ProgramLog.AddException('TGMThread(' + ClassName() + ').Execute - ' + e.ToString());
+      end;
     end;
-  end;
+  until Terminated or done or (error and not FRestartOnError);
 end;
 
 function TGMThread.GetDescription: string;

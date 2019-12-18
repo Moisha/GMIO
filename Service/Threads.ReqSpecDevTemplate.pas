@@ -243,7 +243,7 @@ begin
     repeat // опрос раз в минуту
       if Terminated then Exit;
       BackGroungProc();
-      Sleep(100);
+      SleepThread(2000);
     until Terminated or (Abs(tLastReq - GetTickCount()) >= COMDevicesRequestInterval * 1000);
   end;
 end;

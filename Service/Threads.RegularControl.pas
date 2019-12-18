@@ -132,7 +132,7 @@ begin
   begin
     t := GetTickCount();
     Process();
-    SleepThread(Max(100, COMDevicesRequestInterval * 1000 - Abs(t - GetTickCount())));
+    SleepThread(Max(2000, COMDevicesRequestInterval * 1000 - Abs(t - GetTickCount())));
   end;
 end;
 

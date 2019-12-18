@@ -86,8 +86,7 @@ begin
       if Terminated then Exit;
     end;
 
-    if not bWasAction then
-      Sleep(1000);
+    Sleep(2000);
   end;
 end;
 

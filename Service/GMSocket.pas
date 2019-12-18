@@ -40,6 +40,7 @@ type
     FLast485ID: int;
     FLast485BuilderUTime: int64;
     lst485IDs: array [0 .. 255] of TRequestDetails;
+    FRemoteId: string;
     procedure RemoteServerReport(var bufs: TTwoBuffers);
     procedure ProcessRemoteServerReport(report: IXMLGMIOResponceType);
     function RequestUniversal_SimpleResponce(req: IXMLGMIORequestType): IXMLGMIOResponceType;
@@ -89,6 +90,7 @@ type
     property LastReadUTime: int64 read FLastReadUTime;
     property SocketObjectType: int read FSocketObjectType;
     property N_Car: int read FNCar write SetNCar;
+    property RemoteId: string read FRemoteId;
 
     procedure BackgroundWork();
 
@@ -96,6 +98,7 @@ type
     procedure ReadAndParseDataBlock;
 
     procedure Disconnect(Socket: TSocket); override;
+    function ToString: string; override;
 
     procedure SendCurrentTime();
     procedure RequestInfo0(count: int);
@@ -206,7 +209,10 @@ begin
     if FSocketObjectType = OBJ_TYPE_UNKNOWN then
     begin
       if req.Auth.RemoteName <> '' then
-        FSocketObjectType := OBJ_TYPE_REMOTE_SRV_XML // удаленный сервер нового образца
+      begin
+        FSocketObjectType := OBJ_TYPE_REMOTE_SRV_XML; // удаленный сервер нового образца
+        FRemoteId := req.Auth.RemoteName;
+      end
       else
         FSocketObjectType := OBJ_TYPE_CLIENT; // клиент
     end;
@@ -651,13 +657,11 @@ begin
                             bufs.BufSend[1] := bufs.BufRec[0];
                           end;
 
-                          ProgramLog().AddError('AnalyzeClientRequest: unknown request - ' + ArrayToString(bufs.BufRec,
-                            bufs.NumberOfBytesRead, true));
+                          ProgramLog().AddError(ToString() + ' AnalyzeClientRequest: unknown request - ' + ArrayToString(bufs.BufRec, bufs.NumberOfBytesRead, true));
                         end;
   except
     on e: Exception do
-      ProgramLog().AddError('AnalyzeClientRequest:' + e.Message + ', ' + ArrayToString(bufs.BufRec,
-        bufs.NumberOfBytesRead, true));
+      ProgramLog().AddException('AnalyzeClientRequest:' + e.ToString() + ', ' + ArrayToString(bufs.BufRec, bufs.NumberOfBytesRead, true));
   end;
 end;
 
@@ -675,6 +679,11 @@ end;
 function TGeomerSocket.TimeToRequestCurrents(): bool;
 begin
   Result := Abs(FLast485BuilderUTime - NowGM()) >= COMDevicesRequestInterval;
+end;
+
+function TGeomerSocket.ToString: string;
+begin
+  Result := Format('%s type = %d, NCar = %d, RemoteId = "%s"', [ClassName(), FSocketObjectType, FNCar, FRemoteId]);
 end;
 
 procedure TGeomerSocket.BuildReqList();
@@ -1060,6 +1069,9 @@ begin
     conn := TConnectionObjectTCP_IncomingSocket.Create();
     try
       conn.Socket := Self;
+      // таймауты ставим поменьше, у нас вся посылка скорее всего в буфере
+      conn.WaitFirst := 10;
+      conn.WaitNext := 10;
       action := 'ExchangeBlockData';
       if conn.ExchangeBlockData(etRec) <> ccrBytes then
         Exit;
@@ -1077,23 +1089,31 @@ begin
     ReadAndParseDataBlock_ProcessBuf(buf);
   except
     on e: Exception do
-      raise Exception.Create(action + ' - ' + e.Message);
+      raise Exception.Create(action + ' - ' + e.ToString());
   end;
 end;
 
 destructor TGeomerSocket.Destroy;
 begin
-  TryFreeAndNil(RmSrvRec);
+  ProgramLog().AddMessage(ToString() + ' Destroy');
   TryFreeAndNil(FAncomThread);
   TryFreeAndNil(FExecSQLThread);
   TryFreeAndNil(FReqList);
 
   inherited Destroy;
+  ProgramLog().AddMessage(ToString() + ' Destroy done');
 end;
 
 procedure TGeomerSocket.Disconnect(Socket: TSocket);
 begin
-  inherited Disconnect(Socket);
+  ProgramLog().AddMessage(ToString() + ' Disconnect');
+  try
+    inherited Disconnect(Socket);
+    ProgramLog().AddMessage(ToString() + ' Disconnect done');
+  except
+    on e: Exception do
+      ProgramLog().AddException(ToString() + ' Disconnect error: ' + e.ToString());
+  end;
 end;
 
 procedure TGeomerSocket.SendCurrentTime();
@@ -1248,7 +1268,6 @@ procedure TGeomerSocketSQLExecuteThread.SafeExecute_ExtraStep;
 var report: IXMLGMIOResponceType;
     sql: TStringList;
 begin
-  CoInitialize(nil);
   while FXMLList.Count > 0 do
   begin
     sql := TStringList.Create();

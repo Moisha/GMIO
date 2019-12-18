@@ -118,7 +118,7 @@ begin
   while not Terminated do
   begin
     ProcessObjects();
-    SleepThread(1000);
+    SleepThread(2000);
   end;
 end;
 

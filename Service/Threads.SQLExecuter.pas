@@ -33,7 +33,7 @@ implementation
 
 { TSQLExecuteThread }
 
-uses GMSqlQuery;
+uses GMSqlQuery, Winapi.ActiveX;
 
 procedure TSQLExecuteThread.Add(const s: string);
 begin
@@ -140,6 +140,7 @@ var
   sql: string;
   n: int;
 begin
+  CoInitialize(nil);
   while not Terminated do
   begin
     SafeExecute_ExtraStep();

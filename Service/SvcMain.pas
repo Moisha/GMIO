@@ -125,6 +125,7 @@ begin
   if ssGeomer.Port > 0 then
     try
       ssGeomer.Open;
+      ProgramLog.AddMessage('Open TCP port ' + IntToStr(ssGeomer.Port));
     except
       on e: Exception do
       begin
@@ -255,13 +256,28 @@ end;
 
 procedure TGMIOPService.CloseIPPorts();
 begin
-  ssGeomer.Close();
-  udpSrv.Active := false;
+  ProgramLog.AddMessage('Closing TCP');
+  try
+    ssGeomer.Close();
+  except
+    on e: Exception do
+      ProgramLog.AddException('Closing TCP: ' + e.ToString());
+  end;
+
+  ProgramLog.AddMessage('Closing UDP');
+  try
+    udpSrv.Active := false;
+  except
+    on e: Exception do
+      ProgramLog.AddException('Closing UDP: ' + e.ToString());
+  end;
+
+  ProgramLog.AddMessage('Ports closed');
 end;
 
 procedure TGMIOPService.RestartIPPorts;
 begin
-  ProgramLog.AddError('RestartIPPorts');
+  ProgramLog.AddMessage('RestartIPPorts');
   CloseIPPorts();
   OpenIPPorts();
 end;
@@ -606,7 +622,12 @@ begin
   ProgramLog.AddMessage('========== Stopping Service ==========');
   try
     ProgramLog.AddMessage('Closing TCP Server');
-    try ssGeomer.Close(); except end;
+    try
+      ssGeomer.Close();
+    except
+      on e: Exception do
+        ProgramLog.AddException('Closing TCP Server ' + e.ToString());
+    end;
 
     ProgramLog.AddMessage('Closing UDP Server');
     try udpSrv.Active := false; except end;
@@ -863,7 +884,7 @@ begin
   for i := 0 to lstSockets.Count - 1 do
     if IsSocketTypeIncoming(lstSockets[i].SocketObjectType) and (Abs(NowGM() - lstSockets[i].LastReadUTime) < 30 * UTC_MINUTE) then
     begin
-      ProgramLog().AddMessage(ClassName + Format(': Socket is alive, N_Car = %d, type = %d', [lstSockets[i].N_Car, lstSockets[i].SocketObjectType]));
+      ProgramLog().AddMessage(lstSockets[i].ToString() + ': socket is alive');
       Exit(true);
     end;
 end;
@@ -878,6 +899,7 @@ end;
 
 procedure TCheckSocketThread.SafeExecute;
 begin
+  RestartOnError := true;
   CountGMObjects();
   FLastRestartTick := GetTickCount;
 
@@ -892,9 +914,6 @@ begin
     CountGMObjects();
     if not CheckGMSockets() then
       ReopenSocket('no alive')
-    else
-    if GetTickDiff64(FLastRestartTick, GetTickCount()) > 3600 * 1000 then
-      ReopenSocket('timer')
     else
       SleepThread(60 * 1000);
   end;
