@@ -11,8 +11,6 @@ type
     function WaitForData(wss: TWinSocketStream; TimeOutMs: int; FirstByteOnly: bool): TCheckCOMResult;
   protected
     FLastError: string;
-    procedure LockSocket; virtual;
-    procedure UnlockSocket; virtual;
     procedure OpenSocket; virtual;
     procedure HandleException(e: Exception; const source: string);
     function CreateWinSocketStream(): TWinSocketStream; virtual; abstract;
@@ -26,8 +24,6 @@ type
   private
     FSocket: TCustomWinSocket;
   protected
-    procedure LockSocket; override;
-    procedure UnlockSocket; override;
     function CreateWinSocketStream(): TWinSocketStream; override;
     function ConnectionEquipmentInitialized(): bool; override;
     function LogSignature: string; override;
@@ -142,16 +138,6 @@ begin
   Result := FLastError;
 end;
 
-procedure TConnectionObjectTCP.LockSocket();
-begin
-
-end;
-
-procedure TConnectionObjectTCP.UnlockSocket();
-begin
-
-end;
-
 procedure TConnectionObjectTCP.OpenSocket();
 begin
 
@@ -162,33 +148,28 @@ var wss: TWinSocketStream;
 begin
   Result := ccrError;
 
-  LockSocket();
   try
-    try
-      OpenSocket();
-      wss := CreateWinSocketStream();
+    OpenSocket();
+    wss := CreateWinSocketStream();
 
-      if etAction in [etSenRec, etSend] then
-        wss.WriteBuffer(buffers.BufSend, buffers.LengthSend);
+    if etAction in [etSenRec, etSend] then
+      wss.WriteBuffer(buffers.BufSend, buffers.LengthSend);
 
-      if etAction in [etSenRec, etRec] then
-      begin
-        try
-          Result := ReadFromWinSocketStream(wss);
-        finally
-          TryFreeAndNil(wss);
-        end;
-      end
-      else
-      begin
-        Result := ccrEmpty;
+    if etAction in [etSenRec, etRec] then
+    begin
+      try
+        Result := ReadFromWinSocketStream(wss);
+      finally
+        TryFreeAndNil(wss);
       end;
-    except
-      on e: Exception do
-        HandleException(e, 'MakeExchange');
+    end
+    else
+    begin
+      Result := ccrEmpty;
     end;
-  finally
-    UnlockSocket();
+  except
+    on e: Exception do
+      HandleException(e, 'MakeExchange');
   end;
 end;
 
@@ -271,16 +252,6 @@ end;
 function TConnectionObjectTCP_IncomingSocket.CreateWinSocketStream: TWinSocketStream;
 begin
   Result := TWinSocketStream.Create(FSocket, WaitNext);
-end;
-
-procedure TConnectionObjectTCP_IncomingSocket.LockSocket;
-begin
-  FSocket.Lock();
-end;
-
-procedure TConnectionObjectTCP_IncomingSocket.UnlockSocket;
-begin
-  FSocket.Unlock();
 end;
 
 end.
