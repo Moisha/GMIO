@@ -57,7 +57,6 @@ begin
     TimeVal.tv_sec := 0;
     TimeVal.tv_usec := 500;
 
-    currentAction := 'Lock';
     currentAction := 'select';
     res := select(0, @FDSet, nil, nil, @TimeVal);
     if Terminated then Exit;

@@ -147,25 +147,19 @@ function TConnectionObjectTCP.MakeExchange(etAction: TExchangeType): TCheckCOMRe
 var wss: TWinSocketStream;
 begin
   Result := ccrError;
-
   try
     OpenSocket();
     wss := CreateWinSocketStream();
+    try
+      if etAction in [etSenRec, etSend] then
+        wss.WriteBuffer(buffers.BufSend, buffers.LengthSend);
 
-    if etAction in [etSenRec, etSend] then
-      wss.WriteBuffer(buffers.BufSend, buffers.LengthSend);
-
-    if etAction in [etSenRec, etRec] then
-    begin
-      try
-        Result := ReadFromWinSocketStream(wss);
-      finally
-        TryFreeAndNil(wss);
-      end;
-    end
-    else
-    begin
-      Result := ccrEmpty;
+      if etAction in [etSenRec, etRec] then
+        Result := ReadFromWinSocketStream(wss)
+      else
+        Result := ccrEmpty;
+    finally
+      wss.Free();
     end;
   except
     on e: Exception do

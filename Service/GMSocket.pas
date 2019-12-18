@@ -39,6 +39,7 @@ type
 
     FLast485ID: int;
     FLast485BuilderUTime: int64;
+    FLastBackGroundUTime: int64;
     lst485IDs: array [0 .. 255] of TRequestDetails;
     FRemoteId: string;
     procedure RemoteServerReport(var bufs: TTwoBuffers);
@@ -819,11 +820,12 @@ end;
 
 procedure TGeomerSocket.BackgroundWork;
 begin
-  if FSocketObjectType = OBJ_TYPE_GM then
+  if (FSocketObjectType = OBJ_TYPE_GM) and (Abs(NowGM() - FLastBackGroundUTime) >= 2000) then
   begin
     CheckInfo0();
     LoadCommands();
     Process485();
+    FLastBackGroundUTime := NowGM();
   end;
 end;
 
@@ -841,6 +843,7 @@ begin
   FInfo0Queue := 0;
   FInfo0LastReqUTime := 0;
   FLast485BuilderUTime := 0;
+  FLastBackGroundUTime := 0;
 
   FReqList := TRequestCollection.Create();
 
