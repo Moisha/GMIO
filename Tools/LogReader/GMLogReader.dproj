@@ -1,7 +1,7 @@
 ﻿<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
     <PropertyGroup>
         <ProjectGuid>{0D88F766-E0E4-4444-91BF-9F320DB0217D}</ProjectGuid>
-        <ProjectVersion>14.6</ProjectVersion>
+        <ProjectVersion>18.8</ProjectVersion>
         <FrameworkType>VCL</FrameworkType>
         <MainSource>GMLogReader.dpr</MainSource>
         <Base>True</Base>
@@ -43,7 +43,7 @@
         <BRCC_CompilerToUse>rc</BRCC_CompilerToUse>
         <DCC_SYMBOL_PLATFORM>false</DCC_SYMBOL_PLATFORM>
         <DCC_UNIT_PLATFORM>false</DCC_UNIT_PLATFORM>
-        <DCC_UnitSearchPath>..\..\SharedSrc;..\..\ThirdParty\FastMM;..\..\ThirdParty\JEDI\jvcl\run;..\..\ThirdParty\JEDI\jvcl\common;..\..\ThirdParty\JEDI\jcl\source;..\..\ThirdParty\JEDI\jcl\source\Include;..\..\ThirdParty\JEDI\jcl\source\Common;..\..\ThirdParty\JEDI\jcl\source\Windows;..\..\ThirdParty\JEDI\jvcl\Resources;$(DCC_UnitSearchPath)</DCC_UnitSearchPath>
+        <DCC_UnitSearchPath>..\..\SharedSrc;..\..\ThirdParty\FastMM;..\..\ThirdParty\JEDI\jvcl\run;..\..\ThirdParty\JEDI\jvcl\common;..\..\ThirdParty\JEDI\jcl\source;..\..\ThirdParty\JEDI\jcl\source\Include;..\..\ThirdParty\JEDI\jcl\source\Common;..\..\ThirdParty\JEDI\jcl\source\Windows;..\..\ThirdParty\JEDI\jvcl\Resources;..\..\ThirdParty\ES;..\..\ThirdParty\Log4D;$(DCC_UnitSearchPath)</DCC_UnitSearchPath>
         <Manifest_File>None</Manifest_File>
         <VerInfo_Locale>1049</VerInfo_Locale>
         <VerInfo_Keys>CompanyName=;FileDescription=;FileVersion=1.0.0.0;InternalName=;LegalCopyright=;LegalTrademarks=;OriginalFilename=;ProductName=;ProductVersion=1.0.0.0;Comments=</VerInfo_Keys>
@@ -55,17 +55,23 @@
         <DCC_S>false</DCC_S>
         <DCC_F>false</DCC_F>
         <DCC_K>false</DCC_K>
+        <SanitizedProjectName>GMLogReader</SanitizedProjectName>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Base_Win32)'!=''">
         <VerInfo_IncludeVerInfo>true</VerInfo_IncludeVerInfo>
         <DCC_Namespace>Winapi;System.Win;Data.Win;Datasnap.Win;Web.Win;Soap.Win;Xml.Win;Bde;$(DCC_Namespace)</DCC_Namespace>
         <DCC_UsePackage>dxBarRS18;dxPSCoreRS18;dxSkinOffice2007GreenRS18;dxPScxPCProdRS18;dxSkinBlueRS18;cxTreeListRS18;frxDB18;dxDockingRS18;dxThemeRS18;dxPSdxOCLnkRS18;tb2k_d12;dxSkinsdxRibbonPainterRS18;dxSkinOffice2007BlueRS18;DBXInterBaseDriver;DataSnapCommon;cxTreeListdxBarPopupMenuRS18;dxSkinsdxBarPainterRS18;dxGaugeControlRS18;DbxCommonDriver;vclimg;dxPSdxGaugeControlLnkRS18;dbxcds;vclshlctrls;dxSkinscxPCPainterRS18;vcldb;dxSkinDarkRoomRS18;cxExportRS18;dxSkinVisualStudio2013BlueRS18;CustomIPTransport;dxSkinBlueprintRS18;ObsPkg_XE4;dsnap;IndyIPServer;dxSkinOffice2010BlueRS18;IndyCore;cxVerticalGridRS18;CloudService;dxPSdxDBOCLnkRS18;GridViewD9;dxADOServerModeRS18;dxSkinDarkSideRS18;dxPScxExtCommonRS18;cxSchedulerRibbonStyleEventEditorRS18;cxEditorsRS18;dxSpellCheckerRS18;cxSchedulerRS18;dxPScxVGridLnkRS18;dxSkinSharpPlusRS18;dxSkinValentineRS18;dxRibbonRS18;EnergoSF_1RS18;dxSkinGlassOceansRS18;bindcompfmx;vcldbx;cxBarEditItemRS18;dxRibbonCustomizationFormRS18;cxPageControlRS18;dxSkinSharpRS18;dbrtl;dxSkinDevExpressDarkStyleRS18;bindcomp;dxMapControlRS18;dxSkinVisualStudio2013LightRS18;dxSkinXmas2008BlueRS18;dxPSdxSpreadSheetLnkRS18;DIE;xmlrtl;ibxpress;dxBarExtItemsRS18;frxe18;dxSkinLiquidSkyRS18;dxSkinPumpkinRS18;dxSkinOffice2013WhiteRS18;vclactnband;bindengine;soaprtl;dxSkinMetropolisRS18;bindcompvcl;dxPsPrVwAdvRS18;cxPivotGridRS18;vclie;dxmdsRS18;dxBarDBNavRS18;dxTileControlRS18;dxComnRS18;dxWizardControlRS18;dxBarExtDBItemsRS18;dxPScxSchedulerLnkRS18;Intraweb;dxNavBarRS18;dsnapcon;dxPSTeeChartRS18;inet;dxSkinscxSchedulerPainterRS18;dxPScxCommonRS18;dxSkinWhiteprintRS18;vclx;dxorgcRS18;dbexpress;dxSkinOffice2007BlackRS18;dxSkinSummer2008RS18;dxSkinBlackRS18;IndyIPClient;dxGDIPlusRS18;office2K;dxSkinCoffeeRS18;dxSkinVS2010RS18;dxSkinMoneyTwinsRS18;dxLayoutControlRS18;DBXSqliteDriver;IndySystem;TeeDB;frx18;inetdbbde;vclib;dxPScxTLLnkRS18;dxSkinOffice2013DarkGrayRS18;cxSchedulerGridRS18;dxtrmdRS18;FXCompsD2009;dxSkinSilverRS18;dxTabbedMDIRS18;MetropolisUILiveTile;dxPSLnksRS18;vcldsnap;dxPScxPivotGridLnkRS18;dxSkinVisualStudio2013DarkRS18;dxSkinOffice2010SilverRS18;dxServerModeRS18;vclribbon;dxdborRS18;dxRichEditControlRS18;dxSkinsdxDLPainterRS18;vcl;IndyIPCommon;CodeSiteExpressPkg;cxPivotGridChartRS18;inetdbxpress;webdsnap;dxPScxGridLnkRS18;dxSkinsCoreRS18;dxSkinLondonLiquidSkyRS18;cxLibraryRS18;adortl;dxSkinOffice2013LightGrayRS18;dxSkinTheAsphaltWorldRS18;dxSkinDevExpressStyleRS18;dxSkinSpringTimeRS18;dxSkinHighContrastRS18;dxPSdxDBTVLnkRS18;RtmRxCtl180;dxSpreadSheetRS18;dxSkinCaramelRS18;dxSkinOffice2007SilverRS18;rtl;DbxClientDriver;dxSkinMetropolisDarkRS18;FlexD2006;Tee;dxSkinStardustRS18;svnui;dxDBXServerModeRS18;IndyProtocols;DBXMySQLDriver;dxSkiniMaginaryRS18;dxFlowChartRS18;bindcompdbx;TeeUI;DIECustomVisualizers;vclSvComV7D18;dxSkinMcSkinRS18;vcltouch;dxPSPrVwRibbonRS18;dxSkinOffice2007PinkRS18;dxPSdxFCLnkRS18;VclSmp;dxSkinSevenRS18;cxGridRS18;dxSkinOffice2010BlackRS18;cxSchedulerTreeBrowserRS18;dxPSDBTeeChartRS18;dxdbtrRS18;SynEdit_RXE4;dxCoreRS18;dxSkinFoggyRS18;dxSkinSevenClassicRS18;dxSkinsdxNavBarPainterRS18;svn;dxSkinLilianRS18;dxPSdxLCLnkRS18;cxPivotGridOLAPRS18;cxDataRS18;bdertl;VirtualTreesR;$(DCC_UsePackage)</DCC_UsePackage>
         <VerInfo_Locale>1033</VerInfo_Locale>
-        <VerInfo_Keys>CompanyName=;FileDescription=;FileVersion=1.0.0.0;InternalName=;LegalCopyright=;LegalTrademarks=;OriginalFilename=;ProductName=;ProductVersion=1.0.0.0;Comments=</VerInfo_Keys>
+        <VerInfo_Keys>CompanyName=;FileVersion=1.0.0.0;InternalName=;LegalCopyright=;LegalTrademarks=;OriginalFilename=;ProductVersion=1.0.0.0;Comments=;ProgramID=com.embarcadero.$(MSBuildProjectName);FileDescription=$(MSBuildProjectName);ProductName=$(MSBuildProjectName)</VerInfo_Keys>
         <Manifest_File>$(BDS)\bin\default_app.manifest</Manifest_File>
+        <AppEnableRuntimeThemes>true</AppEnableRuntimeThemes>
+        <UWP_DelphiLogo44>$(BDS)\bin\Artwork\Windows\UWP\delphi_UwpDefault_44.png</UWP_DelphiLogo44>
+        <UWP_DelphiLogo150>$(BDS)\bin\Artwork\Windows\UWP\delphi_UwpDefault_150.png</UWP_DelphiLogo150>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Base_Win64)'!=''">
         <DCC_UsePackage>dxBarRS18;dxPSCoreRS18;dxSkinOffice2007GreenRS18;dxPScxPCProdRS18;dxSkinBlueRS18;cxTreeListRS18;dxDockingRS18;dxThemeRS18;dxPSdxOCLnkRS18;dxSkinsdxRibbonPainterRS18;dxSkinOffice2007BlueRS18;DBXInterBaseDriver;DataSnapCommon;cxTreeListdxBarPopupMenuRS18;dxSkinsdxBarPainterRS18;dxGaugeControlRS18;DbxCommonDriver;vclimg;dxPSdxGaugeControlLnkRS18;dbxcds;vclshlctrls;dxSkinscxPCPainterRS18;vcldb;dxSkinDarkRoomRS18;cxExportRS18;dxSkinVisualStudio2013BlueRS18;CustomIPTransport;dxSkinBlueprintRS18;dsnap;IndyIPServer;dxSkinOffice2010BlueRS18;IndyCore;cxVerticalGridRS18;CloudService;dxPSdxDBOCLnkRS18;dxADOServerModeRS18;dxSkinDarkSideRS18;dxPScxExtCommonRS18;cxSchedulerRibbonStyleEventEditorRS18;cxEditorsRS18;dxSpellCheckerRS18;cxSchedulerRS18;dxPScxVGridLnkRS18;dxSkinSharpPlusRS18;dxSkinValentineRS18;dxRibbonRS18;dxSkinGlassOceansRS18;bindcompfmx;cxBarEditItemRS18;dxRibbonCustomizationFormRS18;cxPageControlRS18;dxSkinSharpRS18;dbrtl;dxSkinDevExpressDarkStyleRS18;bindcomp;dxMapControlRS18;dxSkinVisualStudio2013LightRS18;dxSkinXmas2008BlueRS18;dxPSdxSpreadSheetLnkRS18;xmlrtl;ibxpress;dxBarExtItemsRS18;dxSkinLiquidSkyRS18;dxSkinPumpkinRS18;dxSkinOffice2013WhiteRS18;vclactnband;bindengine;soaprtl;dxSkinMetropolisRS18;bindcompvcl;dxPsPrVwAdvRS18;cxPivotGridRS18;vclie;dxmdsRS18;dxBarDBNavRS18;dxTileControlRS18;dxComnRS18;dxWizardControlRS18;dxBarExtDBItemsRS18;dxPScxSchedulerLnkRS18;Intraweb;dxNavBarRS18;dsnapcon;dxPSTeeChartRS18;inet;dxSkinscxSchedulerPainterRS18;dxPScxCommonRS18;dxSkinWhiteprintRS18;vclx;dxorgcRS18;dbexpress;dxSkinOffice2007BlackRS18;dxSkinSummer2008RS18;dxSkinBlackRS18;IndyIPClient;dxGDIPlusRS18;office2K;dxSkinCoffeeRS18;dxSkinVS2010RS18;dxSkinMoneyTwinsRS18;dxLayoutControlRS18;DBXSqliteDriver;IndySystem;TeeDB;vclib;dxPScxTLLnkRS18;dxSkinOffice2013DarkGrayRS18;cxSchedulerGridRS18;dxtrmdRS18;dxSkinSilverRS18;dxTabbedMDIRS18;MetropolisUILiveTile;dxPSLnksRS18;vcldsnap;dxPScxPivotGridLnkRS18;dxSkinVisualStudio2013DarkRS18;dxSkinOffice2010SilverRS18;dxServerModeRS18;vclribbon;dxdborRS18;dxRichEditControlRS18;dxSkinsdxDLPainterRS18;vcl;IndyIPCommon;cxPivotGridChartRS18;inetdbxpress;webdsnap;dxPScxGridLnkRS18;dxSkinsCoreRS18;dxSkinLondonLiquidSkyRS18;cxLibraryRS18;adortl;dxSkinOffice2013LightGrayRS18;dxSkinTheAsphaltWorldRS18;dxSkinDevExpressStyleRS18;dxSkinSpringTimeRS18;dxSkinHighContrastRS18;dxPSdxDBTVLnkRS18;dxSpreadSheetRS18;dxSkinCaramelRS18;dxSkinOffice2007SilverRS18;rtl;DbxClientDriver;dxSkinMetropolisDarkRS18;Tee;dxSkinStardustRS18;dxDBXServerModeRS18;IndyProtocols;DBXMySQLDriver;dxSkiniMaginaryRS18;dxFlowChartRS18;bindcompdbx;TeeUI;dxSkinMcSkinRS18;vcltouch;dxPSPrVwRibbonRS18;dxSkinOffice2007PinkRS18;dxPSdxFCLnkRS18;VclSmp;dxSkinSevenRS18;cxGridRS18;dxSkinOffice2010BlackRS18;cxSchedulerTreeBrowserRS18;dxPSDBTeeChartRS18;dxdbtrRS18;SynEdit_RXE4;dxCoreRS18;dxSkinFoggyRS18;dxSkinSevenClassicRS18;dxSkinsdxNavBarPainterRS18;dxSkinLilianRS18;dxPSdxLCLnkRS18;cxPivotGridOLAPRS18;cxDataRS18;VirtualTreesR;$(DCC_UsePackage)</DCC_UsePackage>
+        <UWP_DelphiLogo44>$(BDS)\bin\Artwork\Windows\UWP\delphi_UwpDefault_44.png</UWP_DelphiLogo44>
+        <UWP_DelphiLogo150>$(BDS)\bin\Artwork\Windows\UWP\delphi_UwpDefault_150.png</UWP_DelphiLogo150>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Cfg_1)'!=''">
         <DCC_Define>DEBUG;$(DCC_Define)</DCC_Define>
@@ -80,6 +86,9 @@
         <VerInfo_IncludeVerInfo>true</VerInfo_IncludeVerInfo>
         <VerInfo_Locale>1033</VerInfo_Locale>
         <DCC_RemoteDebug>false</DCC_RemoteDebug>
+        <AppEnableRuntimeThemes>true</AppEnableRuntimeThemes>
+        <BT_BuildType>Debug</BT_BuildType>
+        <VerInfo_Keys>CompanyName=;FileVersion=1.0.0.0;InternalName=;LegalCopyright=;LegalTrademarks=;OriginalFilename=;ProductVersion=1.0.0.0;Comments=;ProgramID=com.embarcadero.$(MSBuildProjectName);FileDescription=$(MSBuildProjectName);ProductName=$(MSBuildProjectName)</VerInfo_Keys>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Cfg_2)'!=''">
         <DCC_LocalDebugSymbols>false</DCC_LocalDebugSymbols>
@@ -163,11 +172,10 @@
                     <Source Name="MainSource">GMLogReader.dpr</Source>
                 </Source>
                 <Excluded_Packages>
-                    <Excluded_Packages Name="$(BDSBIN)\dcloffice2k180.bpl">Microsoft Office 2000 Sample Automation Server Wrapper Components</Excluded_Packages>
-                    <Excluded_Packages Name="$(BDSBIN)\dclofficexp180.bpl">Microsoft Office XP Sample Automation Server Wrapper Components</Excluded_Packages>
+                    <Excluded_Packages Name="$(BDSBIN)\dclofficexp260.bpl">Microsoft Office XP Sample Automation Server Wrapper Components</Excluded_Packages>
                 </Excluded_Packages>
             </Delphi.Personality>
-            <Deployment/>
+            <Deployment Version="3"/>
             <Platforms>
                 <Platform value="Win32">True</Platform>
                 <Platform value="Win64">False</Platform>
@@ -177,4 +185,5 @@
     </ProjectExtensions>
     <Import Project="$(BDS)\Bin\CodeGear.Delphi.Targets" Condition="Exists('$(BDS)\Bin\CodeGear.Delphi.Targets')"/>
     <Import Project="$(APPDATA)\Embarcadero\$(BDSAPPDATABASEDIR)\$(PRODUCTVERSION)\UserTools.proj" Condition="Exists('$(APPDATA)\Embarcadero\$(BDSAPPDATABASEDIR)\$(PRODUCTVERSION)\UserTools.proj')"/>
+    <Import Project="$(MSBuildProjectName).deployproj" Condition="Exists('$(MSBuildProjectName).deployproj')"/>
 </Project>

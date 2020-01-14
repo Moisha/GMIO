@@ -12,7 +12,7 @@ type
   private
     function NeedComLog: bool;
     function NeedExchangeBuf: bool;
-    procedure PostLogMessage;
+    procedure PostLogMessage(const Msg: string);
   protected
     FLogger: TesLogger;
   public
@@ -63,7 +63,7 @@ end;
 
 { TProgramLogFile }
 
-procedure TProgramLogFile.PostLogMessage();
+procedure TProgramLogFile.PostLogMessage(const Msg: string);
 begin
 {$ifdef MESSAGE_COM_LOG}
   if (Application <> nil) and (Application.MainForm <> nil) then
@@ -74,7 +74,7 @@ end;
 procedure TProgramLogFile.AddError(const s: string);
 begin
   FLogger.Error(s);
-  PostLogMessage();
+  PostLogMessage(s);
 end;
 
 procedure TProgramLogFile.AddExchangeBuf(const comDevice: string; direction: int; buf: array of Byte; bufLen: int);
@@ -115,13 +115,13 @@ end;
 procedure TProgramLogFile.AddExchangeBuf(const s: string);
 begin
   FLogger.Debug(s);
-  PostLogMessage();
+  PostLogMessage(s);
 end;
 
 procedure TProgramLogFile.AddMessage(const s: string);
 begin
   FLogger.Info(s);
-  PostLogMessage();
+  PostLogMessage(s);
 end;
 
 function TProgramLogFile.NeedExchangeBuf: bool;

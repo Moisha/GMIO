@@ -7,7 +7,7 @@
         <TargetedPlatforms>1</TargetedPlatforms>
         <AppType>Application</AppType>
         <FrameworkType>VCL</FrameworkType>
-        <ProjectVersion>18.5</ProjectVersion>
+        <ProjectVersion>18.8</ProjectVersion>
         <Platform Condition="'$(Platform)'==''">Win32</Platform>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Config)'=='Base' or '$(Base)'!=''">
@@ -67,7 +67,7 @@
         <DCC_Define>FullDebugModeInIDE;ClearLogFileOnStartup;LogErrorsToFile;LogMemoryLeakDetailToFile;EnableMemoryLeakReporting;NeverSleepOnThreadContention;UseSwitchToThread;GMIOSRV;MESSAGE_COM_LOG;SQL_APP;$(DCC_Define)</DCC_Define>
         <DCC_Optimize>false</DCC_Optimize>
         <VerInfo_Build>324</VerInfo_Build>
-        <DCC_UnitSearchPath>..\SharedSrc;..\ThirdParty\FastMM;..\ThirdParty\Zeos;..\ThirdParty\Zeos\component;..\ThirdParty\Zeos\core;..\ThirdParty\Zeos\dbc;..\ThirdParty\Zeos\parsesql;..\ThirdParty\Zeos\plain;..\ThirdParty\VT\Source;..\ThirdParty\DateComboBox;..\ThirdParty\VT\Resources;..\ThirdParty\VT;..\ThirdParty\JEDI\jvcl\run;..\ThirdParty\JEDI\jvcl\common;..\ThirdParty\JEDI\jcl\source;..\ThirdParty\JEDI\jcl\source\Include;..\ThirdParty\JEDI\jcl\source\Common;..\ThirdParty\JEDI\jcl\source\Windows;..\ThirdParty\JEDI\jvcl\Resources;$(DCC_UnitSearchPath)</DCC_UnitSearchPath>
+        <DCC_UnitSearchPath>..\SharedSrc;..\ThirdParty\FastMM;..\ThirdParty\Zeos;..\ThirdParty\Zeos\component;..\ThirdParty\Zeos\core;..\ThirdParty\Zeos\dbc;..\ThirdParty\Zeos\parsesql;..\ThirdParty\Zeos\plain;..\ThirdParty\VT\Source;..\ThirdParty\DateComboBox;..\ThirdParty\VT\Resources;..\ThirdParty\VT;..\ThirdParty\JEDI\jvcl\run;..\ThirdParty\JEDI\jvcl\common;..\ThirdParty\JEDI\jcl\source;..\ThirdParty\JEDI\jcl\source\Include;..\ThirdParty\JEDI\jcl\source\Common;..\ThirdParty\JEDI\jcl\source\Windows;..\ThirdParty\JEDI\jvcl\Resources;..\ThirdParty\ES;..\ThirdParty\Log4D;$(DCC_UnitSearchPath)</DCC_UnitSearchPath>
         <VerInfo_Release>1</VerInfo_Release>
         <DCC_S>false</DCC_S>
         <DCC_F>false</DCC_F>
@@ -119,6 +119,7 @@
         <VerInfo_Locale>1033</VerInfo_Locale>
         <Debugger_RunParams>-log</Debugger_RunParams>
         <AppEnableRuntimeThemes>true</AppEnableRuntimeThemes>
+        <BT_BuildType>Debug</BT_BuildType>
     </PropertyGroup>
     <ItemGroup>
         <DelphiCompile Include="$(MainSource)">
@@ -224,9 +225,7 @@
                     <VersionInfoKeys Name="Build Date">17.02.2014 16:33:28</VersionInfoKeys>
                 </VersionInfoKeys>
                 <Excluded_Packages>
-                    <Excluded_Packages Name="C:\Users\Public\Documents\RAD Studio\11.0\Bpl\ObsPkg_XE4.bpl">(untitled)</Excluded_Packages>
-                    <Excluded_Packages Name="$(BDSBIN)\dcloffice2k180.bpl">Microsoft Office 2000 Sample Automation Server Wrapper Components</Excluded_Packages>
-                    <Excluded_Packages Name="$(BDSBIN)\dclofficexp180.bpl">Microsoft Office XP Sample Automation Server Wrapper Components</Excluded_Packages>
+                    <Excluded_Packages Name="$(BDSBIN)\dclofficexp260.bpl">Microsoft Office XP Sample Automation Server Wrapper Components</Excluded_Packages>
                 </Excluded_Packages>
             </Delphi.Personality>
             <Platforms>

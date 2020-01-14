@@ -517,13 +517,15 @@ begin
 end;
 
 procedure TCheckAllFilesUnderSVN.CheckFile(const fn: string);
-var
-  ext: string;
+const
+  FilesUnderSvn: array [0..3] of string = ('.sql', '.pas', '.dfm', '.in');
 begin
-  ext := ExtractFileExt(fn).ToLower();
-  if (ext <> '.sql') and (ext <> '.pas') and (ext <> '.dfm') then Exit;
+  var ext := ExtractFileExt(fn).ToLower();
+  var goOn := false;
+  for var i := 0 to High(FilesUnderSvn) do
+    goOn := goOn or (ext = FilesUnderSvn[i]);
 
-  if FRepoFiles.IndexOf(AnsiLowerCase(fn)) < 0 then
+  if goOn and (FRepoFiles.IndexOf(AnsiLowerCase(fn)) < 0) then
     FMissingFiles.Add(fn);
 end;
 
