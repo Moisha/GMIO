@@ -7,7 +7,7 @@
         <TargetedPlatforms>1</TargetedPlatforms>
         <AppType>Application</AppType>
         <FrameworkType>VCL</FrameworkType>
-        <ProjectVersion>18.5</ProjectVersion>
+        <ProjectVersion>18.8</ProjectVersion>
         <Platform Condition="'$(Platform)'==''">Win32</Platform>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Config)'=='Base' or '$(Base)'!=''">
@@ -51,7 +51,7 @@
         <DCC_SymbolReferenceInfo>1</DCC_SymbolReferenceInfo>
         <VerInfo_Build>327</VerInfo_Build>
         <DCC_F>false</DCC_F>
-        <DCC_UnitSearchPath>..\ThirdParty\FastMM;..\SharedSrc;..\ThirdParty\VT\Source;..\ThirdParty\DateComboBox;..\ThirdParty\VT\Resources;..\ThirdParty\SynEdit\Source;..\ThirdParty\JEDI\jvcl\run;..\ThirdParty\JEDI\jvcl\common;..\ThirdParty\JEDI\jcl\source;..\ThirdParty\JEDI\jcl\source\Include;..\ThirdParty\JEDI\jcl\source\Common;..\ThirdParty\JEDI\jcl\source\Windows;..\ThirdParty\JEDI\jvcl\Resources;..\ThirdParty\Flex\Src;FlexEdit;..\ThirdParty\RX;FlexEdit\Components;..\ThirdParty\ToolBar2000\Source;..\ThirdParty\ExtControls;..\SharedSrc\MP3;$(DXVCL)\ExpressEditors Library\Sources;$(DXVCL)\ExpressCore Library\Sources;$(DXVCL)\ExpressLibrary\Sources;$(DXVCL)\ExpressGDI+ Library\Sources;$(DXVCL)\XP Theme Manager\Sources;$(DXVCL)\ExpressSkins Library\Sources;$(DXVCL)\ExpressPageControl\Sources;$(DXVCL)\ExpressBars\Sources;$(DXVCL)\ExpressCommon Library\Sources;$(DXVCL)\ExpressQuantumGrid\Sources;$(DXVCL)\ExpressLayout Control\Sources;$(DXVCL)\ExpressDocking Library\Sources;$(DXVCL)\ExpressMemData\Sources;$(DXVCL)\ExpressQuantumTreeList\Sources;$(DXVCL)\ExpressGauge Control\Sources;$(DXVCL)\ExpressVerticalGrid\Sources;$(DXVCL)\ExpressDataController\Sources;$(DXVCL)\ExpressOfficeCore Library\Sources;$(DXVCL)\ExpressSpreadSheet Core\Sources;$(DXVCL)\ExpressSpreadSheet\Sources;$(DCC_UnitSearchPath)</DCC_UnitSearchPath>
+        <DCC_UnitSearchPath>..\ThirdParty\FastMM;..\SharedSrc;..\ThirdParty\VT\Source;..\ThirdParty\DateComboBox;..\ThirdParty\VT\Resources;..\ThirdParty\SynEdit\Source;..\ThirdParty\JEDI\jvcl\run;..\ThirdParty\JEDI\jvcl\common;..\ThirdParty\JEDI\jcl\source;..\ThirdParty\JEDI\jcl\source\Include;..\ThirdParty\JEDI\jcl\source\Common;..\ThirdParty\JEDI\jcl\source\Windows;..\ThirdParty\JEDI\jvcl\Resources;..\ThirdParty\Flex\Src;FlexEdit;..\ThirdParty\RX;FlexEdit\Components;..\ThirdParty\ToolBar2000\Source;..\ThirdParty\ExtControls;..\SharedSrc\MP3;$(DXVCL)\ExpressEditors Library\Sources;$(DXVCL)\ExpressCore Library\Sources;$(DXVCL)\ExpressLibrary\Sources;$(DXVCL)\ExpressGDI+ Library\Sources;$(DXVCL)\XP Theme Manager\Sources;$(DXVCL)\ExpressSkins Library\Sources;$(DXVCL)\ExpressPageControl\Sources;$(DXVCL)\ExpressBars\Sources;$(DXVCL)\ExpressCommon Library\Sources;$(DXVCL)\ExpressQuantumGrid\Sources;$(DXVCL)\ExpressLayout Control\Sources;$(DXVCL)\ExpressDocking Library\Sources;$(DXVCL)\ExpressMemData\Sources;$(DXVCL)\ExpressQuantumTreeList\Sources;$(DXVCL)\ExpressGauge Control\Sources;$(DXVCL)\ExpressVerticalGrid\Sources;$(DXVCL)\ExpressDataController\Sources;$(DXVCL)\ExpressOfficeCore Library\Sources;$(DXVCL)\ExpressSpreadSheet Core\Sources;$(DXVCL)\ExpressSpreadSheet\Sources;..\ThirdParty\Log4d;..\ThirdParty\ES;$(DCC_UnitSearchPath)</DCC_UnitSearchPath>
         <VerInfo_Release>1</VerInfo_Release>
         <DCC_Optimize>false</DCC_Optimize>
         <DCC_Namespace>Vcl;Vcl.Imaging;Vcl.Touch;Vcl.Samples;Vcl.Shell;System;Xml;Data;Datasnap;Web;Soap;Winapi;Web.Win;System.Win;$(DCC_Namespace)</DCC_Namespace>
@@ -96,18 +96,21 @@
         <VerInfo_Keys>CompanyName=;FileVersion=1.0.0.0;InternalName=;LegalCopyright=;LegalTrademarks=;OriginalFilename=;ProductVersion=1.0.0.0;Comments=;ProgramID=com.embarcadero.$(MSBuildProjectName);FileDescription=$(MSBuildProjectName);ProductName=$(MSBuildProjectName)</VerInfo_Keys>
         <VerInfo_Locale>1033</VerInfo_Locale>
         <AppEnableRuntimeThemes>true</AppEnableRuntimeThemes>
+        <BT_BuildType>Debug</BT_BuildType>
     </PropertyGroup>
     <ItemGroup>
         <DelphiCompile Include="$(MainSource)">
             <MainSource>MainSource</MainSource>
         </DelphiCompile>
+        <RcCompile Include="EsLogging.RC">
+            <Form>EsLogging.res</Form>
+        </RcCompile>
         <DCCReference Include="GMClMain.pas">
             <Form>GMClMainFrm</Form>
         </DCCReference>
         <DCCReference Include="..\SharedSrc\GMGlobals.pas"/>
         <DCCReference Include="Frame.ClientObject.pas">
             <Form>FrmObject</Form>
-            <FormType>dfm</FormType>
             <DesignClass>TFrame</DesignClass>
         </DCCReference>
         <DCCReference Include="Threads.GMClient.pas"/>
@@ -119,7 +122,6 @@
         </DCCReference>
         <DCCReference Include="Frame.ObjectTree.pas">
             <Form>ObjTreeFrame</Form>
-            <FormType>dfm</FormType>
             <DesignClass>TFrame</DesignClass>
         </DCCReference>
         <DCCReference Include="EditINIWithDevices.pas">
@@ -127,17 +129,14 @@
         </DCCReference>
         <DCCReference Include="Frame.EditPrm.pas">
             <Form>EditPrmWithDevicesFrm</Form>
-            <FormType>dfm</FormType>
             <DesignClass>TFrame</DesignClass>
         </DCCReference>
         <DCCReference Include="Frame.ControlOneAggregate.pas">
             <Form>ControlOneAggregateFrame</Form>
-            <FormType>dfm</FormType>
             <DesignClass>TFrame</DesignClass>
         </DCCReference>
         <DCCReference Include="ControlFrame.pas">
             <Form>ControlFrm</Form>
-            <FormType>dfm</FormType>
             <DesignClass>TFrame</DesignClass>
         </DCCReference>
         <DCCReference Include="..\SharedSrc\Opts.pas">
@@ -148,7 +147,6 @@
         </DCCReference>
         <DCCReference Include="Frame.DiagramAndTable.pas">
             <Form>FrmDiagramAndTable</Form>
-            <FormType>dfm</FormType>
             <DesignClass>TFrame</DesignClass>
         </DCCReference>
         <DCCReference Include="ParamsForDiagram.pas"/>
@@ -157,7 +155,6 @@
         <DCCReference Include="..\SharedSrc\Devices.Vacon.Common.pas"/>
         <DCCReference Include="Frame.ReportBlank.pas">
             <Form>FrmReportBlank</Form>
-            <FormType>dfm</FormType>
             <DesignClass>TFrame</DesignClass>
         </DCCReference>
         <DCCReference Include="HydroGeoRep.pas">
@@ -178,18 +175,15 @@
         <DCCReference Include="..\SharedSrc\StdResponce.pas"/>
         <DCCReference Include="..\SharedSrc\Frame.NodeTree.pas">
             <Form>frmNodeTree</Form>
-            <FormType>dfm</FormType>
             <DesignClass>TFrame</DesignClass>
         </DCCReference>
         <DCCReference Include="ArrayNodeReader.pas"/>
         <DCCReference Include="..\SharedSrc\Frame.TimeInterval.pas">
             <Form>frmSelArchTime</Form>
-            <FormType>dfm</FormType>
             <DesignClass>TFrame</DesignClass>
         </DCCReference>
         <DCCReference Include="Frame.BigWindow.pas">
             <Form>BigWindowFrame</Form>
-            <FormType>dfm</FormType>
             <DesignClass>TFrame</DesignClass>
         </DCCReference>
         <DCCReference Include="BigWindowData.pas"/>
@@ -197,89 +191,68 @@
         <DCCReference Include="..\SharedSrc\Connection.TCP.pas"/>
         <DCCReference Include="PasScript.pas">
             <Form>PascalDlg</Form>
-            <FormType>dfm</FormType>
         </DCCReference>
         <DCCReference Include="h_GMClient.pas"/>
         <DCCReference Include="FlexEdit\fChannelsProps.pas">
             <Form>ChannelsPropForm</Form>
-            <FormType>dfm</FormType>
         </DCCReference>
         <DCCReference Include="FlexEdit\fChild.pas">
             <Form>FlexChildFrame</Form>
-            <FormType>dfm</FormType>
             <DesignClass>T</DesignClass>
         </DCCReference>
         <DCCReference Include="FlexEdit\fDocProps.pas">
             <Form>fmDocProps</Form>
-            <FormType>dfm</FormType>
         </DCCReference>
         <DCCReference Include="FlexEdit\fInspector.pas">
             <Form>fmInspector</Form>
-            <FormType>dfm</FormType>
         </DCCReference>
         <DCCReference Include="FlexEdit\fLayers.pas">
             <Form>fmLayers</Form>
-            <FormType>dfm</FormType>
         </DCCReference>
         <DCCReference Include="FlexEdit\FlexEdit.Main.pas">
             <Form>EditMainForm</Form>
-            <FormType>dfm</FormType>
         </DCCReference>
         <DCCReference Include="FlexEdit\fLibItemProps.pas">
             <Form>fmLibItemProps</Form>
-            <FormType>dfm</FormType>
         </DCCReference>
         <DCCReference Include="FlexEdit\fLibProps.pas">
             <Form>fmLibProps</Form>
-            <FormType>dfm</FormType>
         </DCCReference>
         <DCCReference Include="FlexEdit\fLibrary.pas">
             <Form>fmLibrary</Form>
-            <FormType>dfm</FormType>
         </DCCReference>
         <DCCReference Include="FlexEdit\fOptions.pas">
             <Form>fmOptions</Form>
-            <FormType>dfm</FormType>
         </DCCReference>
         <DCCReference Include="FlexEdit\fPreview.pas">
             <Form>fmPreview</Form>
-            <FormType>dfm</FormType>
         </DCCReference>
         <DCCReference Include="FlexEdit\fUserData.pas">
             <Form>fmUserData</Form>
-            <FormType>dfm</FormType>
         </DCCReference>
         <DCCReference Include="FlexEdit\ToolMngr.pas">
             <Form>ToolContainer</Form>
-            <FormType>dfm</FormType>
         </DCCReference>
         <DCCReference Include="FlexEdit\PropForms\BackgroundFrm.pas">
             <Form>BackgroundOptionsForm</Form>
-            <FormType>dfm</FormType>
         </DCCReference>
         <DCCReference Include="FlexEdit\PropForms\BrushFrm.pas">
             <Form>BrushPropForm</Form>
-            <FormType>dfm</FormType>
         </DCCReference>
         <DCCReference Include="FlexEdit\PropForms\LineCapFrm.pas">
             <Form>LineCapPropForm</Form>
-            <FormType>dfm</FormType>
         </DCCReference>
         <DCCReference Include="FlexEdit\PropForms\PenFrm.pas">
             <Form>PenPropForm</Form>
-            <FormType>dfm</FormType>
         </DCCReference>
         <DCCReference Include="FlexEdit\PropForms\PictureFrm.pas">
             <Form>PicturePropForm</Form>
-            <FormType>dfm</FormType>
         </DCCReference>
         <DCCReference Include="FlexEdit\PropForms\StrListFrm.pas">
             <Form>StrListPropForm</Form>
-            <FormType>dfm</FormType>
         </DCCReference>
         <DCCReference Include="FlexEdit\PropForms\UserDataFrm.pas">
             <Form>UserDataForm</Form>
-            <FormType>dfm</FormType>
         </DCCReference>
         <DCCReference Include="ScriptRunner.pas"/>
         <DCCReference Include="..\ThirdParty\Flex\Src\FlexActions.pas"/>
@@ -295,27 +268,22 @@
         <DCCReference Include="..\ThirdParty\Flex\Src\FlexUtils.pas"/>
         <DCCReference Include="FlexEdit\PropForms\PropForm.ControlObject.pas">
             <Form>ControlObjectPropForm</Form>
-            <FormType>dfm</FormType>
         </DCCReference>
         <DCCReference Include="..\SharedSrc\VT_Utils.pas"/>
         <DCCReference Include="Frame.CurrentsDiagramBase.pas">
             <Form>CurrentsDiagramBaseFrame</Form>
-            <FormType>dfm</FormType>
             <DesignClass>TFrame</DesignClass>
         </DCCReference>
         <DCCReference Include="..\SharedSrc\dxStandardControlsSkinHelper.pas"/>
         <DCCReference Include="GMDock.pas"/>
         <DCCReference Include="ScadaForm.pas">
             <Form>ScadaFormForDocking</Form>
-            <FormType>dfm</FormType>
         </DCCReference>
         <DCCReference Include="BigWindowForm.pas">
             <Form>BigWindowFormForDocking</Form>
-            <FormType>dfm</FormType>
         </DCCReference>
         <DCCReference Include="Frames.ScriptEditor.pas">
             <Form>ScriptEditorFrame</Form>
-            <FormType>dfm</FormType>
             <DesignClass>TFrame</DesignClass>
         </DCCReference>
         <DCCReference Include="Threads.Sound.pas"/>
@@ -372,19 +340,22 @@
                 </VersionInfoKeys>
                 <Excluded_Packages>
                     <Excluded_Packages Name="$(BDSBIN)\dcloffice2k260.bpl">Microsoft Office 2000 Sample Automation Server Wrapper Components</Excluded_Packages>
-                    <Excluded_Packages Name="C:\Users\Public\Documents\Embarcadero\Studio\20.0\Bpl\dcldxAuthorizationAgentsRS26.bpl">Authorization Agents for Web Services by Developer Express Inc.</Excluded_Packages>
-                    <Excluded_Packages Name="C:\Users\Public\Documents\Embarcadero\Studio\20.0\Bpl\dcldxSkinscxEditorsHelperRS26.bpl">ExpressSkins Library Uses Clause Auto Fill Helper for ExpressEditors by Developer Express Inc.</Excluded_Packages>
-                    <Excluded_Packages Name="$(BDSBIN)\dclofficexp260.bpl">Microsoft Office XP Sample Automation Server Wrapper Components</Excluded_Packages>
                     <Excluded_Packages Name="C:\Program Files (x86)\DevExpress\VCL\Library\RS26\dcldxCloudServiceLibraryRS26.bpl">ExpressCloudService Library by Developer Express Inc.</Excluded_Packages>
                     <Excluded_Packages Name="C:\Program Files (x86)\DevExpress\VCL\Library\RS26\dcldxFlowChartDesignerRS26.bpl">ExpressFlowChart Designer by Developer Express Inc.</Excluded_Packages>
+                    <Excluded_Packages Name="$(BDSBIN)\dclofficexp260.bpl">Microsoft Office XP Sample Automation Server Wrapper Components</Excluded_Packages>
                 </Excluded_Packages>
             </Delphi.Personality>
             <Platforms>
                 <Platform value="Win32">True</Platform>
             </Platforms>
             <Deployment Version="3">
-                <DeployFile LocalName="GMPClient.rsm" Configuration="Debug" Class="DebugSymbols"/>
                 <DeployFile LocalName="GMPClient.exe" Configuration="Debug" Class="ProjectOutput"/>
+                <DeployFile LocalName="GMPClient.exe" Configuration="Debug" Class="ProjectOutput">
+                    <Platform Name="Win32">
+                        <RemoteName>GMPClient.exe</RemoteName>
+                        <Overwrite>true</Overwrite>
+                    </Platform>
+                </DeployFile>
                 <DeployClass Name="AdditionalDebugSymbols">
                     <Platform Name="iOSSimulator">
                         <Operation>1</Operation>
@@ -402,9 +373,17 @@
                         <RemoteDir>classes</RemoteDir>
                         <Operation>1</Operation>
                     </Platform>
+                    <Platform Name="Android64">
+                        <RemoteDir>classes</RemoteDir>
+                        <Operation>1</Operation>
+                    </Platform>
                 </DeployClass>
                 <DeployClass Name="AndroidFileProvider">
                     <Platform Name="Android">
+                        <RemoteDir>res\xml</RemoteDir>
+                        <Operation>1</Operation>
+                    </Platform>
+                    <Platform Name="Android64">
                         <RemoteDir>res\xml</RemoteDir>
                         <Operation>1</Operation>
                     </Platform>
@@ -420,9 +399,23 @@
                         <RemoteDir>library\lib\armeabi</RemoteDir>
                         <Operation>1</Operation>
                     </Platform>
+                    <Platform Name="Android64">
+                        <RemoteDir>library\lib\armeabi</RemoteDir>
+                        <Operation>1</Operation>
+                    </Platform>
+                </DeployClass>
+                <DeployClass Name="AndroidLibnativeArmeabiv7aFile">
+                    <Platform Name="Android64">
+                        <RemoteDir>library\lib\armeabi-v7a</RemoteDir>
+                        <Operation>1</Operation>
+                    </Platform>
                 </DeployClass>
                 <DeployClass Name="AndroidLibnativeMipsFile">
                     <Platform Name="Android">
+                        <RemoteDir>library\lib\mips</RemoteDir>
+                        <Operation>1</Operation>
+                    </Platform>
+                    <Platform Name="Android64">
                         <RemoteDir>library\lib\mips</RemoteDir>
                         <Operation>1</Operation>
                     </Platform>
@@ -432,9 +425,23 @@
                         <RemoteDir>library\lib\armeabi-v7a</RemoteDir>
                         <Operation>1</Operation>
                     </Platform>
+                    <Platform Name="Android64">
+                        <RemoteDir>library\lib\arm64-v8a</RemoteDir>
+                        <Operation>1</Operation>
+                    </Platform>
+                </DeployClass>
+                <DeployClass Name="AndroidServiceOutput_Android32">
+                    <Platform Name="Android64">
+                        <RemoteDir>library\lib\armeabi-v7a</RemoteDir>
+                        <Operation>1</Operation>
+                    </Platform>
                 </DeployClass>
                 <DeployClass Name="AndroidSplashImageDef">
                     <Platform Name="Android">
+                        <RemoteDir>res\drawable</RemoteDir>
+                        <Operation>1</Operation>
+                    </Platform>
+                    <Platform Name="Android64">
                         <RemoteDir>res\drawable</RemoteDir>
                         <Operation>1</Operation>
                     </Platform>
@@ -444,15 +451,37 @@
                         <RemoteDir>res\values</RemoteDir>
                         <Operation>1</Operation>
                     </Platform>
+                    <Platform Name="Android64">
+                        <RemoteDir>res\values</RemoteDir>
+                        <Operation>1</Operation>
+                    </Platform>
                 </DeployClass>
                 <DeployClass Name="AndroidSplashStylesV21">
                     <Platform Name="Android">
                         <RemoteDir>res\values-v21</RemoteDir>
                         <Operation>1</Operation>
                     </Platform>
+                    <Platform Name="Android64">
+                        <RemoteDir>res\values-v21</RemoteDir>
+                        <Operation>1</Operation>
+                    </Platform>
+                </DeployClass>
+                <DeployClass Name="Android_Colors">
+                    <Platform Name="Android">
+                        <RemoteDir>res\values</RemoteDir>
+                        <Operation>1</Operation>
+                    </Platform>
+                    <Platform Name="Android64">
+                        <RemoteDir>res\values</RemoteDir>
+                        <Operation>1</Operation>
+                    </Platform>
                 </DeployClass>
                 <DeployClass Name="Android_DefaultAppIcon">
                     <Platform Name="Android">
+                        <RemoteDir>res\drawable</RemoteDir>
+                        <Operation>1</Operation>
+                    </Platform>
+                    <Platform Name="Android64">
                         <RemoteDir>res\drawable</RemoteDir>
                         <Operation>1</Operation>
                     </Platform>
@@ -462,9 +491,17 @@
                         <RemoteDir>res\drawable-xxhdpi</RemoteDir>
                         <Operation>1</Operation>
                     </Platform>
+                    <Platform Name="Android64">
+                        <RemoteDir>res\drawable-xxhdpi</RemoteDir>
+                        <Operation>1</Operation>
+                    </Platform>
                 </DeployClass>
                 <DeployClass Name="Android_LauncherIcon36">
                     <Platform Name="Android">
+                        <RemoteDir>res\drawable-ldpi</RemoteDir>
+                        <Operation>1</Operation>
+                    </Platform>
+                    <Platform Name="Android64">
                         <RemoteDir>res\drawable-ldpi</RemoteDir>
                         <Operation>1</Operation>
                     </Platform>
@@ -474,9 +511,17 @@
                         <RemoteDir>res\drawable-mdpi</RemoteDir>
                         <Operation>1</Operation>
                     </Platform>
+                    <Platform Name="Android64">
+                        <RemoteDir>res\drawable-mdpi</RemoteDir>
+                        <Operation>1</Operation>
+                    </Platform>
                 </DeployClass>
                 <DeployClass Name="Android_LauncherIcon72">
                     <Platform Name="Android">
+                        <RemoteDir>res\drawable-hdpi</RemoteDir>
+                        <Operation>1</Operation>
+                    </Platform>
+                    <Platform Name="Android64">
                         <RemoteDir>res\drawable-hdpi</RemoteDir>
                         <Operation>1</Operation>
                     </Platform>
@@ -486,9 +531,67 @@
                         <RemoteDir>res\drawable-xhdpi</RemoteDir>
                         <Operation>1</Operation>
                     </Platform>
+                    <Platform Name="Android64">
+                        <RemoteDir>res\drawable-xhdpi</RemoteDir>
+                        <Operation>1</Operation>
+                    </Platform>
+                </DeployClass>
+                <DeployClass Name="Android_NotificationIcon24">
+                    <Platform Name="Android">
+                        <RemoteDir>res\drawable-mdpi</RemoteDir>
+                        <Operation>1</Operation>
+                    </Platform>
+                    <Platform Name="Android64">
+                        <RemoteDir>res\drawable-mdpi</RemoteDir>
+                        <Operation>1</Operation>
+                    </Platform>
+                </DeployClass>
+                <DeployClass Name="Android_NotificationIcon36">
+                    <Platform Name="Android">
+                        <RemoteDir>res\drawable-hdpi</RemoteDir>
+                        <Operation>1</Operation>
+                    </Platform>
+                    <Platform Name="Android64">
+                        <RemoteDir>res\drawable-hdpi</RemoteDir>
+                        <Operation>1</Operation>
+                    </Platform>
+                </DeployClass>
+                <DeployClass Name="Android_NotificationIcon48">
+                    <Platform Name="Android">
+                        <RemoteDir>res\drawable-xhdpi</RemoteDir>
+                        <Operation>1</Operation>
+                    </Platform>
+                    <Platform Name="Android64">
+                        <RemoteDir>res\drawable-xhdpi</RemoteDir>
+                        <Operation>1</Operation>
+                    </Platform>
+                </DeployClass>
+                <DeployClass Name="Android_NotificationIcon72">
+                    <Platform Name="Android">
+                        <RemoteDir>res\drawable-xxhdpi</RemoteDir>
+                        <Operation>1</Operation>
+                    </Platform>
+                    <Platform Name="Android64">
+                        <RemoteDir>res\drawable-xxhdpi</RemoteDir>
+                        <Operation>1</Operation>
+                    </Platform>
+                </DeployClass>
+                <DeployClass Name="Android_NotificationIcon96">
+                    <Platform Name="Android">
+                        <RemoteDir>res\drawable-xxxhdpi</RemoteDir>
+                        <Operation>1</Operation>
+                    </Platform>
+                    <Platform Name="Android64">
+                        <RemoteDir>res\drawable-xxxhdpi</RemoteDir>
+                        <Operation>1</Operation>
+                    </Platform>
                 </DeployClass>
                 <DeployClass Name="Android_SplashImage426">
                     <Platform Name="Android">
+                        <RemoteDir>res\drawable-small</RemoteDir>
+                        <Operation>1</Operation>
+                    </Platform>
+                    <Platform Name="Android64">
                         <RemoteDir>res\drawable-small</RemoteDir>
                         <Operation>1</Operation>
                     </Platform>
@@ -498,9 +601,17 @@
                         <RemoteDir>res\drawable-normal</RemoteDir>
                         <Operation>1</Operation>
                     </Platform>
+                    <Platform Name="Android64">
+                        <RemoteDir>res\drawable-normal</RemoteDir>
+                        <Operation>1</Operation>
+                    </Platform>
                 </DeployClass>
                 <DeployClass Name="Android_SplashImage640">
                     <Platform Name="Android">
+                        <RemoteDir>res\drawable-large</RemoteDir>
+                        <Operation>1</Operation>
+                    </Platform>
+                    <Platform Name="Android64">
                         <RemoteDir>res\drawable-large</RemoteDir>
                         <Operation>1</Operation>
                     </Platform>
@@ -508,6 +619,20 @@
                 <DeployClass Name="Android_SplashImage960">
                     <Platform Name="Android">
                         <RemoteDir>res\drawable-xlarge</RemoteDir>
+                        <Operation>1</Operation>
+                    </Platform>
+                    <Platform Name="Android64">
+                        <RemoteDir>res\drawable-xlarge</RemoteDir>
+                        <Operation>1</Operation>
+                    </Platform>
+                </DeployClass>
+                <DeployClass Name="Android_Strings">
+                    <Platform Name="Android">
+                        <RemoteDir>res\values</RemoteDir>
+                        <Operation>1</Operation>
+                    </Platform>
+                    <Platform Name="Android64">
+                        <RemoteDir>res\values</RemoteDir>
                         <Operation>1</Operation>
                     </Platform>
                 </DeployClass>
@@ -598,6 +723,9 @@
                     <Platform Name="Android">
                         <Operation>0</Operation>
                     </Platform>
+                    <Platform Name="Android64">
+                        <Operation>0</Operation>
+                    </Platform>
                     <Platform Name="iOSDevice32">
                         <Operation>0</Operation>
                     </Platform>
@@ -630,7 +758,51 @@
                         <Operation>1</Operation>
                     </Platform>
                 </DeployClass>
+                <DeployClass Name="iPad_Launch1024x768">
+                    <Platform Name="iOSDevice32">
+                        <Operation>1</Operation>
+                    </Platform>
+                    <Platform Name="iOSDevice64">
+                        <Operation>1</Operation>
+                    </Platform>
+                    <Platform Name="iOSSimulator">
+                        <Operation>1</Operation>
+                    </Platform>
+                </DeployClass>
                 <DeployClass Name="iPad_Launch1536">
+                    <Platform Name="iOSDevice32">
+                        <Operation>1</Operation>
+                    </Platform>
+                    <Platform Name="iOSDevice64">
+                        <Operation>1</Operation>
+                    </Platform>
+                    <Platform Name="iOSSimulator">
+                        <Operation>1</Operation>
+                    </Platform>
+                </DeployClass>
+                <DeployClass Name="iPad_Launch1536x2048">
+                    <Platform Name="iOSDevice32">
+                        <Operation>1</Operation>
+                    </Platform>
+                    <Platform Name="iOSDevice64">
+                        <Operation>1</Operation>
+                    </Platform>
+                    <Platform Name="iOSSimulator">
+                        <Operation>1</Operation>
+                    </Platform>
+                </DeployClass>
+                <DeployClass Name="iPad_Launch1668">
+                    <Platform Name="iOSDevice32">
+                        <Operation>1</Operation>
+                    </Platform>
+                    <Platform Name="iOSDevice64">
+                        <Operation>1</Operation>
+                    </Platform>
+                    <Platform Name="iOSSimulator">
+                        <Operation>1</Operation>
+                    </Platform>
+                </DeployClass>
+                <DeployClass Name="iPad_Launch1668x2388">
                     <Platform Name="iOSDevice32">
                         <Operation>1</Operation>
                     </Platform>
@@ -652,7 +824,172 @@
                         <Operation>1</Operation>
                     </Platform>
                 </DeployClass>
+                <DeployClass Name="iPad_Launch2048x1536">
+                    <Platform Name="iOSDevice32">
+                        <Operation>1</Operation>
+                    </Platform>
+                    <Platform Name="iOSDevice64">
+                        <Operation>1</Operation>
+                    </Platform>
+                    <Platform Name="iOSSimulator">
+                        <Operation>1</Operation>
+                    </Platform>
+                </DeployClass>
+                <DeployClass Name="iPad_Launch2048x2732">
+                    <Platform Name="iOSDevice32">
+                        <Operation>1</Operation>
+                    </Platform>
+                    <Platform Name="iOSDevice64">
+                        <Operation>1</Operation>
+                    </Platform>
+                    <Platform Name="iOSSimulator">
+                        <Operation>1</Operation>
+                    </Platform>
+                </DeployClass>
+                <DeployClass Name="iPad_Launch2224">
+                    <Platform Name="iOSDevice32">
+                        <Operation>1</Operation>
+                    </Platform>
+                    <Platform Name="iOSDevice64">
+                        <Operation>1</Operation>
+                    </Platform>
+                    <Platform Name="iOSSimulator">
+                        <Operation>1</Operation>
+                    </Platform>
+                </DeployClass>
+                <DeployClass Name="iPad_Launch2388x1668">
+                    <Platform Name="iOSDevice32">
+                        <Operation>1</Operation>
+                    </Platform>
+                    <Platform Name="iOSDevice64">
+                        <Operation>1</Operation>
+                    </Platform>
+                    <Platform Name="iOSSimulator">
+                        <Operation>1</Operation>
+                    </Platform>
+                </DeployClass>
+                <DeployClass Name="iPad_Launch2732x2048">
+                    <Platform Name="iOSDevice32">
+                        <Operation>1</Operation>
+                    </Platform>
+                    <Platform Name="iOSDevice64">
+                        <Operation>1</Operation>
+                    </Platform>
+                    <Platform Name="iOSSimulator">
+                        <Operation>1</Operation>
+                    </Platform>
+                </DeployClass>
                 <DeployClass Name="iPad_Launch768">
+                    <Platform Name="iOSDevice32">
+                        <Operation>1</Operation>
+                    </Platform>
+                    <Platform Name="iOSDevice64">
+                        <Operation>1</Operation>
+                    </Platform>
+                    <Platform Name="iOSSimulator">
+                        <Operation>1</Operation>
+                    </Platform>
+                </DeployClass>
+                <DeployClass Name="iPad_Launch768x1024">
+                    <Platform Name="iOSDevice32">
+                        <Operation>1</Operation>
+                    </Platform>
+                    <Platform Name="iOSDevice64">
+                        <Operation>1</Operation>
+                    </Platform>
+                    <Platform Name="iOSSimulator">
+                        <Operation>1</Operation>
+                    </Platform>
+                </DeployClass>
+                <DeployClass Name="iPhone_Launch1125">
+                    <Platform Name="iOSDevice32">
+                        <Operation>1</Operation>
+                    </Platform>
+                    <Platform Name="iOSDevice64">
+                        <Operation>1</Operation>
+                    </Platform>
+                    <Platform Name="iOSSimulator">
+                        <Operation>1</Operation>
+                    </Platform>
+                </DeployClass>
+                <DeployClass Name="iPhone_Launch1136x640">
+                    <Platform Name="iOSDevice32">
+                        <Operation>1</Operation>
+                    </Platform>
+                    <Platform Name="iOSDevice64">
+                        <Operation>1</Operation>
+                    </Platform>
+                    <Platform Name="iOSSimulator">
+                        <Operation>1</Operation>
+                    </Platform>
+                </DeployClass>
+                <DeployClass Name="iPhone_Launch1242">
+                    <Platform Name="iOSDevice32">
+                        <Operation>1</Operation>
+                    </Platform>
+                    <Platform Name="iOSDevice64">
+                        <Operation>1</Operation>
+                    </Platform>
+                    <Platform Name="iOSSimulator">
+                        <Operation>1</Operation>
+                    </Platform>
+                </DeployClass>
+                <DeployClass Name="iPhone_Launch1242x2688">
+                    <Platform Name="iOSDevice32">
+                        <Operation>1</Operation>
+                    </Platform>
+                    <Platform Name="iOSDevice64">
+                        <Operation>1</Operation>
+                    </Platform>
+                    <Platform Name="iOSSimulator">
+                        <Operation>1</Operation>
+                    </Platform>
+                </DeployClass>
+                <DeployClass Name="iPhone_Launch1334">
+                    <Platform Name="iOSDevice32">
+                        <Operation>1</Operation>
+                    </Platform>
+                    <Platform Name="iOSDevice64">
+                        <Operation>1</Operation>
+                    </Platform>
+                    <Platform Name="iOSSimulator">
+                        <Operation>1</Operation>
+                    </Platform>
+                </DeployClass>
+                <DeployClass Name="iPhone_Launch1792">
+                    <Platform Name="iOSDevice32">
+                        <Operation>1</Operation>
+                    </Platform>
+                    <Platform Name="iOSDevice64">
+                        <Operation>1</Operation>
+                    </Platform>
+                    <Platform Name="iOSSimulator">
+                        <Operation>1</Operation>
+                    </Platform>
+                </DeployClass>
+                <DeployClass Name="iPhone_Launch2208">
+                    <Platform Name="iOSDevice32">
+                        <Operation>1</Operation>
+                    </Platform>
+                    <Platform Name="iOSDevice64">
+                        <Operation>1</Operation>
+                    </Platform>
+                    <Platform Name="iOSSimulator">
+                        <Operation>1</Operation>
+                    </Platform>
+                </DeployClass>
+                <DeployClass Name="iPhone_Launch2436">
+                    <Platform Name="iOSDevice32">
+                        <Operation>1</Operation>
+                    </Platform>
+                    <Platform Name="iOSDevice64">
+                        <Operation>1</Operation>
+                    </Platform>
+                    <Platform Name="iOSSimulator">
+                        <Operation>1</Operation>
+                    </Platform>
+                </DeployClass>
+                <DeployClass Name="iPhone_Launch2688x1242">
                     <Platform Name="iOSDevice32">
                         <Operation>1</Operation>
                     </Platform>
@@ -696,8 +1033,33 @@
                         <Operation>1</Operation>
                     </Platform>
                 </DeployClass>
+                <DeployClass Name="iPhone_Launch750">
+                    <Platform Name="iOSDevice32">
+                        <Operation>1</Operation>
+                    </Platform>
+                    <Platform Name="iOSDevice64">
+                        <Operation>1</Operation>
+                    </Platform>
+                    <Platform Name="iOSSimulator">
+                        <Operation>1</Operation>
+                    </Platform>
+                </DeployClass>
+                <DeployClass Name="iPhone_Launch828">
+                    <Platform Name="iOSDevice32">
+                        <Operation>1</Operation>
+                    </Platform>
+                    <Platform Name="iOSDevice64">
+                        <Operation>1</Operation>
+                    </Platform>
+                    <Platform Name="iOSSimulator">
+                        <Operation>1</Operation>
+                    </Platform>
+                </DeployClass>
                 <DeployClass Name="ProjectAndroidManifest">
                     <Platform Name="Android">
+                        <Operation>1</Operation>
+                    </Platform>
+                    <Platform Name="Android64">
                         <Operation>1</Operation>
                     </Platform>
                 </DeployClass>
@@ -792,6 +1154,10 @@
                         <RemoteDir>library\lib\armeabi-v7a</RemoteDir>
                         <Operation>1</Operation>
                     </Platform>
+                    <Platform Name="Android64">
+                        <RemoteDir>library\lib\arm64-v8a</RemoteDir>
+                        <Operation>1</Operation>
+                    </Platform>
                     <Platform Name="iOSDevice32">
                         <Operation>1</Operation>
                     </Platform>
@@ -814,6 +1180,12 @@
                     </Platform>
                     <Platform Name="Win32">
                         <Operation>0</Operation>
+                    </Platform>
+                </DeployClass>
+                <DeployClass Name="ProjectOutput_Android32">
+                    <Platform Name="Android64">
+                        <RemoteDir>library\lib\armeabi-v7a</RemoteDir>
+                        <Operation>1</Operation>
                     </Platform>
                 </DeployClass>
                 <DeployClass Name="ProjectUWPManifest">
@@ -853,6 +1225,7 @@
                 <ProjectRoot Platform="Android" Name="$(PROJECTNAME)"/>
                 <ProjectRoot Platform="OSX64" Name="$(PROJECTNAME).app"/>
                 <ProjectRoot Platform="iOSSimulator" Name="$(PROJECTNAME).app"/>
+                <ProjectRoot Platform="Android64" Name="$(PROJECTNAME)"/>
             </Deployment>
         </BorlandProject>
         <ProjectFileVersion>12</ProjectFileVersion>

@@ -1,9 +1,13 @@
 program GMIOPSvc;
 
 {$R 'GMIOPSvc.res' 'GMIOPSvc.rc'}
+{$R 'EsLogging.res' 'EsLogging.RC'}
 
 uses
+  FastMM4,
+  esLogging,
   Vcl.SvcMgr,
+  IniFiles,
   {$ifdef Application}
   Forms,
   {$endif }
@@ -23,7 +27,6 @@ uses
   GMSqlQuery in '..\SharedSrc\GMSqlQuery.pas',
   UsefulQueries in '..\SharedSrc\UsefulQueries.pas',
   ProgramLogFile in '..\SharedSrc\ProgramLogFile.pas',
-  SvcLogFile in 'SvcLogFile.pas',
   GMGlobals in '..\SharedSrc\GMGlobals.pas',
   AppConfigFile in '..\SharedSrc\AppConfigFile.pas',
   StdRequest in '..\SharedSrc\StdRequest.pas',
@@ -75,6 +78,26 @@ uses
   Devices.ADCPChannelMaster in 'Devices.ADCPChannelMaster.pas',
   Devices.Geomer in 'Devices.Geomer.pas';
 
+procedure ConfigureLogging();
+  var
+    f: TIniFile;
+  begin
+    if GMMainConfigFile.CheckMainINIFile() <> iftINI then
+      Exit;
+
+    try
+      f := TIniFile.Create(GMMainConfigFile.GetMainINIFileName());
+      try
+        TesLogging.TCPPort := f.ReadInteger('COMMON', 'PORT', 0);
+      finally
+        f.Free();
+      end;
+    except
+    end;
+
+    TesLogging.ConfigureLogging();
+  end;
+
 begin
   // Windows 2003 Server requires StartServiceCtrlDispatcher to be
   // called before CoRegisterClassObject, which can be called indirectly
@@ -90,6 +113,7 @@ begin
   //
   // Application.DelayInitialize := True;
   //
+  ConfigureLogging();
 {$ifdef Application}
   Forms.Application.Initialize();
   Forms.Application.CreateForm(TGMIOPService, GMIOPService);

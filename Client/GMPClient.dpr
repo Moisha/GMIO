@@ -4,9 +4,12 @@
 
 program GMClient;
 
+{$R 'EsLogging.res' 'EsLogging.RC'}
+
 uses
   FastMM4,
   Forms,
+  esLogging,
   GMClMain in 'GMClMain.pas' {GMClMainFrm},
   GMGlobals in '..\SharedSrc\GMGlobals.pas',
   Frame.ClientObject in 'Frame.ClientObject.pas' {FrmObject: TFrame},
@@ -93,6 +96,7 @@ uses
 begin
   Application.Initialize;
   Application.Title := 'Клиент Инженерные сети онлайн';
+  TEsLogging.ConfigureLogging();
   Application.CreateForm(TGMClMainFrm, GMClMainFrm);
   Application.CreateForm(TFrmXL, FrmXL);
   Application.CreateForm(TAlarmRepDlg, AlarmRepDlg);

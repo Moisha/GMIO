@@ -74,7 +74,7 @@ end;
 
 procedure InitPathName();
 begin
-  FCommonAppDataPath := GetSpecialFolderPath(CSIDL_COMMON_APPDATA) + '\SiriusATM';
+  FCommonAppDataPath := GetSpecialFolderPath(CSIDL_COMMON_APPDATA) + '\SiriusATM\EN Online';
   if not ForceDirectories(FCommonAppDataPath) then
     FCommonAppDataPath := ''
   else begin

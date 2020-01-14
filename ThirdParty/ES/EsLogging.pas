@@ -74,6 +74,8 @@ uses
       DefaultConfigResourceName: string;
     class var
       AppLogConfigurationKeyName: string;
+    class var
+      TCPPort: integer;
   end;
 
   {{LogRollingFileAppender c поддержкой Enviromnent variable в имени файла}
@@ -86,6 +88,13 @@ uses
   TLogConsoleAppender = class(TLogCustomAppender)
   protected
     procedure DoAppend(const Message: string); override;
+  end;
+
+  TesLoggingTObjectLogHelper = class helper for TObject
+  private
+
+    function GetDefaultLogger: TesLogger;  public
+    property DefaultLogger: TesLogger read GetDefaultLogger;
   end;
 
 type
@@ -267,6 +276,8 @@ begin
   end
   else
     expandedName := Name;
+
+  expandedName := StringReplace(expandedName, '%TCPPort%', IntToStr(TEsLogging.TcpPort), [rfReplaceAll]);
 
   try
     CallInheritedSetLogFile(expandedName);
@@ -624,6 +635,13 @@ procedure TEsLogger.LogException(const ex: Exception; const AFormat: string; con
 begin
   if IsErrorEnabled then
     LogException(ex, Format(AFormat, AArgs));
+end;
+
+{ TesLoggingTObjectLogHelper }
+
+function TesLoggingTObjectLogHelper.GetDefaultLogger: TesLogger;
+begin
+  Result := TEsLogging.GetLogger(ClassType);
 end;
 
 initialization

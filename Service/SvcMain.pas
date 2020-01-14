@@ -106,7 +106,7 @@ implementation
 {$R *.DFM}
 
 uses WinSock, ProgramLogFile, AppConfigFile, IniFiles, ActiveX, Devices.Tecon, Threads.K105, Threads.GMSocket,
-     StrUtils, UsefulQueries, SvcLogFile, GMBlockValues, Devices.Tecon.Common;
+     StrUtils, UsefulQueries, GMBlockValues, Devices.Tecon.Common;
 
 procedure ServiceController(CtrlCode: DWord); stdcall;
 begin
@@ -222,11 +222,6 @@ begin
   begin
     f := TIniFile.Create(GMMainConfigFile.GetMainINIFileName());
     try
-      ProgramLog.SetNeedProgramLog(f.ReadInteger('LOG', 'PROGRAM', 0) = 1);
-      ProgramLog.SetNeedErrorLog(f.ReadInteger('LOG', 'ERROR', 1) = 1);
-      ProgramLog.SetNeedComLog(f.ReadInteger('LOG', 'COM', 0) = 1);
-      ProgramLog.SetLogPath(f.ReadString('LOG', 'PATH', ''));
-
       ssGeomer.Port := f.ReadInteger('COMMON', 'PORT', 0);
       udpSrv.DefaultPort := f.ReadInteger('COMMON', 'UDP_PORT', 0);
       COMDevicesRequestInterval := f.ReadInteger('COMMON', 'COM_INTERVAL', 60);
@@ -553,8 +548,6 @@ begin
   bBadName := false;
   FResetSocketCounter := 0;
 
-  ProgramLogFileClass := TServiceProgramLogFile;
-
   SvcName := CmdLineSwitchValue('name');
   if SvcName <> '' then
   try
@@ -576,8 +569,6 @@ begin
   ThreadsContainer := nil;
 
   glvBuffer := TGeomerLastValuesBuffer.Create();
-
-  SetMainConfigFileClass(TGMServiceConfigFile);
 
   lstSockets := TSocketList.Create(ssGeomer.Socket);
   FUDPBindingsAndThreads := TUDPBindingsAndThreads.Create(udpSrv);
@@ -919,4 +910,6 @@ begin
   end;
 end;
 
+initialization
+  SetMainConfigFileClass(TGMServiceConfigFile);
 end.

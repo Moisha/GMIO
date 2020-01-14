@@ -5,35 +5,16 @@ unit ProgramLogFile;
 
 interface
 
-uses Windows, Classes, GMGlobals, SysUtils;
+uses Windows, Classes, GMGlobals, SysUtils, EsLogging;
 
 type
-  TLogFile = class
-  private
-    FTemplate: string;
-    FLogFileNumber: int;
-    FLogFileWriteCount: int;
-    procedure CheckLogSize;
-    procedure UpdateWriteCount;
-    procedure AppendString(const s: string);
-  protected
-    function Prefix: string; virtual; abstract;
-    function FileName(): string;
-    procedure UpdateTemplate(const path: string);
-  public
-    procedure Write(const Msg: string); virtual;
-    constructor Create(const LogPath: string = '');
-    destructor Destroy; override;
-  end;
-
   TProgramLogFile = class
   private
-    FProgramLog, FErrorLog, FExchangeLog: TLogFile;
+    function NeedComLog: bool;
+    function NeedExchangeBuf: bool;
+    procedure PostLogMessage;
   protected
-    function NeedExchangeBuf: bool; virtual;
-    function NeedComLog: bool; virtual;
-    function NeedProgramLog(): bool; virtual;
-    function NeedErrorLog(): bool; virtual;
+    FLogger: TesLogger;
   public
     procedure AddMessage(const s: string);
     procedure AddError(const s: string);
@@ -44,18 +25,9 @@ type
 
     constructor Create();
     destructor Destroy; override;
-
-    procedure SetLogPath(const Value: string);
-    procedure SetNeedComLog(Value: bool); virtual;
-    procedure SetNeedProgramLog(Value: bool); virtual;
-    procedure SetNeedErrorLog(Value: bool); virtual;
   end;
 
-  TProgramLogFileClass = class of TProgramLogFile;
-
   function ProgramLog(): TProgramLogFile;
-
-var ProgramLogFileClass: TProgramLogFileClass = TProgramLogFile;
 
 implementation
 
@@ -81,7 +53,7 @@ begin
   LogSynch.BeginWrite();
   try
     if applicationProgramLog = nil then
-      applicationProgramLog := ProgramLogFileClass.Create();
+      applicationProgramLog := TProgramLogFile.Create();
 
     Result := applicationProgramLog;
   finally
@@ -89,56 +61,20 @@ begin
   end;
 end;
 
-type
-  TFileForErrorLog = class(TLogFile)
-  protected
-    function Prefix(): string; override;
-  end;
+{ TProgramLogFile }
 
-  TFileForProgramLog = class(TLogFile)
-  protected
-    function Prefix(): string; override;
-  end;
-
-  TFileForExchangeLog = class(TLogFile)
-  protected
-    function Prefix(): string; override;
-    procedure Write(const Msg: string); override;
-  end;
-
-function TFileForErrorLog.Prefix(): string;
+procedure TProgramLogFile.PostLogMessage();
 begin
-  Result := '_error';
-end;
-
-function TFileForProgramLog.Prefix(): string;
-begin
-  Result := '_trace';
-end;
-
-function TFileForExchangeLog.Prefix: string;
-begin
-  Result := '_com';
-end;
-
-procedure TFileForExchangeLog.Write(const Msg: string);
-begin
-  inherited Write(Msg);
-
 {$ifdef MESSAGE_COM_LOG}
   if (Application <> nil) and (Application.MainForm <> nil) then
     GMPostMessage(WM_UPDATE_COM_LOG, WPARAM(TStringClass.Create(Msg)), 0);
 {$endif}
 end;
 
-{ TProgramLogFile }
-
 procedure TProgramLogFile.AddError(const s: string);
 begin
-  AddMessage('!!!! ' + s); // в логе программы пометим ошибку
-
-  if NeedErrorLog() then // в логе ошибок - незачем
-    FErrorLog.Write(s);
+  FLogger.Error(s);
+  PostLogMessage();
 end;
 
 procedure TProgramLogFile.AddExchangeBuf(const comDevice: string; direction: int; buf: array of Byte; bufLen: int);
@@ -178,195 +114,35 @@ end;
 
 procedure TProgramLogFile.AddExchangeBuf(const s: string);
 begin
-  if NeedComLog() then
-    FExchangeLog.Write(s);
-
-  if NeedProgramLog() then
-    FProgramLog.Write(s);
+  FLogger.Debug(s);
+  PostLogMessage();
 end;
 
 procedure TProgramLogFile.AddMessage(const s: string);
 begin
-  if NeedProgramLog() then
-    FProgramLog.Write(s);
-end;
-
-function TProgramLogFile.NeedErrorLog: bool;
-begin
-  Result := true;
+  FLogger.Info(s);
+  PostLogMessage();
 end;
 
 function TProgramLogFile.NeedExchangeBuf: bool;
 begin
-  Result := NeedComLog() or NeedProgramLog();
-end;
-
-function TProgramLogFile.NeedProgramLog: bool;
-begin
-  Result := FindCmdLineSwitch('log');
-end;
-
-procedure TProgramLogFile.SetLogPath(const Value: string);
-var path: string;
-begin
-  if Value.Trim() = '' then
-    path := ExtractFileDir(Paramstr(0))
-  else
-    path := Value;
-
-  if not DirectoryExists(path) and not ForceDirectories(path) then Exit;
-
-  FProgramLog.UpdateTemplate(path);
-  FErrorLog.UpdateTemplate(path);
-  FExchangeLog.UpdateTemplate(path);
-end;
-
-procedure TProgramLogFile.SetNeedComLog(Value: bool);
-begin
-
-end;
-
-procedure TProgramLogFile.SetNeedErrorLog(Value: bool);
-begin
-
-end;
-
-procedure TProgramLogFile.SetNeedProgramLog(Value: bool);
-begin
-
+  Result := NeedComLog();
 end;
 
 function TProgramLogFile.NeedComLog: bool;
 begin
-  Result := FindCmdLineSwitch('log');
+  Result := true;
 end;
 
 constructor TProgramLogFile.Create;
 begin
-  FProgramLog := TFileForProgramLog.Create();
-  FErrorLog := TFileForErrorLog.Create();
-  FExchangeLog := TFileForExchangeLog.Create();
+  FLogger := TesLogging.GetLogger('Default');
 end;
 
 destructor TProgramLogFile.Destroy;
 begin
-  FProgramLog.Free();
-  FErrorLog.Free();
-  FExchangeLog.Free();
 
   inherited;
-end;
-
-{ TLogFile }
-
-function FileSize(fileName : wideString) : Int64;
-var sr : TSearchRec;
-begin
-  if FindFirst(fileName, faAnyFile, sr ) = 0 then
-     result := Int64(sr.FindData.nFileSizeHigh) shl Int64(32) + Int64(sr.FindData.nFileSizeLow)
-  else
-     result := 0;
-
-  FindClose(sr) ;
-end;
-
-procedure TLogFile.CheckLogSize();
-var
-  i: int;
-  updated: bool;
-begin
-  updated := false;
-  while FileExists(FileName()) and (FileSize(FileName()) >= 1e7) do // даем 10 ћб на один трассировочный файл
-  begin
-    inc(FLogFileNumber);
-    updated := true;
-  end;
-
-  if updated then
-  begin
-    for i := 1 to FLogFileNumber - 10 do
-      Windows.DeleteFile(PChar(Format(FTemplate, [i])));
-
-    for i := FLogFileNumber + 1 to FLogFileNumber + 10 do
-      Windows.DeleteFile(PChar(Format(FTemplate, [i])));
-  end;
-end;
-
-constructor TLogFile.Create(const LogPath: string = '');
-var path: string;
-begin
-  inherited Create();
-
-  FLogFileNumber := 1;
-  FLogFileWriteCount := 0;
-
-  path := LogPath;
-  if path = '' then
-    path := ExtractFileDir(ParamStr(0));
-
-  UpdateTemplate(path);
-  CheckLogSize();
-end;
-
-destructor TLogFile.Destroy;
-begin
-
-  inherited;
-end;
-
-function TLogFile.FileName: string;
-begin
-  Result := Format(FTemplate, [FLogFileNumber]);
-end;
-
-procedure TLogFile.UpdateTemplate(const path: string);
-var fn, ext: string;
-begin
-  fn := ExtractFileName(ParamStr(0));
-  ext := ExtractFileExt(fn);
-  if ext <> '' then
-    Delete(fn, Length(fn) - Length(ext) + 1, Length(ext));
-
-  FTemplate := IncludeTrailingPathDelimiter(path) + fn + prefix + '%d' + '.log';
-end;
-
-procedure TLogFile.UpdateWriteCount();
-begin
-  inc(FLogFileWriteCount);
-
-  if FLogFileWriteCount >= 100 then
-  begin
-    CheckLogSize();
-    FLogFileWriteCount := 0;
-  end;
-end;
-
-procedure TLogFile.AppendString(const s: string);
-var f: TextFile;
-begin
-  LogSynch.BeginWrite();
-  try
-{$I-}
-    AssignFile(f, FileName());
-    if not FileExists(FileName()) then
-      Rewrite(f)
-    else
-      Append(f);
-
-    Writeln(f, s);
-    CloseFile(f);
-{$I+}
-  except end;
-  LogSynch.EndWrite();
-end;
-
-procedure TLogFile.Write(const Msg: string);
-var s: string;
-begin
-  s := FormatDateTime('yyyy-mm-dd hh:nn:ss.zzz', Now()) + #9 + IntToStr(GetCurrentThreadId()) + #9 + Msg;
-  AppendString(s);
-
-  UpdateWriteCount();
 end;
 
 initialization
