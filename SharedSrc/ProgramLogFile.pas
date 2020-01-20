@@ -67,7 +67,7 @@ procedure TProgramLogFile.PostLogMessage(const Msg: string);
 begin
 {$ifdef MESSAGE_COM_LOG}
   if (Application <> nil) and (Application.MainForm <> nil) then
-    GMPostMessage(WM_UPDATE_COM_LOG, WPARAM(TStringClass.Create(Msg)), 0, DefaultLogger);
+    GMPostMessage(WM_UPDATE_COM_LOG, WPARAM(TStringClass.Create(Msg)), 0, FLogger);
 {$endif}
 end;
 

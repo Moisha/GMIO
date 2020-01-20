@@ -103,7 +103,7 @@ implementation
 uses Devices.Owen, Math, StrUtils, DateUtils, Devices.Tecon, Devices.Vzlet,
      Devices.Vacon, ActiveX, Devices.Logica.SPT961, ProgramLogFile, UsefulQueries, Devices.Termotronic, Devices.Mercury,
      Devices.ModbusBase, Devices.Altistart22, Devices.Geostream, Devices.MainSrv, Devices.Logica.SPT941,
-     Devices.Logica.SPT943, System.Variants, System.TypInfo;
+     Devices.Logica.SPT943, System.Variants, System.TypInfo, EsLogging;
 
 function IfThen(condition: bool; valTrue, valFalse: TRecognizeChannelResult): TRecognizeChannelResult;
 begin
@@ -1733,7 +1733,7 @@ var i, id_prm: int;
 begin
   for i := 0 to High(Values) do
   begin
-    GMPostMessage(WM_DEVICE_ONLINE, ChannelIds.ID_Obj, ChannelIds.ID_Device);
+    GMPostMessage(WM_DEVICE_ONLINE, ChannelIds.ID_Obj, ChannelIds.ID_Device, DefaultLogger);
 
     if (Values[i].Chn <> nil) and (int(Values[i].Chn) <> ChannelIds.ID_Prm) then
     begin

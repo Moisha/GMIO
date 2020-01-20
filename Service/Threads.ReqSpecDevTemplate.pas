@@ -74,7 +74,7 @@ type
 
 implementation
 
-uses StrUtils, DB, GMBlockValues, ProgramLogFile, Math, Devices.Logica.SPT961, UsefulQueries;
+uses StrUtils, DB, GMBlockValues, ProgramLogFile, Math, Devices.Logica.SPT961, UsefulQueries, EsLogging;
 
 constructor TRequestSpecDevices.Create(ObjType: int; ID_Obj: int = 0);
 begin
@@ -119,8 +119,8 @@ begin
   gbv.ReqDetails := ReqDetails;
   gbv.SetBufRec(bufRec, cnt);
 
-  GMPostMessage(WM_GEOMER_BLOCK, WPARAM(gbv), 0);
-  ProgramLog.AddMessage('WM_GEOMER_BLOCK');
+  GMPostMessage(WM_GEOMER_BLOCK, WPARAM(gbv), 0, DefaultLogger);
+  DefaultLogger.Debug('WM_GEOMER_BLOCK');
 end;
 
 procedure TRequestSpecDevices.DoOneRequest(ri: TSpecDevReqListItem);

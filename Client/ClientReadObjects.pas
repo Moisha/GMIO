@@ -10,9 +10,9 @@ uses Windows, Classes, SysUtils, GMGlobals, GMConst, Threads.Base, Threads.GMCli
 
 type TClientReadObjectsThread = class (TGMThread)
   private
-    function ExecUniversalOrder(nRetry: int = 3): IXMLGMIOResponceType;
+    function ExecReadStructureOrder(nRetry: int = 3): IXMLGMIOResponceType;
     function ReadObjectsFromSrvUniversal: int;
-    function TryExecUniversalOrder(): IXMLGMIOResponceType;
+    function TryExecReadStructureOrder(): IXMLGMIOResponceType;
     procedure ReadPT(resp: IXMLGMIOResponceType);
     procedure ReadObjects(resp: IXMLGMIOResponceType);
     procedure ReadDevices(devices: IXMLDevicesType; obj: TGMObject);
@@ -26,20 +26,20 @@ type TClientReadObjectsThread = class (TGMThread)
 
 implementation
 
-uses ActiveX;
+uses ActiveX, EsLogging;
 
-function TClientReadObjectsThread.ExecUniversalOrder(nRetry: int = 3): IXMLGMIOResponceType;
+function TClientReadObjectsThread.ExecReadStructureOrder(nRetry: int = 3): IXMLGMIOResponceType;
 var i: int;
 begin
   Result := nil;
   for i := 0 to nRetry do
   begin
-    Result := TryExecUniversalOrder();
+    Result := TryExecReadStructureOrder();
     if (Result <> nil) or Terminated then Exit;
   end;
 end;
 
-function TClientReadObjectsThread.TryExecUniversalOrder(): IXMLGMIOResponceType;
+function TClientReadObjectsThread.TryExecReadStructureOrder(): IXMLGMIOResponceType;
 var order: TDataOrder;
 begin
   Result := nil;
@@ -207,14 +207,22 @@ function TClientReadObjectsThread.ReadObjectsFromSrvUniversal: int;
 var
   resp: IXMLGMIOResponceType;
 begin
-  resp := ExecUniversalOrder();
+  DefaultLogger.Info('ReadObjectsFromSrv - req');
+  resp := ExecReadStructureOrder();
   try
     if resp = nil then
+    begin
+      DefaultLogger.Error('ReadObjectsFromSrv - connection failed');
       Exit(RESULT_CLIENT_CREATE_OBJECTS_CONNECTION_FAILED);
+    end;
 
     if Resp.Auth.OK = 0 then
+    begin
+      DefaultLogger.Error('ReadObjectsFromSrv - auth failed');
       Exit(RESULT_CLIENT_CREATE_OBJECTS_LOGIN_FAILED);
+    end;
 
+    DefaultLogger.Info('ReadObjectsFromSrv - req done');
     Result := RESULT_CLIENT_CREATE_OBJECTS_OK;
 
     InitDB();
@@ -222,7 +230,7 @@ begin
     ReadObjects(resp);
     ReadNodes(resp);
   finally
-    resp := nil;
+    DefaultLogger.Info('ReadObjectsFromSrv done');
   end;
 end;
 

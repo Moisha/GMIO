@@ -106,7 +106,7 @@ implementation
 {$R *.DFM}
 
 uses WinSock, ProgramLogFile, AppConfigFile, IniFiles, ActiveX, Devices.Tecon, Threads.K105, Threads.GMSocket,
-     StrUtils, UsefulQueries, GMBlockValues, Devices.Tecon.Common;
+     StrUtils, UsefulQueries, GMBlockValues, Devices.Tecon.Common, EsLogging;
 
 procedure ServiceController(CtrlCode: DWord); stdcall;
 begin
@@ -749,7 +749,7 @@ begin
     if id_obj > 0 then
     begin
       FUDPBindingsAndThreads.ClearByIdObj(id_obj, TRequestK105Devices);
-      GMPostMessage(WM_DEVICE_ONLINE, id_obj, 0);
+      GMPostMessage(WM_DEVICE_ONLINE, id_obj, 0, DefaultLogger);
 
       with TUDPBindingAndThread(FUDPBindingsAndThreads.Add()) do
       begin
@@ -760,7 +760,7 @@ begin
   end
   else
   begin
-    GMPostMessage(WM_DEVICE_ONLINE, thread.ID_Obj, 0);
+    GMPostMessage(WM_DEVICE_ONLINE, thread.ID_Obj, 0, DefaultLogger);
   end;
 end;
 
@@ -771,7 +771,7 @@ begin
   if (thread <> nil) and (thread is TRequestK105Devices) then
   begin
     TRequestK105Devices(thread).AddReplyBlock(bufs.BufRec, bufs.NumberOfBytesRead);
-    GMPostMessage(WM_DEVICE_ONLINE, thread.ID_Obj, 0);
+    GMPostMessage(WM_DEVICE_ONLINE, thread.ID_Obj, 0, DefaultLogger);
   end;
 end;
 

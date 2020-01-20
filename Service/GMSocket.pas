@@ -132,7 +132,7 @@ implementation
 uses Devices.UBZ, DB, Devices.Vacon, HTTPApp, XMLDoc, GMBlockValues,
   Devices.Ancom, Threads.AncomGPRS, ProgramLogFile, ClientResponce, UsefulQueries, Devices.TR101, Threads.Base,
   Threads.ReqSpecDevTemplate, DateUtils, Connection.TCP, Connection.Base, RequestThreadsContainer, Winapi.ActiveX,
-  System.NetEncoding;
+  System.NetEncoding, EsLogging;
 
 { TGeomerSocket }
 
@@ -494,7 +494,7 @@ procedure TGeomerSocket.AnalyzeClientRequest(var bufs: TTwoBuffers);
     end;
 
     if (ut > 0) and (r <> nil) then
-      GMPostMessage(WM_DEVICE_ONLINE, r.ID_Obj, r.ID_Device);
+      GMPostMessage(WM_DEVICE_ONLINE, r.ID_Obj, r.ID_Device, DefaultLogger);
   end;
 
   procedure RequestSQL();
@@ -883,7 +883,7 @@ begin
     if ID_Obj > 0 then
     begin
       FAncomThread := TRequestAncomGPRS.Create(ID_Obj);
-      GMPostMessage(WM_DEVICE_ONLINE, ID_Obj, 0);
+      GMPostMessage(WM_DEVICE_ONLINE, ID_Obj, 0, DefaultLogger);
     end;
   end;
 
@@ -919,7 +919,7 @@ var
   procedure ProcessGBV();
   begin
     N_Car := gbv.ReqDetails.N_Car;
-    GMPostMessage(WM_GEOMER_BLOCK, WPARAM(gbv), 0);
+    GMPostMessage(WM_GEOMER_BLOCK, WPARAM(gbv), 0, DefaultLogger);
     FSocketObjectType := OBJ_TYPE_GM;
     ProgramLog.AddExchangeBuf('Geomer_' + IntToStr(N_Car), COM_LOG_IN, buf, Result);
   end;

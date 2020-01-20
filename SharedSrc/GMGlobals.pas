@@ -983,11 +983,11 @@ begin
  end;
 end;
 
-function LookForTService(c: TComponent): TComponent;
+function LookForTService(c: TComponent; logger: TEsLogger): TComponent;
 var i: int;
 begin
   Result := nil;
-  ProgramLog.AddMessage('LookForTService' + c.ClassName);
+  logger.Debug('LookForTService' + c.ClassName);
   if c is TService then
   begin
     Result := c;
@@ -996,7 +996,7 @@ begin
 
   for i := 0 to c.ComponentCount - 1 do
   begin
-    Result := LookForTService(c.Components[i]);
+    Result := LookForTService(c.Components[i], logger);
     if Result <> nil then Exit;
   end;
 end;
@@ -1010,15 +1010,15 @@ begin
     Exit;
   end;
 
-  logger.Info('GMPostMessage');
+  logger.Debug('GMPostMessage');
   app := {$ifdef Application}Forms{$else}SvcMgr{$endif}.Application;
   if app <> nil then
   begin
-    c := LookForTService(app);
+    c := LookForTService(app, logger);
     if (c <> nil) and (c is TService) then
     begin
       Result := PostThreadMessage(TService(c).Tag, Msg, wParam, lParam);
-      logger.Info('GMPostMessage(TService)');
+      logger.Debug('GMPostMessage(TService)');
       Exit;
     end;
   end;
