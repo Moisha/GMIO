@@ -74,7 +74,7 @@ implementation
 
 {$R *.dfm}
 
-uses AppConfigFile, dxStandardControlsSkinHelper;
+uses AppConfigFile, dxStandardControlsSkinHelper, EsLogging;
 
 type FrameColorAndBitmaps = record
   color: TColor;
@@ -535,7 +535,7 @@ end;
 
 procedure TFrmObject.imgDiagramClick(Sender: TObject);
 begin
-  GMPostMessage(WM_SHOW_CONTROL_PANEL, FID_Obj, 1);
+  GMPostMessage(WM_SHOW_CONTROL_PANEL, FID_Obj, 1, DefaultLogger);
 end;
 
 procedure FinalizeModule();

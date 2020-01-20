@@ -69,7 +69,7 @@ type
 
 implementation
 
-uses Devices.UBZ.Common, Devices.Vacon.Common;
+uses Devices.UBZ.Common, Devices.Vacon.Common, EsLogging;
 
 {$R *.dfm}
 
@@ -213,7 +213,7 @@ end;
 
 procedure TControlFrm.sbCloseClick(Sender: TObject);
 begin
-  GMPostMessage(WM_SHOW_CONTROL_PANEL, 0, 0);
+  GMPostMessage(WM_SHOW_CONTROL_PANEL, 0, 0, DefaultLogger);
 end;
 
 constructor TControlFrm.Create(AOWner: TComponent);

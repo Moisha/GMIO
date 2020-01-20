@@ -243,7 +243,7 @@ begin
   while not Terminated do
   begin
     res := ReadObjectsFromSrvUniversal();
-    GMPostMessage(WM_CLIENT_CREATE_OBJECTS, res, 0);
+    GMPostMessage(WM_CLIENT_CREATE_OBJECTS, res, 0, DefaultLogger);
 
     if res = RESULT_CLIENT_CREATE_OBJECTS_OK then
       break;

@@ -31,7 +31,7 @@ implementation
 
 { TGMDockPanel }
 
-uses dxStandardControlsSkinHelper;
+uses dxStandardControlsSkinHelper, EsLogging;
 
 class procedure TGMDockPanel.CloseAll();
 var
@@ -118,7 +118,7 @@ end;
 procedure TGMDockPanel.DockPanelClose(Sender: TdxCustomDockControl);
 begin
   if NeedDestroyOnClose() then
-    GMPostMessage(WM_DESTROY_OBJECT, WParam(self), 0);
+    GMPostMessage(WM_DESTROY_OBJECT, WParam(self), 0, DefaultLogger);
 end;
 
 procedure TGMDockPanel.DockPanelCloseQuery(Sender: TdxCustomDockControl; var CanClose: Boolean);

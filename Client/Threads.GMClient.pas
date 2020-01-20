@@ -182,7 +182,7 @@ var
 
 implementation
 
-uses ActiveX, ProgramLogFile;
+uses ActiveX, ProgramLogFile, EsLogging;
 
 const iReqPause = 10;
 
@@ -354,8 +354,8 @@ begin
     except
       on e: Exception do
       begin
-        ProgramLog.AddException('TGMCOMThread.SafeExecute.' + e.Message);
-        GMPostMessage(WM_THREAD_EXCEPTION, WParam(self), 0);
+        DefaultLogger.LogException(e);
+        GMPostMessage(WM_THREAD_EXCEPTION, WParam(self), 0, DefaultLogger);
       end;
     end;
   end;
@@ -465,7 +465,7 @@ begin
     asUnknown: alCurrState:=asNotSet;
   end;
 
-  GMPostMessage(WM_ALARM_STATE_CHANGED, WParam(self), 0);
+  GMPostMessage(WM_ALARM_STATE_CHANGED, WParam(self), 0, DefaultLogger);
 end;
 
 procedure TGMAlarm.Quote();
@@ -481,7 +481,7 @@ begin
   end;
 
   SaveToLogFile();
-  GMPostMessage(WM_ALARM_STATE_CHANGED, WParam(self), 0);
+  GMPostMessage(WM_ALARM_STATE_CHANGED, WParam(self), 0, DefaultLogger);
 end;
 
 function TGMAlarm.GetAlarmTxt: string;
@@ -793,7 +793,7 @@ begin
   if FalCurrState <> Value then
   begin
     FalCurrState := Value;
-    GMPostMessage(WM_ALARM_STATE_CHANGED, WParam(self), 0);
+    GMPostMessage(WM_ALARM_STATE_CHANGED, WParam(self), 0, DefaultLogger);
   end;
 end;
 
@@ -1087,7 +1087,7 @@ begin
         val := resp.Data[i].Value[0].Val;
 
         if p.UpdateVal(Utime, Val) then
-          GMPostMessage(WM_UPDATE_OBJECT, WParam(p), 0);
+          GMPostMessage(WM_UPDATE_OBJECT, WParam(p), 0, DefaultLogger);
       end;
     end;
   except end;
