@@ -37,7 +37,7 @@ type
 
 implementation
 
-uses ProgramLogFile, GMConst{$ifdef SQL_APP}, GMSqlQuery{$endif};
+uses ProgramLogFile, GMConst{$ifdef SQL_APP}, GMSqlQuery{$endif}, EsLogging;
 
 { TGMThread }
 
@@ -65,7 +65,7 @@ begin
       on e: Exception do
       begin
         error := true;
-        GMPostMessage(WM_THREAD_EXCEPTION, IfThen(FreeOnTerminate, 0, WParam(self)), WParam(ClassType));
+        GMPostMessage(WM_THREAD_EXCEPTION, IfThen(FreeOnTerminate, 0, WParam(self)), WParam(ClassType), DefaultLogger);
         ProgramLog.AddException('TGMThread(' + ClassName() + ').Execute - ' + e.ToString());
       end;
     end;

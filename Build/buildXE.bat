@@ -29,11 +29,7 @@ del /S /Q %PROJECTSROOT%\Release\*.exe
 del /S /Q %PROJECTSROOT%\Release\*.dll
 del /S /Q %PROJECTSROOT%\Release\*.sql
 
-if exist %PROJECTSROOT%\DB\pg_gm_db.sql (
-  echo Back up pg_gm_db >> %LOGFILE%
-  del %PROJECTSROOT%\DB\pg_gm_db.bak
-  call :copyfile %PROJECTSROOT%\DB\pg_gm_db.sql %PROJECTSROOT%\DB\pg_gm_db.bak
-)
+del %PROJECTSROOT%\DB\pg_gm_db.bak
 del %PROJECTSROOT%\DB\pg_gm_db.sql
 
 call :buildprog %PROJECTSROOT%\ThirdParty\JEDI\jcl\examples\windows\debug\tools MakeJclDbg

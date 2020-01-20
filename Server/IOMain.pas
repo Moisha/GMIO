@@ -323,7 +323,7 @@ var
 implementation
 
 uses Math, CheckConnStr, VT_Utils, SysConfig,
-  ProgramLogFile, AppConfigFile, SQLNodeReader, UsefulQueries, UserPermissions;
+  ProgramLogFile, AppConfigFile, SQLNodeReader, UsefulQueries, UserPermissions, EsLogging;
 
 var nSimulatorCounter: int = 0;
     synch: TMultiReadExclusiveWriteSynchronizer;
@@ -2880,7 +2880,7 @@ begin
       ut := StrToIntDef(arr[1], 0);
     end;
 
-    GMPostMessage(msg, n, ut);
+    GMPostMessage(msg, n, ut, DefaultLogger);
   except
   end;
 end;
@@ -2893,7 +2893,7 @@ end;
 
 procedure TServerStateThread.ReadObjectState(q: TGMSqlQuery; obj: pointer);
 begin
-  GMPostMessage(WM_OBJECT_ONLINE, q.FieldByName('ID_Obj').AsInteger, q.FieldByName('LastOnline').AsInteger)
+  GMPostMessage(WM_OBJECT_ONLINE, q.FieldByName('ID_Obj').AsInteger, q.FieldByName('LastOnline').AsInteger, DefaultLogger)
 end;
 
 procedure TServerStateThread.CheckObjectsOnline();
@@ -2903,7 +2903,7 @@ end;
 
 procedure TServerStateThread.ReadDeviceState(q: TGMSqlQuery; obj: pointer);
 begin
-  GMPostMessage(WM_DEVICE_ONLINE, q.FieldByName('ID_Device').AsInteger, q.FieldByName('LastOnline').AsInteger)
+  GMPostMessage(WM_DEVICE_ONLINE, q.FieldByName('ID_Device').AsInteger, q.FieldByName('LastOnline').AsInteger, DefaultLogger)
 end;
 
 procedure TServerStateThread.CheckDevicesOnline();
@@ -2919,7 +2919,7 @@ begin
   val.Val.UTime := q.FieldByName('UTime').AsInteger;
   val.Val.Val := q.FieldByName('Val').AsFloat;
 
-  GMPostMessage(WM_PARAM_DATA_WRITTEN, WParam(val), 0);
+  GMPostMessage(WM_PARAM_DATA_WRITTEN, WParam(val), 0, DefaultLogger);
 end;
 
 procedure TServerStateThread.CheckDataWritten();

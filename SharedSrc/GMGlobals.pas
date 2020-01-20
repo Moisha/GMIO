@@ -4,7 +4,7 @@
 unit GMGlobals;
 
 interface
-uses SysUtils, Windows, StrUtils, Forms, IniFiles, DateUtils, Math, StdCtrls, Messages, Types,
+uses SysUtils, Windows, StrUtils, Forms, IniFiles, DateUtils, Math, StdCtrls, Messages, Types, EsLogging,
      CheckLst, Classes, ComCtrls, Graphics, GMConst, Variants, zlib, cxDropDownEdit, cxTextEdit,
      Controls, AnsiStrings, IdGlobal, SvcMgr, cxListBox;
 
@@ -222,7 +222,7 @@ procedure RecoursiveEnableControls(c: TWinControl; bEnable: bool);
 procedure EnableWithParents(c: TWinControl);
 
 function ShowMessageBox(const Txt: string; Flags: int = MB_OK): int;
-function GMPostMessage(Msg: UINT; wParam: WPARAM; lParam: LPARAM): bool;
+function GMPostMessage(Msg: UINT; wParam: WPARAM; lParam: LPARAM; logger: TesLogger): bool;
 function GetCLBSelCount(clb: TCheckListBox): int;
 
 function SaveStringToFile(const str: string; const fn: string): bool;
@@ -1001,7 +1001,7 @@ begin
   end;
 end;
 
-function GMPostMessage(Msg: UINT; wParam: WPARAM; lParam: LPARAM): bool;
+function GMPostMessage(Msg: UINT; wParam: WPARAM; lParam: LPARAM; logger: TesLogger): bool;
 var c, app: TComponent;
 begin
   if ThreadForMessagesHandle > 0 then
@@ -1010,7 +1010,7 @@ begin
     Exit;
   end;
 
-  ProgramLog.AddMessage('GMPostMessage');
+  logger.Info('GMPostMessage');
   app := {$ifdef Application}Forms{$else}SvcMgr{$endif}.Application;
   if app <> nil then
   begin
@@ -1018,7 +1018,7 @@ begin
     if (c <> nil) and (c is TService) then
     begin
       Result := PostThreadMessage(TService(c).Tag, Msg, wParam, lParam);
-      ProgramLog.AddMessage('GMPostMessage(TService)');
+      logger.Info('GMPostMessage(TService)');
       Exit;
     end;
   end;
@@ -1029,7 +1029,7 @@ begin
     Exit;
   end;
 
-  ProgramLog.AddError('GMPostMessage: Service component not found!');
+  logger.Error('GMPostMessage: Service component not found!');
 
   Result := false;
 end;
