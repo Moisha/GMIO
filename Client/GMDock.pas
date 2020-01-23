@@ -10,6 +10,7 @@ type
   TGMDockPanel = class(TdxDockPanel)
   private
     FGMForm: TGMForm;
+    FScrollbox: TcxScrollBox;
     procedure ScrollboxResize(Sender: TObject);
     procedure WMAfterConstruction(var Msg: TMessage); message WM_AFTER_CONSTRUCTION;
     procedure DockPanelClose(Sender: TdxCustomDockControl);
@@ -58,17 +59,15 @@ begin
 end;
 
 procedure TGMDockPanel.InsertForm(gmFormClass: TGMFormClass);
-var scrollbox: TcxScrollBox;
 begin
-  scrollbox := TcxScrollBox.Create(self);
-  scrollbox.Parent := self;
-  scrollbox.Align := alClient;
-  scrollbox.OnResize := ScrollboxResize;
-  scrollbox.HorzScrollBar.Tracking := true;
-  scrollbox.VertScrollBar.Tracking := true;
+  FScrollbox := TcxScrollBox.Create(self);
+  FScrollbox.Parent := self;
+  FScrollbox.Align := alClient;
+  FScrollbox.OnResize := ScrollboxResize;
+  FScrollbox.HorzScrollBar.Tracking := true;
+  FScrollbox.VertScrollBar.Tracking := true;
 
   FGMForm := gmFormClass.Create(self);
-  FGMForm.Parent := scrollbox;
   FGMForm.Left := 0;
   FGMForm.Top := 0;
 
@@ -107,6 +106,7 @@ end;
 procedure TGMDockPanel.CreateWnd;
 begin
   inherited;
+  FGMForm.Parent := FScrollBox;
   PostMessage(Handle, WM_AFTER_CONSTRUCTION, 0, 0);
 end;
 
