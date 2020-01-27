@@ -14,14 +14,14 @@ type
   private
     FPFD: TParamForDrawList;
     FDiagramLenHrs: int;
-    function ReadAppropriateDigitsAfterPoint(ID_Prm: int): int;
+    function ReadAppropriateDigitsAfterPoint(xml: IGMConfigConfigType; ID_Prm: int): int;
   public
     Caption: string;
 
     constructor Create();
     destructor Destroy; override;
     property pfd: TParamForDrawList read FPFD;
-    procedure LoadFromINI(xmlBw: IGMConfigBigwindowType);
+    procedure LoadFromINI(xml: IGMConfigConfigType; xmlBw: IGMConfigBigwindowType);
     procedure DrawDiagram();
     function AddValue(val: TValueFromBase; bArchive: bool): bool;
     property DiagramLenHrs: int read FDiagramLenHrs write FDiagramLenHrs;
@@ -76,7 +76,7 @@ begin
   for i := 0 to xml.Bigwindows.Count - 1 do
   begin
     bw := BigWindowList.Add();
-    bw.LoadFromINI(xml.Bigwindows[i]);
+    bw.LoadFromINI(xml, xml.Bigwindows[i]);
   end;
 end;
 
@@ -107,12 +107,11 @@ begin
     pfd.Params[i].DrawDiagram(int64(NowGM()) - FDiagramLenHrs * 3600, NowGM())
 end;
 
-function TBigWindow.ReadAppropriateDigitsAfterPoint(ID_Prm: int): int;
-var i, j: int;
-    xml: IGMConfigConfigType;
+function TBigWindow.ReadAppropriateDigitsAfterPoint(xml: IGMConfigConfigType; ID_Prm: int): int;
+var
+  i, j: int;
 begin
   Result := 0;
-  xml := ReadConfigXML();
   for i := 0 to xml.Objects.Count - 1 do
   begin
     for j := 1 to xml.Objects[i].Channels.Count - 1 do // 0й(BAR) не нужен
@@ -124,9 +123,10 @@ begin
   end;
 end;
 
-procedure TBigWindow.LoadFromINI(xmlBw: IGMConfigBigwindowType);
-var i: int;
-    p: TParamForDraw;
+procedure TBigWindow.LoadFromINI(xml: IGMConfigConfigType; xmlBw: IGMConfigBigwindowType);
+var
+  i: int;
+  p: TParamForDraw;
 begin
   Caption := xmlBw.Name;
   for i := 0 to xmlBw.Diagrams.Count - 1 do
@@ -141,7 +141,7 @@ begin
 
     p.prm := ParamOrNodeChannel(xmlBw.Diagrams[i].DataChnType, xmlBw.Diagrams[i].Id_prm);
     if (p.prm <> nil) and (p.iDigitsAfterPoint <= 0) then
-      p.iDigitsAfterPoint := ReadAppropriateDigitsAfterPoint(p.prm.ID_Prm);
+      p.iDigitsAfterPoint := ReadAppropriateDigitsAfterPoint(xml, p.prm.ID_Prm);
   end;
 end;
 
