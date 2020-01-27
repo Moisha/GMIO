@@ -13,7 +13,7 @@ unit ConfigXml;
 
 interface
 
-uses Forms, Windows, xmldom, XMLDoc, XMLIntf, GMGlobals, GMConst, SysUtils, Variants;
+uses Forms, Windows, xmldom, XMLDoc, XMLIntf, GMGlobals, GMConst, SysUtils, Variants, SyncObjs;
 
 type
 
@@ -898,7 +898,7 @@ implementation
 
 { Global Functions }
 
-uses AppConfigFile;
+uses AppConfigFile, Threads.Base, Winapi.ActiveX;
 
 function Getconfig(Doc: IXMLDocument): IGMConfigConfigType;
 begin
@@ -974,11 +974,22 @@ begin
   PrepareConfigXML(Result);
 end;
 
+type
+  TSaveConfigXMLThread = class(TGMThread)
+  private
+    class var FLock: TCriticalSection;
+    FXml: string;
+  protected
+    procedure SafeExecute; override;
+  public
+    class constructor Create();
+    class destructor Destroy;
+    constructor Create(const xml: string);
+  end;
+
 procedure SaveConfigXML(xml: IGMConfigConfigType);
-var s: string;
 begin
-  s := '<?xml version="1.0" encoding="Windows-1251"?>'#13#10 + FormatXMLData(xml.XML);
-  SaveStringToFile(s, GMMainConfigFile.GetMainINIFileName())
+  TSaveConfigXMLThread.Create(xml.XML);
 end;
 
 function Newconfig: IGMConfigConfigType;
@@ -2046,6 +2057,40 @@ end;
 procedure TGMScadaType.Set_Filename(Value: UnicodeString);
 begin
   ChildNodes['filename'].NodeValue := Value;
+end;
+
+{ TSaveConfigXMLThread }
+
+class constructor TSaveConfigXMLThread.Create;
+begin
+  FLock := TCriticalSection.Create();
+  inherited;
+end;
+
+constructor TSaveConfigXMLThread.Create(const xml: string);
+begin
+  inherited Create(false);
+  FreeOnTerminate := true;
+  FXml := xml;
+end;
+
+class destructor TSaveConfigXMLThread.Destroy;
+begin
+  inherited;
+  FLock.Free();
+end;
+
+procedure TSaveConfigXMLThread.SafeExecute;
+begin
+  CoInitialize(nil);
+  FLock.Acquire();
+  try
+    var s := '<?xml version="1.0" encoding="Windows-1251"?>'#13#10 + FormatXMLData(FXml);
+    SaveStringToFile(s, GMMainConfigFile.GetMainINIFileName());
+  finally
+    FLock.Release();
+    CoUninitialize();
+  end;
 end;
 
 initialization

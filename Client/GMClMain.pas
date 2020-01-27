@@ -153,6 +153,8 @@ type
     procedure InitialDock(panel: TdxDockPanel; dockType: TdxDockingTypeEx = dtNone);
     function FindDockSiteIfAny: TdxLayoutDockSite;
     procedure DockToEventsPanel(panel: TdxDockPanel);
+    function AddBigWindowMenuButtonLink(const buttonCaption: string; clickEvent: TNotifyEvent; buttonTag: int): TdxBarItemLink;
+    procedure MenuOpenAllBigWindows(Sender: TObject);
     property ControlMode: TGMControlMode read FControlMode write SetControlMode;
   public
     { Public declarations }
@@ -247,11 +249,31 @@ begin
   InitialDock(CreateDockableBigWindow(idx));
 end;
 
-procedure TGMClMainFrm.ReadBigWindowList(xml: IGMConfigConfigType);
+function TGMClMainFrm.AddBigWindowMenuButtonLink(const buttonCaption: string; clickEvent: TNotifyEvent; buttonTag: int): TdxBarItemLink;
 var
   b: TdxBarButton;
-  l: TdxBarItemLink;
-  i: Integer;
+begin
+  Result := dxBarSubItemBigWindows.ItemLinks.AddItem(TdxBarButton);
+  b := TdxBarButton(Result.Item);
+  b.Caption := buttonCaption;
+  b.OnClick := clickEvent;
+  b.Tag := buttonTag;
+  b.ImageIndex := -1;
+end;
+
+procedure TGMClMainFrm.MenuOpenAllBigWindows(Sender: TObject);
+begin
+  for var i := 0 to dxBarSubItemBigWindows.ItemLinks.Count - 1 do
+  begin
+    var b := TdxBarButton(dxBarSubItemBigWindows.ItemLinks.Items[i].Item);
+    if b.Tag >= 0 then
+      b.Click();
+  end;
+end;
+
+procedure TGMClMainFrm.ReadBigWindowList(xml: IGMConfigConfigType);
+var
+  i: int;
 begin
   BigWindowList.LoadFromINI(xml);
 
@@ -259,14 +281,9 @@ begin
     dxBarSubItemBigWindows.ItemLinks.Items[0].Free();
 
   for i := 0 to BigWindowList.Count - 1 do
-  begin
-    l := dxBarSubItemBigWindows.ItemLinks.AddItem(TdxBarButton);
-    b := TdxBarButton(l.Item);
-    b.Caption := BigWindowList[i].Caption;
-    b.OnClick := MenuCallBigWindow;
-    b.Tag := i;
-    b.ImageIndex := -1;
-  end;
+    AddBigWindowMenuButtonLink(BigWindowList[i].Caption, MenuCallBigWindow, i);
+
+  AddBigWindowMenuButtonLink('Открыть все', MenuOpenAllBigWindows, -1).BeginGroup := true;
 end;
 
 function TGMClMainFrm.ReadBigWindows(xml: IGMConfigConfigType): TdxDockPanel;

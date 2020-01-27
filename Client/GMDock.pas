@@ -140,6 +140,8 @@ begin
 
   OnClose := DockPanelClose;
   OnCloseQuery := DockPanelCloseQuery;
+
+  ScrollBoxResize(FScrollBox);
 end;
 
 procedure TGMDockPanel.SaveLayoutToCustomIni(AIniFile: TCustomIniFile; ASection: string);

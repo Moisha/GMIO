@@ -45,6 +45,7 @@ type
     FActiveBW: TBigWindow;
     FClearArchivesOnRequest: bool;
     FTblTimeStep: int;
+    FForceRepaintDiagram: bool;
 
     procedure PrepareTableHeader;
     procedure AdjustColCount;
@@ -69,6 +70,7 @@ type
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
     procedure CheckDiagramSize;
+    procedure ForceRepaintDiagram();
     property DiagramLenHrs: int read GetDiagramLenHrs write SetDiagramLenHrs;
     property ClearArchivesOnRequest: bool read FClearArchivesOnRequest write FClearArchivesOnRequest;
     property ActiveBW: TBigWindow read FActiveBW write SetActiveBW;
@@ -89,6 +91,7 @@ begin
   imgDiagram.iDiagramTicks := 10;
   imgDiagram.iDiagramVrtTicks := 25;
   imgDiagram.bMarker := true;
+  FForceRepaintDiagram := false;
 
   FDiagramLenHrs := 24;
 
@@ -98,6 +101,11 @@ end;
 destructor TFrmDiagramAndTable.Destroy;
 begin
   inherited;
+end;
+
+procedure TFrmDiagramAndTable.ForceRepaintDiagram;
+begin
+  FForceRepaintDiagram := true;
 end;
 
 procedure TFrmDiagramAndTable.ClearDiagrams(lDiagram: array of TValueFromBase);
@@ -134,7 +142,7 @@ begin
       FActiveBW.AddValue(order.lDiagram[i], false);
 
     InitTableDates();
-    PostMessage(Handle, WM_REFRESH_OBJECT_FRAME, 0, 0);
+    ForceRepaintDiagram();
   finally
     order.State := dosDelete;
   end;
@@ -265,7 +273,7 @@ begin
 
   PrepareTableHeader();
   InitTableDates();
-  PostMessage(Handle, WM_REFRESH_OBJECT_FRAME, 0, 0);
+  ForceRepaintDiagram();
 end;
 
 procedure TFrmDiagramAndTable.vstTableHeaderDrawQueryElements(
@@ -413,10 +421,11 @@ end;
 
 procedure TFrmDiagramAndTable.CheckTableDates();
 begin
-  if int64(NowGM() - CalcLastDiagramUTime()) > FTblTimeStep then
+  if FForceRepaintDiagram or (int64(NowGM() - CalcLastDiagramUTime()) > FTblTimeStep) then
   begin
     RepaintDiagram();
     InitTableDates();
+    FForceRepaintDiagram := false;
   end;
 end;
 
@@ -477,7 +486,7 @@ begin
     xml.Bigwindows[BigWindowList.IndexOf(FActiveBW)].Diagrams[HitInfo.Column - 1].Diagram := IfThen(FActiveBW.pfd[HitInfo.Column - 1].bDiagram, 1, 0);
     SaveConfigXML(xml);
 
-    RepaintDiagram();
+    ForceRepaintDiagram();
     vstTable.Refresh();
   end;
 end;
