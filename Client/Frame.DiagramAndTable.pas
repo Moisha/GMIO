@@ -127,8 +127,9 @@ begin
 end;
 
 procedure TFrmDiagramAndTable.WMOrderReady(var Msg: TMessage);
-var order: TDataOrder;
-    i: int;
+var
+  order: TDataOrder;
+  i: int;
 begin
   order := TDataOrder(Msg.WParam);
   try
@@ -138,11 +139,13 @@ begin
     if FClearArchivesOnRequest and (Length(order.lDiagram) > 0) then
       ClearDiagrams(order.lDiagram);
 
+    var valueAdded := false;
     for i := 0 to High(order.lDiagram) do
-      FActiveBW.AddValue(order.lDiagram[i], false);
+      if FActiveBW.AddValue(order.lDiagram[i], false) then
+        valueAdded := true;
 
-    InitTableDates();
-    ForceRepaintDiagram();
+    if valueAdded then
+      ForceRepaintDiagram();
   finally
     order.State := dosDelete;
   end;
