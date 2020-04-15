@@ -250,6 +250,7 @@ $(PreBuildEvent)]]></PreBuildEvent>
         <DCCReference Include="Devices.DRK.pas"/>
         <DCCReference Include="Devices.ADCPChannelMaster.pas"/>
         <DCCReference Include="Devices.Geomer.pas"/>
+        <DCCReference Include="Threads.TcpServer.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>

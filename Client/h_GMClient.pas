@@ -328,7 +328,7 @@ begin
   TFlexPanel(Args.Obj).ModalDialogMode := true;
 
   prompt[0] := Args.Values[1];
-  Value := InputQuery(Args.Values[0], prompt, val, CheckFloat);
+  Value := InputQuery(Args.Values[0], prompt, val, CheckInt);
   if Value then
     Args.Values[2] := StrToInt(val[0]);
 end;

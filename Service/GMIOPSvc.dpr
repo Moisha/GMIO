@@ -76,7 +76,8 @@ uses
   Devices.Modbus.ReqCreatorBase in 'Devices.Modbus.ReqCreatorBase.pas',
   Devices.DRK in 'Devices.DRK.pas',
   Devices.ADCPChannelMaster in 'Devices.ADCPChannelMaster.pas',
-  Devices.Geomer in 'Devices.Geomer.pas';
+  Devices.Geomer in 'Devices.Geomer.pas',
+  Threads.TcpServer in 'Threads.TcpServer.pas';
 
 procedure ConfigureLogging();
   var
