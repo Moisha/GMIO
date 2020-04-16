@@ -4,17 +4,17 @@ interface
 
 uses Windows, TestFrameWork, GMGlobals, GMSocket, Classes, ScktComp, Threads.ReqSpecDevTemplate, WinSock,
      GMSQLQuery, AppConfigFile, StdRequest, StdResponce, Threads.GMClient,
-     ConnParamsStorage, Test.UniversalExchange, GeomerLastValue, System.Generics.Collections, Threads.RemoteSrv, Connection.Base;
+     ConnParamsStorage, Test.UniversalExchange, GeomerLastValue, System.Generics.Collections, Threads.RemoteSrv, Connection.Base, blcksock;
 
 type
   TGeomerSocketForTest = class(TGeomerSocket)
   private
     FCommands: TSTringList;
   protected
-    procedure GMSendText(const s: string); override;
+    function GMSendText(const s: string): int; override;
     procedure SetSocketObjectType(objType: int);
   public
-    constructor Create(Socket: TSocket; ServerWinSocket: TServerWinSocket; AglvBuffer: TGeomerLastValuesBuffer);
+    constructor Create(ASocket: TTCPBlockSocket; AglvBuffer: TGeomerLastValuesBuffer);
     destructor Destroy; override;
   end;
 
@@ -58,7 +58,6 @@ type
 
   TGMSocketTest = class(TUniversalTransponderTest)
   private
-    FServerSocket: TServerWinSocket;
     FSocket: TGeomerSocketForTest;
     FOrder: TDataOrderForTest;
     FRequestList: TList<TRequestDetails>;
@@ -326,17 +325,16 @@ procedure TGMSocketTest.SetUp;
 begin
   inherited SetUp;
 
-  FServerSocket := TServerWinSocket.Create(INVALID_SOCKET);
-  FSocket := TGeomerSocketForTest.Create(INVALID_SOCKET, FServerSocket, glvBuffer);
+  FSocket := TGeomerSocketForTest.Create(nil, glvBuffer);
   FOrder := TDataOrderForTest.Create();
   FRequestList := TList<TRequestDetails>.Create();
   ThreadsContainer := TRequestThreadsContainerForTest.Create();
 
-  lstSockets := TSocketListForTest.Create(FServerSocket);
-  TSocketListForTest(lstSockets).FList.Add(TGeomerSocketForTest.Create(INVALID_SOCKET, FServerSocket, glvBuffer));
+  lstSockets := TSocketListForTest.Create(nil);
+  TSocketListForTest(lstSockets).FList.Add(TGeomerSocketForTest.Create(nil, glvBuffer));
   TGeomerSocketForTest(lstSockets[0]).SetSocketObjectType(OBJ_TYPE_GM);
   lstSockets[0].N_Car := 100;
-  TSocketListForTest(lstSockets).FList.Add(TGeomerSocketForTest.Create(INVALID_SOCKET, FServerSocket, glvBuffer));
+  TSocketListForTest(lstSockets).FList.Add(TGeomerSocketForTest.Create(nil, glvBuffer));
   TGeomerSocketForTest(lstSockets[1]).SetSocketObjectType(OBJ_TYPE_GM);
   lstSockets[1].N_Car := 300;
 
@@ -349,7 +347,6 @@ begin
 
   FreeAndNil(lstSockets);
   FSocket.Free();
-  FServerSocket.Free();
   FOrder.Free();
   FRequestList.Free();
   ThreadsContainer.Free();
@@ -498,21 +495,23 @@ end;
 
 { TGeomerSocketForTest }
 
-constructor TGeomerSocketForTest.Create(Socket: TSocket; ServerWinSocket: TServerWinSocket; AglvBuffer: TGeomerLastValuesBuffer);
+constructor TGeomerSocketForTest.Create(ASocket: TTCPBlockSocket; AglvBuffer: TGeomerLastValuesBuffer);
 begin
-  inherited;
+  inherited Create(TTCPBlockSocket.Create(), AglvBuffer);
   FCommands := TSTringList.Create();
 end;
 
 destructor TGeomerSocketForTest.Destroy;
 begin
   FCommands.Free();
+  Socket.Free();
   inherited;
 end;
 
-procedure TGeomerSocketForTest.GMSendText(const s: string);
+function TGeomerSocketForTest.GMSendText(const s: string): int;
 begin
   FCommands.Add(s);
+  Result := 0;
 end;
 
 procedure TGeomerSocketForTest.SetSocketObjectType(objType: int);

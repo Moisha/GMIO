@@ -35,13 +35,10 @@ requires
   IndySystem,
   IndyProtocols,
   IndyCore,
-  dxCoreRS18,
-  cxLibraryRS18,
-  dxGDIPlusRS18,
-  dxThemeRS18,
-  cxDataRS18,
-  cxEditorsRS18,
-  Jcl;
+  dxCoreRS26,
+  cxLibraryRS26,
+  dxGDIPlusRS26,
+  ObsPkg_XE4;
 
 contains
   GMConst in '..\SharedSrc\GMConst.pas',

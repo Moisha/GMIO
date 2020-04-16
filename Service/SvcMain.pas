@@ -7,7 +7,7 @@ uses
   GMSocket, GMSqlQuery, ConnParamsStorage, GMGlobals, IdSocketHandle, IdBaseComponent, IdComponent, IdUDPBase, IdUDPServer, IdGlobal,
   UDPBindingStorage, WinSvc, Vcl.Consts, UITypes, GeomerLastValue, GMConst, Threads.ObjectOnline,
   Threads.Base, RequestThreadsContainer, Threads.NIUpdater, Threads.ReqSpecDevTemplate, Threads.RemoteSrv, Threads.ResponceParser,
-  Vcl.ExtCtrls;
+  Vcl.ExtCtrls, Threads.TcpServer;
 
 {$I ScriptVersion.inc}
 
@@ -38,23 +38,16 @@ type
   end;
 
   TGMIOPService = class(TService)
-    ssGeomer: TServerSocket;
     udpSrv: TIdUDPServer;
-    timerResetSocket: TTimer;
     procedure ServiceExecute(Sender: TService);
-    procedure ssGeomerAccept(Sender: TObject; Socket: TCustomWinSocket);
-    procedure ssGeomerClientConnect(Sender: TObject; Socket: TCustomWinSocket);
-    procedure ssGeomerClientError(Sender: TObject; Socket: TCustomWinSocket; ErrorEvent: TErrorEvent; var ErrorCode: Integer);
-    procedure ssGeomerClientRead(Sender: TObject; Socket: TCustomWinSocket);
     procedure udpSrvUDPRead(AThread: TIdUDPListenerThread; const AData: TIdBytes; ABinding: TIdSocketHandle);
     procedure ServiceCreate(Sender: TObject);
-    procedure ssGeomerGetSocket(Sender: TObject; Socket: NativeInt; var ClientSocket: TServerClientWinSocket);
-    procedure ssGeomerGetThread(Sender: TObject; ClientSocket: TServerClientWinSocket; var SocketThread: TServerClientThread);
     procedure ServiceStop(Sender: TService; var Stopped: Boolean);
     procedure ServiceDestroy(Sender: TObject);
-    procedure timerResetSocketTimer(Sender: TObject);
   private
     { Private declarations }
+    FTcpPort: int;
+    FTcpServerDaemon: TGMTCPServerDaemon;
     FResetSocketCounter: int;
     FClosingInProcess: bool;
     FUDPBindingsAndThreads: TUDPBindingsAndThreads;
@@ -122,17 +115,15 @@ function TGMIOPService.OpenIPPorts: bool;
 begin
   Result := false;
 
-  if ssGeomer.Port > 0 then
-    try
-      ssGeomer.Open;
-      ProgramLog.AddMessage('Open TCP port ' + IntToStr(ssGeomer.Port));
-    except
-      on e: Exception do
-      begin
-        ProgramLog.AddError(e.Message + ''#13''#10'Запуск невозможен до освобождения TCP-порта ' + IntToStr(ssGeomer.Port));
-        Exit;
-      end;
+  if FTcpPort > 0 then
+  begin
+    FTcpServerDaemon := TGMTCPServerDaemon.Create(FTcpPort, glvBuffer);
+    if not FTcpServerDaemon.Listen() then
+    begin
+      DefaultLogger.Error('Запуск невозможен до освобождения TCP-порта ' + IntToStr(FTcpPort));
+      Exit;
     end;
+  end;
 
   if udpSrv.DefaultPort > 0 then
     try
@@ -206,9 +197,10 @@ begin
 end;
 
 function TGMIOPService.ReadINI: bool;
-var f: TIniFile;
-    remoteSrv, remoteName: string;
-    remotePort: int;
+var
+  f: TIniFile;
+  remoteSrv, remoteName: string;
+  remotePort: int;
 begin
   Result := (GMMainConfigFile.CheckMainINIFile() = iftINI);
   if not Result then
@@ -222,7 +214,7 @@ begin
   begin
     f := TIniFile.Create(GMMainConfigFile.GetMainINIFileName());
     try
-      ssGeomer.Port := f.ReadInteger('COMMON', 'PORT', 0);
+      FTcpPort := f.ReadInteger('COMMON', 'PORT', 0);
       udpSrv.DefaultPort := f.ReadInteger('COMMON', 'UDP_PORT', 0);
       COMDevicesRequestInterval := f.ReadInteger('COMMON', 'COM_INTERVAL', 60);
       CommonWaitFirst := f.ReadInteger('COMMON', 'TIMEOUT', CommonWaitFirst);
@@ -253,7 +245,7 @@ procedure TGMIOPService.CloseIPPorts();
 begin
   ProgramLog.AddMessage('Closing TCP');
   try
-    ssGeomer.Close();
+    FreeAndNil(FTcpServerDaemon);
   except
     on e: Exception do
       ProgramLog.AddException('Closing TCP: ' + e.ToString());
@@ -438,18 +430,6 @@ begin
   end;
 end;
 
-procedure TGMIOPService.timerResetSocketTimer(Sender: TObject);
-begin
-  inc(FResetSocketCounter);
-
-  if FResetSocketCounter >= 30 * 60 then
-  begin
-    FResetSocketCounter := 0;
-    ssGeomer.Close();
-    ssGeomer.Open();
-  end;
-end;
-
 procedure TGMIOPService.UninstallService(SvcMgr: SC_HANDLE);
 var
   Svc: SC_HANDLE;
@@ -570,7 +550,7 @@ begin
 
   glvBuffer := TGeomerLastValuesBuffer.Create();
 
-  lstSockets := TSocketList.Create(ssGeomer.Socket);
+  lstSockets := TSocketList.Create({ssGeomer.Socket !!!!!!}nil);
   FUDPBindingsAndThreads := TUDPBindingsAndThreads.Create(udpSrv);
 end;
 
@@ -612,16 +592,7 @@ var tLastDec: int64;
 begin
   ProgramLog.AddMessage('========== Stopping Service ==========');
   try
-    ProgramLog.AddMessage('Closing TCP Server');
-    try
-      ssGeomer.Close();
-    except
-      on e: Exception do
-        ProgramLog.AddException('Closing TCP Server ' + e.ToString());
-    end;
-
-    ProgramLog.AddMessage('Closing UDP Server');
-    try udpSrv.Active := false; except end;
+    CloseIPPorts();
     FUDPBindingsAndThreads.PrepareToShutDown();
 
     ProgramLog.AddMessage('Terminating Threads');
@@ -671,66 +642,6 @@ begin
     thrResponceParser.Terminate();
     thrResponceParser.WaitForTimeout(2000); // больше уже совсем неприлично, все равно очередь не уменьшается или кончилась
   except end; // ничто не должно омрачить выхода из приложения
-end;
-
-procedure TGMIOPService.ssGeomerAccept(Sender: TObject; Socket: TCustomWinSocket);
-var opt: integer;
-begin
-  opt := 1;
-  SetSockOpt(Socket.SocketHandle, SOL_SOCKET, SO_KEEPALIVE, PAnsiChar(@opt), SizeOf(opt));
-end;
-
-procedure TGMIOPService.ssGeomerClientError(Sender: TObject;
-  Socket: TCustomWinSocket; ErrorEvent: TErrorEvent;
-  var ErrorCode: Integer);
-begin
-  ErrorCode := 0;
-  Socket.Close();
-end;
-
-procedure TGMIOPService.ssGeomerClientRead(Sender: TObject; Socket: TCustomWinSocket);
-var Sckt: TGeomerSocket;
-    action: string;
-begin
-  if FClosingInProcess then Exit;
-
-  try
-    if (Socket = nil) or not (Socket is TGeomerSocket) then
-    begin
-      ProgramLog.AddError('ClientRead - Socket type is not TGeomerSocket');
-      Exit;
-    end;
-
-    action := 'ReadAndParseDataBlock';
-    Sckt := TGeomerSocket(Socket);
-    Sckt.ReadAndParseDataBlock();
-
-    if FClosingInProcess then Exit;
-
-    // обновим время, кому оно надо
-    action := 'SendCurrentTime';
-    Sckt.SendCurrentTime();
-  except
-    on e: Exception do
-      ProgramLog().AddException('ClientRead - ' + action + ': ' + e.Message);
-  end;
-end;
-
-procedure TGMIOPService.ssGeomerGetSocket(Sender: TObject; Socket: NativeInt; var ClientSocket: TServerClientWinSocket);
-begin
-  if FClosingInProcess then Exit;
-
-  try
-    ClientSocket := TGeomerSocket.Create(Socket, Sender as TServerWinSocket, glvBuffer);
-  except
-    on e: Exception do
-      ProgramLog.AddException('GetSocket - ' + e.Message);
-  end;
-end;
-
-procedure TGMIOPService.ssGeomerGetThread(Sender: TObject; ClientSocket: TServerClientWinSocket; var SocketThread: TServerClientThread);
-begin
-  SocketThread := TGMSocketThread.Create(false, ClientSocket);
 end;
 
 procedure TGMIOPService.ProcessK105Autorization(bufs: TTwoBuffers; ABinding: TIdSocketHandle);
@@ -790,11 +701,6 @@ begin
   else
   if Tecon_CheckPrmReply(bufs.BufRec, bufs.NumberOfBytesRead) then
     ProcessTeconReply(bufs, ABinding);
-end;
-
-procedure TGMIOPService.ssGeomerClientConnect(Sender: TObject; Socket: TCustomWinSocket);
-begin
-  Socket.OnErrorEvent := ssGeomerClientError;
 end;
 
 { TSvcMessageHandleThread }

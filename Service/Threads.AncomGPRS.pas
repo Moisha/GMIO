@@ -39,14 +39,15 @@ end;
 { TRequestAncomGPRS }
 
 function TRequestAncomGPRS.ConfigurePort(ri: TSpecDevReqListItem): bool;
-var Sckt: TGeomerSocket;
+var
+  Sckt: TGeomerSocket;
 begin
   Sckt := lstSockets.SocketByIdObj(ID_Obj);
   if Sckt = nil then
     Exit(false);
 
   Result := inherited;
-  TConnectionObjectTCP_IncomingSocket(ConnectionObject).Socket := Sckt;
+  TConnectionObjectTCP_IncomingSocket(ConnectionObject).Socket := Sckt.Socket;
   if Sckt <> nil then
     ConnectionObject.LogPrefix := 'Ancom_' + IntToStr(Sckt.N_Car)
   else

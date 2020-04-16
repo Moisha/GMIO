@@ -6,7 +6,7 @@ unit GMGlobals;
 interface
 uses SysUtils, Windows, StrUtils, Forms, IniFiles, DateUtils, Math, StdCtrls, Messages, Types, EsLogging,
      CheckLst, Classes, ComCtrls, Graphics, GMConst, Variants, zlib, cxDropDownEdit, cxTextEdit,
-     Controls, AnsiStrings, IdGlobal, SvcMgr, cxListBox;
+     Controls, AnsiStrings, IdGlobal, SvcMgr, cxListBox, WinSock, blcksock;
 
 type int = integer;
      SetOfInt = set of byte;
@@ -292,9 +292,16 @@ type
     destructor Destroy; override;
   end;
 
-  const
-    SQLConst_SelectRemotePrmId =
-      '(select ID_Prm from DeviceSystem where RemoteName = %s and PrmRemoteID = %d)';
+
+  TBlockSocketHelper = class helper for TBlockSocket
+  public
+    function IsWaitDataSocketError(): bool;
+  end;
+
+const
+  SQLConst_SelectRemotePrmId =
+    '(select ID_Prm from DeviceSystem where RemoteName = %s and PrmRemoteID = %d)';
+
 var TimeZone: int;
     iNoRefreshAlarm: LongWORD;
     iDiagramHrs: WORD;
@@ -1823,6 +1830,13 @@ end;
 function TSmartPointer<T>.Invoke: T;
 begin
   Result := FValue;
+end;
+
+{ TBlockSocketHelper }
+
+function TBlockSocketHelper.IsWaitDataSocketError: bool;
+begin
+  Result := (LastError = 0) or (LastError = WSAETIMEDOUT);
 end;
 
 initialization

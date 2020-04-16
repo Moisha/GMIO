@@ -2,25 +2,31 @@ unit Threads.TcpServer;
 
 interface
 
-uses Windows, Classes, SysUtils, Threads.Base, blcksock, WinSock, GMGlobals;
+uses Windows, Classes, SysUtils, Threads.Base, blcksock, WinSock, GMGlobals, GMSocket, GeomerLastValue;
 
 type
   TGMTCPServerDaemon = class(TGMThread)
   private
     FPort: int;
     FServerSocket: TTCPBlockSocket;
-  public
-    constructor Create(port: int);
-    destructor Destroy; override;
+    FGlvBuffer: TGeomerLastValuesBuffer;
+  protected
     procedure SafeExecute; override;
+  public
+    constructor Create(port: int; glvBuffer: TGeomerLastValuesBuffer);
+    destructor Destroy; override;
+    function Listen(): bool;
   end;
 
   TGMTCPServerThread = class(TGMThread)
   private
-    FClientSocket: TSocket;
-  public
-    constructor Create(clientSocket: TSocket);
+    FClientSocket: TTCPBlockSocket;
+    FGMSocket: TGeomerSocket;
+  protected
     procedure SafeExecute; override;
+  public
+    constructor Create(clientSocket: TSocket; glvBuffer: TGeomerLastValuesBuffer);
+    destructor Destroy; override;
   end;
 
 implementation
@@ -30,12 +36,13 @@ uses
 
 { TGMTCPServerDaemon }
 
-constructor TGMTCPServerDaemon.Create(port: int);
+constructor TGMTCPServerDaemon.Create(port: int; glvBuffer: TGeomerLastValuesBuffer);
 begin
-  inherited Create(false);
-  FPort := port;
-  FServerSocket := TTCPBlockSocket.Create;
+  inherited Create(true);
   FreeOnTerminate := true;
+  FPort := port;
+  FGlvBuffer := glvBuffer;
+  FServerSocket := TTCPBlockSocket.Create;
 end;
 
 destructor TGMTCPServerDaemon.Destroy;
@@ -43,22 +50,41 @@ begin
   FServerSocket.Free();
 end;
 
+function TGMTCPServerDaemon.Listen: bool;
+begin
+  if FServerSocket.Socket <> INVALID_SOCKET then
+    Exit(true);
+
+  DefaultLogger.Info('Start on port  %d', [FPort]);
+  FServerSocket.CreateSocket();
+  if FServerSocket.LastError = 0 then
+  begin
+    FServerSocket.Bind('0.0.0.0', IntToStr(FPort));
+    if FServerSocket.LastError = 0 then
+      FServerSocket.Listen();
+  end;
+
+  Result := FServerSocket.LastError = 0;
+  if Result then
+  begin
+    DefaultLogger.Info('Listen on port  %d', [FPort]);
+    Start();
+  end
+  else
+    DefaultLogger.Error('Failed Listen on port  %d - %s', [FPort, FServerSocket.LastErrorDesc]);
+end;
+
 procedure TGMTCPServerDaemon.SafeExecute;
 var
   clientSocket: TSocket;
 begin
-  DefaultLogger.Info('Start on port  %d', [FPort]);
-  FServerSocket.CreateSocket();
-  FServerSocket.Bind('0.0.0.0', IntToStr(FPort));
-  FServerSocket.Listen();
-  DefaultLogger.Info('Listen on port  %d', [FPort]);
   while not Terminated do
   begin
     if FServerSocket.CanRead(1000) then
     begin
       clientSocket := FServerSocket.Accept();
       if FServerSocket.LastError = 0 then
-        TGMTCPServerThread.Create(clientSocket)
+        TGMTCPServerThread.Create(clientSocket, FGlvBuffer)
       else
         DefaultLogger.Error(FServerSocket.LastErrorDesc);
     end
@@ -73,35 +99,32 @@ end;
 
 { TGMTCPServerThread }
 
-constructor TGMTCPServerThread.Create(clientSocket: TSocket);
+constructor TGMTCPServerThread.Create(clientSocket: TSocket; glvBuffer: TGeomerLastValuesBuffer);
 begin
   inherited Create(false);
-  FClientSocket := clientSocket;
+  FClientSocket := TTCPBlockSocket.Create;
+  FClientSocket.Socket := clientSocket;
+  FGMSocket := TGeomerSocket.Create(FClientSocket, glvBuffer);
   FreeOnTerminate := true;
 end;
 
-procedure TGMTCPServerThread.SafeExecute;
-var
-  socket: TTCPBlockSocket;
-  s: string;
+destructor TGMTCPServerThread.Destroy;
 begin
-  socket := TTCPBlockSocket.Create;
-  try
-    socket.Socket := FClientSocket;
-    socket.GetSins();
-    while not Terminated do
-    begin
-      s := socket.RecvPacket(60000);
-      if socket.LastError <> 0 then
-        break;
+  FGMSocket.Free();
+  FClientSocket.Free();
 
-      socket.SendString(s);
+  inherited;
+end;
 
-      if socket.LastError <> 0 then
-        break;
-    end;
-  finally
-    socket.Free;
+procedure TGMTCPServerThread.SafeExecute;
+begin
+  FClientSocket.GetSins();
+  while not Terminated do
+  begin
+    FGMSocket.ReadAndParseDataBlock();
+
+    if FGMSocket.SendCurrentTime() <> 0 then
+      break;
   end;
 end;
 

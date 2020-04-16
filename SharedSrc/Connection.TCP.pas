@@ -2,52 +2,43 @@ unit Connection.TCP;
 
 interface
 
-uses Windows, SysUtils, GMConst, GMGlobals, Connection.Base, ScktComp, StrUtils;
+uses Windows, SysUtils, GMConst, GMGlobals, Connection.Base, StrUtils, blcksock;
 
 type
   TConnectionObjectTCP = class(TConnectionObjectBase)
   private
-    function ReadFromWinSocketStream(wss: TWinSocketStream): TCheckCOMResult;
-    function WaitForData(wss: TWinSocketStream; TimeOutMs: int; FirstByteOnly: bool): TCheckCOMResult;
+    FSocket: TTCPBlockSocket;
+    function ReadFromSocket(): TCheckCOMResult;
   protected
     FLastError: string;
     procedure OpenSocket; virtual;
     procedure HandleException(e: Exception; const source: string);
-    function CreateWinSocketStream(): TWinSocketStream; virtual; abstract;
     function MakeExchange(etAction: TExchangeType): TCheckCOMResult; override;
     function GetLastConnectionError: string; override;
     function ExceptionLogInfo(e: Exception): string; virtual;
   public
+    property Socket: TTCPBlockSocket read FSocket write FSocket;
   end;
 
   TConnectionObjectTCP_IncomingSocket = class (TConnectionObjectTCP)
-  private
-    FSocket: TCustomWinSocket;
   protected
-    function CreateWinSocketStream(): TWinSocketStream; override;
     function ConnectionEquipmentInitialized(): bool; override;
     function LogSignature: string; override;
-  public
-    property Socket: TCustomWinSocket read FSocket write FSocket;
   end;
 
   TConnectionObjectTCP_OwnSocket = class (TConnectionObjectTCP)
   private
-    FSocket: TClientSocket;
-    procedure SetHost(const Value: string);
-    procedure SetPort(const Value: int);
-    procedure ScktError(Sender: TObject; Socket: TCustomWinSocket; ErrorEvent: TErrorEvent; var ErrorCode: Integer);
+    FHost: string;
+    FPort: int;
   protected
     function LogSignature: string; override;
     procedure OpenSocket; override;
-    function CreateWinSocketStream(): TWinSocketStream; override;
     function ExceptionLogInfo(e: Exception): string; override;
   public
     constructor Create(); override;
     destructor Destroy(); override;
-    property Socket: TClientSocket read FSocket;
-    property Host: string write SetHost;
-    property Port: int write SetPort;
+    property Host: string read FHost write FHost;
+    property Port: int read FPort write FPort;
     procedure FreePort; override;
   end;
 
@@ -56,47 +47,6 @@ implementation
 { TConnectionObjectTCP }
 
 uses ProgramLogFile;
-
-function TConnectionObjectTCP.WaitForData(wss: TWinSocketStream; TimeOutMs: int; FirstByteOnly: bool): TCheckCOMResult;
-var t: int64;
-    nRead: int;
-    LocalBuf: array[0..102400] of byte;
-    action: string;
-begin
-  action := '1';
-  t := GetTickCount();
-  Result := ccrEmpty;
-
-  try
-    repeat
-      nRead := 0;
-      action := 'wss.WaitForData';
-      if wss.WaitForData(100) then
-      begin
-        action := 'wss.Read';
-        nRead := wss.Read(LocalBuf, High(LocalBuf));
-      end;
-
-      if nRead > 0 then
-      begin
-        Result := ccrBytes;
-        action := 'WriteBuf';
-        WriteBuf(buffers.BufRec, buffers.NumberOfBytesRead, LocalBuf, nRead);
-        buffers.NumberOfBytesRead := buffers.NumberOfBytesRead + nRead;
-        action := 'CheckGetAllData';
-        if FirstByteOnly or CheckGetAllData() then break;
-
-        if ParentTerminated then break;
-      end;
-    until Abs(GetTickCount() - t) >= TimeOutMs;
-  except
-    on e: Exception do
-    begin
-      HandleException(e, 'ReadFromWinSocketStream.WaitForData.' + action);
-      Result := ccrError;
-    end;
-  end;
-end;
 
 function TConnectionObjectTCP.ExceptionLogInfo(e: Exception): string;
 begin
@@ -110,20 +60,17 @@ begin
   FreePort();
 end;
 
-function TConnectionObjectTCP.ReadFromWinSocketStream(wss: TWinSocketStream): TCheckCOMResult;
+function TConnectionObjectTCP.ReadFromSocket(): TCheckCOMResult;
 begin
   try
-    buffers.NumberOfBytesRead := 0;
-    wss.TimeOut := 200;
-
-    Result := WaitForData(wss, WaitFirst, true);
-    if (Result = ccrBytes) and (buffers.NumberOfBytesRead > 0) then
-    begin
-      while not CheckGetAllData() do // пока не сработает CheckGetAllData или не вычерпаем все
-      begin
-        if WaitForData(wss, WaitNext, false) <> ccrBytes then break;
-      end;
-    end;
+    buffers.NumberOfBytesRead := Socket.RecvBufferEx(@buffers.BufRec, Length(buffers.BufRec), WaitFirst);
+    if buffers.NumberOfBytesRead > 0 then
+      Result := ccrBytes
+    else
+    if Socket.IsWaitDataSocketError() then
+      Result := ccrError
+    else
+      Result := ccrEmpty;
   except
     on e: Exception do
     begin
@@ -144,23 +91,17 @@ begin
 end;
 
 function TConnectionObjectTCP.MakeExchange(etAction: TExchangeType): TCheckCOMResult;
-var wss: TWinSocketStream;
 begin
   Result := ccrError;
   try
     OpenSocket();
-    wss := CreateWinSocketStream();
-    try
-      if etAction in [etSenRec, etSend] then
-        wss.WriteBuffer(buffers.BufSend, buffers.LengthSend);
+    if etAction in [etSenRec, etSend] then
+      Socket.SendBuffer(@buffers.BufSend, buffers.LengthSend);
 
-      if etAction in [etSenRec, etRec] then
-        Result := ReadFromWinSocketStream(wss)
-      else
-        Result := ccrEmpty;
-    finally
-      wss.Free();
-    end;
+    if etAction in [etSenRec, etRec] then
+      Result := ReadFromSocket()
+    else
+      Result := ccrEmpty;
   except
     on e: Exception do
       HandleException(e, 'MakeExchange');
@@ -173,19 +114,7 @@ constructor TConnectionObjectTCP_OwnSocket.Create;
 begin
   inherited Create();
 
-  FSocket := TClientSocket.Create(nil);
-  FSocket.ClientType := ctBlocking;
-  FSocket.OnError := ScktError;
-end;
-
-procedure TConnectionObjectTCP_OwnSocket.ScktError(Sender: TObject; Socket: TCustomWinSocket; ErrorEvent: TErrorEvent; var ErrorCode: Integer);
-begin
-  ErrorCode := 0;
-end;
-
-function TConnectionObjectTCP_OwnSocket.CreateWinSocketStream: TWinSocketStream;
-begin
-  Result := TWinSocketStream.Create(FSocket.Socket, WaitNext);
+  FSocket := TTCPBlockSocket.Create();
 end;
 
 destructor TConnectionObjectTCP_OwnSocket.Destroy;
@@ -197,7 +126,7 @@ end;
 function TConnectionObjectTCP_OwnSocket.ExceptionLogInfo(e: Exception): string;
 begin
   if FSocket <> nil then
-    Result := Format(' (host = %s, port = %d)', [FSocket.Host.QuotedString(), FSocket.Port])
+    Result := Format(' (host = %s, port = %d)', [FHost.QuotedString(), FPort])
   else
     Result := '';
 end;
@@ -206,29 +135,20 @@ procedure TConnectionObjectTCP_OwnSocket.FreePort;
 begin
   inherited FreePort;
 
-  FSocket.Close();
+  FSocket.CloseSocket();
 end;
 
 function TConnectionObjectTCP_OwnSocket.LogSignature: string;
 begin
   Result := IfThen(LogPrefix <> '', LogPrefix, 'TCP');
   if FSocket <> nil then
-    Result := Result + ' ' + FSocket.Host + ' ' + IntToStr(FSocket.Port);
+    Result := Result + ' ' + FHost + ' ' + IntToStr(FPort);
 end;
 
 procedure TConnectionObjectTCP_OwnSocket.OpenSocket;
 begin
-  FSocket.Open();
-end;
-
-procedure TConnectionObjectTCP_OwnSocket.SetHost(const Value: string);
-begin
-  FSocket.Host := Value;
-end;
-
-procedure TConnectionObjectTCP_OwnSocket.SetPort(const Value: int);
-begin
-  FSocket.Port := Value;
+  inherited;
+  FSocket.Connect(FHost, IntToStr(FPort));
 end;
 
 { TConnectionObjectTCP_ExternalSocket }
@@ -241,11 +161,6 @@ end;
 function TConnectionObjectTCP_IncomingSocket.LogSignature: string;
 begin
   Result := IfThen(LogPrefix <> '', LogPrefix, 'TCP Incoming');
-end;
-
-function TConnectionObjectTCP_IncomingSocket.CreateWinSocketStream: TWinSocketStream;
-begin
-  Result := TWinSocketStream.Create(FSocket, WaitNext);
 end;
 
 end.

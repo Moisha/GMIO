@@ -8,7 +8,7 @@ interface
 
 uses Windows, SysUtils, ScktComp, GMGlobals, Winsock, Classes, RecordsForRmSrv, Math,
   GMSqlQuery, GMConst, zlib, StrUtils, StdRequest, StdResponce, ConnParamsStorage,
-  GeomerLastValue, GMGenerics, GM485, Generics.Collections, RequestList, Threads.SQLExecuter;
+  GeomerLastValue, GMGenerics, GM485, Generics.Collections, RequestList, Threads.SQLExecuter, blcksock;
 
 type
   TGeomerSocketSQLExecuteThread = class(TSQLExecuteThread)
@@ -23,7 +23,7 @@ type
     procedure AddResponceXml(const xml: string);
   end;
 
-  TGeomerSocket = class(TServerClientWinSocket)
+  TGeomerSocket = class
   private
     FLastReadUTime: int64;
     RmSrvRec: TRemoteSrvRecords;
@@ -42,6 +42,7 @@ type
     FLastBackGroundUTime: int64;
     lst485IDs: array [0 .. 255] of TRequestDetails;
     FRemoteId: string;
+    FSocket: TTCPBlockSocket;
     procedure RemoteServerReport(var bufs: TTwoBuffers);
     procedure ProcessRemoteServerReport(report: IXMLGMIOResponceType);
     function RequestUniversal_SimpleResponce(req: IXMLGMIORequestType): IXMLGMIOResponceType;
@@ -74,7 +75,7 @@ type
     procedure LoadCommands;
     property ReqList: TRequestCollection read FReqList;
     property ExecSQLThread: TGeomerSocketSQLExecuteThread read FExecSQLThread;
-    procedure GMSendText(const s: string); virtual;
+    function GMSendText(const s: string): int; virtual;
     procedure SetNCar(const Value: int); virtual;
     procedure BuildReqList; virtual;
     function DecodeGMDataBlock(buf: array of byte; cnt: int): int; virtual;
@@ -85,23 +86,23 @@ type
     arrDI: array [0 .. 15] of bool; // нужные DI
     arrAI: array [0 .. 15] of bool; // нужные AI
 
-    constructor Create(Socket: TSocket; ServerWinSocket: TServerWinSocket; AglvBuffer: TGeomerLastValuesBuffer);
+    constructor Create(ASocket: TTCPBlockSocket; AglvBuffer: TGeomerLastValuesBuffer);
     destructor Destroy; override;
 
     property LastReadUTime: int64 read FLastReadUTime;
     property SocketObjectType: int read FSocketObjectType;
     property N_Car: int read FNCar write SetNCar;
     property RemoteId: string read FRemoteId;
+    property Socket: TTCPBlockSocket read FSocket;
 
     procedure BackgroundWork();
 
     procedure AnalyzeClientRequest(var bufs: TTwoBuffers);
     procedure ReadAndParseDataBlock;
 
-    procedure Disconnect(Socket: TSocket); override;
     function ToString: string; override;
 
-    procedure SendCurrentTime();
+    function SendCurrentTime(): int;
     procedure RequestInfo0(count: int);
     procedure AddRequest(ReqDetails: TRequestDetails);
     procedure Geomer_SetOutputChannel(N_Src: int; fVal: double; TimeHold: UINT);
@@ -275,9 +276,10 @@ begin
   bufs.XmlToBufSend(res);
 end;
 
-procedure TGeomerSocket.GMSendText(const s: string);
+function TGeomerSocket.GMSendText(const s: string): int;
 begin
-  SendText(AnsiString(s));
+  Socket.SendString(AnsiString(s));
+  Result := Socket.LastError;
 end;
 
 procedure TGeomerSocket.AddRequest(ReqDetails: TRequestDetails);
@@ -756,7 +758,7 @@ begin
   end;
 
   ProgramLog.AddExchangeBuf('Geomer_' + IntToStr(N_Car), COM_LOG_OUT, buf, nPos);
-  SendBuf(buf, nPos);
+  Socket.SendBuffer(@buf, nPos);
 end;
 
 procedure TGeomerSocket.IncLast485ID();
@@ -829,13 +831,11 @@ begin
   end;
 end;
 
-constructor TGeomerSocket.Create(Socket: TSocket; ServerWinSocket: TServerWinSocket;
-  AglvBuffer: TGeomerLastValuesBuffer);
+constructor TGeomerSocket.Create(ASocket: TTCPBlockSocket; AglvBuffer: TGeomerLastValuesBuffer);
 var
   i: int;
 begin
-  inherited Create(Socket, ServerWinSocket);
-
+  FSocket := ASocket;
   N_Car := -1;
   FLastTimeUpdate := 0;
   FSocketObjectType := OBJ_TYPE_UNKNOWN;
@@ -892,7 +892,7 @@ begin
   for i := 1 to Length(AncomServerID) do
     BufSend[i - 1] := ord(AncomServerID[i]);
 
-  SendBuf(BufSend, 20);
+  Socket.SendBuffer(@BufSend, 20);
 end;
 
 function TGeomerSocket.CheckGMWithUBZBlock(buf: array of byte; cnt: int; var blockCnt: int): bool;
@@ -1002,7 +1002,7 @@ begin
         try
           ProgramLog.AddMessage('DecodeGMDataBlock - AnalyzeClientRequest - SendBuf Len = ' +
             IntToStr(bufs.LengthSend));
-          SendBuf(bufs.BufSend, bufs.LengthSend);
+          Socket.SendBuffer(@bufs.BufSend, bufs.LengthSend);
         except
           on e: Exception do
             ProgramLog.AddException('DecodeGMDataBlock - SendBuf: ' + e.Message);
@@ -1071,7 +1071,7 @@ begin
     action := 'CreateConn';
     conn := TConnectionObjectTCP_IncomingSocket.Create();
     try
-      conn.Socket := Self;
+      conn.Socket := Socket;
       // таймауты ставим поменьше, у нас вся посылка скорее всего в буфере
       conn.WaitFirst := 10;
       conn.WaitNext := 10;
@@ -1099,36 +1099,26 @@ end;
 destructor TGeomerSocket.Destroy;
 begin
   ProgramLog().AddMessage(ToString() + ' Destroy');
-  TryFreeAndNil(FAncomThread);
-  TryFreeAndNil(FExecSQLThread);
-  TryFreeAndNil(FReqList);
+  FreeAndNil(FAncomThread);
+  FreeAndNil(FExecSQLThread);
+  FreeAndNil(FReqList);
+  FreeAndNil(RmSrvRec);
 
   inherited Destroy;
   ProgramLog().AddMessage(ToString() + ' Destroy done');
 end;
 
-procedure TGeomerSocket.Disconnect(Socket: TSocket);
-begin
-  ProgramLog().AddMessage(ToString() + ' Disconnect');
-  try
-    inherited Disconnect(Socket);
-    ProgramLog().AddMessage(ToString() + ' Disconnect done');
-  except
-    on e: Exception do
-      ProgramLog().AddException(ToString() + ' Disconnect error: ' + e.ToString());
-  end;
-end;
-
-procedure TGeomerSocket.SendCurrentTime();
+function TGeomerSocket.SendCurrentTime(): int;
 var
   s: string;
 begin
+  Result := 0;
   // обновим время для Геомеров каждые 12 часов
   if ((FSocketObjectType = OBJ_TYPE_UNKNOWN) or ((FSocketObjectType = OBJ_TYPE_GM) and (N_Car > 0))) and
     (Abs(FLastTimeUpdate - Now()) > 12 * OneHour) then
     try
       s := #13#10'TIME:' + FormatDateTime('ddmmyy,hhnnss', NowUTC()) + #13#10;
-      GMSendText(s);
+      Result := GMSendText(s);
       FLastTimeUpdate := Now();
     except
       on e: Exception do
