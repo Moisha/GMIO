@@ -5,6 +5,8 @@ interface
 uses Windows, Classes, SysUtils, Threads.Base, blcksock, WinSock, GMGlobals, GMSocket, GeomerLastValue;
 
 type
+  TGMTCPServerThread = class;
+
   TGMTCPServerDaemon = class(TGMThread)
   private
     FPort: int;
@@ -12,6 +14,7 @@ type
     FGlvBuffer: TGeomerLastValuesBuffer;
   protected
     procedure SafeExecute; override;
+    function CreateClientSocketThread(clientSocket: TSocket; glvBuffer: TGeomerLastValuesBuffer): TGMTCPServerThread; virtual;
   public
     constructor Create(port: int; glvBuffer: TGeomerLastValuesBuffer);
     destructor Destroy; override;
@@ -24,6 +27,7 @@ type
     FGMSocket: TGeomerSocket;
   protected
     procedure SafeExecute; override;
+    function CreateGMSocket(clientSocket: TTCPBlockSocket; glvBuffer: TGeomerLastValuesBuffer): TGeomerSocket; virtual;
   public
     constructor Create(clientSocket: TSocket; glvBuffer: TGeomerLastValuesBuffer);
     destructor Destroy; override;
@@ -43,6 +47,11 @@ begin
   FPort := port;
   FGlvBuffer := glvBuffer;
   FServerSocket := TTCPBlockSocket.Create;
+end;
+
+function TGMTCPServerDaemon.CreateClientSocketThread(clientSocket: TSocket; glvBuffer: TGeomerLastValuesBuffer): TGMTCPServerThread;
+begin
+  Result := TGMTCPServerThread.Create(clientSocket, glvBuffer)
 end;
 
 destructor TGMTCPServerDaemon.Destroy;
@@ -84,7 +93,7 @@ begin
     begin
       clientSocket := FServerSocket.Accept();
       if FServerSocket.LastError = 0 then
-        TGMTCPServerThread.Create(clientSocket, FGlvBuffer)
+        CreateClientSocketThread(clientSocket, FGlvBuffer)
       else
         DefaultLogger.Error(FServerSocket.LastErrorDesc);
     end
@@ -99,12 +108,17 @@ end;
 
 { TGMTCPServerThread }
 
+function TGMTCPServerThread.CreateGMSocket(clientSocket: TTCPBlockSocket; glvBuffer: TGeomerLastValuesBuffer): TGeomerSocket;
+begin
+  Result := TGeomerSocket.Create(clientSocket, glvBuffer);
+end;
+
 constructor TGMTCPServerThread.Create(clientSocket: TSocket; glvBuffer: TGeomerLastValuesBuffer);
 begin
   inherited Create(false);
   FClientSocket := TTCPBlockSocket.Create;
   FClientSocket.Socket := clientSocket;
-  FGMSocket := TGeomerSocket.Create(FClientSocket, glvBuffer);
+  FGMSocket := CreateGMSocket(FClientSocket, glvBuffer);
   FreeOnTerminate := true;
 end;
 
