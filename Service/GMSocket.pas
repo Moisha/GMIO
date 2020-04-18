@@ -8,7 +8,7 @@ interface
 
 uses Windows, SysUtils, ScktComp, GMGlobals, Winsock, Classes, RecordsForRmSrv, Math,
   GMSqlQuery, GMConst, zlib, StrUtils, StdRequest, StdResponce, ConnParamsStorage,
-  GeomerLastValue, GMGenerics, GM485, Generics.Collections, RequestList, Threads.SQLExecuter, blcksock;
+  GeomerLastValue, GMGenerics, GM485, Generics.Collections, RequestList, Threads.SQLExecuter, blcksock, Connection.Base;
 
 type
   TGeomerSocketSQLExecuteThread = class(TSQLExecuteThread)
@@ -98,7 +98,7 @@ type
     procedure BackgroundWork();
 
     procedure AnalyzeClientRequest(var bufs: TTwoBuffers);
-    procedure ReadAndParseDataBlock;
+    function ReadAndParseDataBlock: TCheckCOMResult;
 
     function ToString: string; override;
 
@@ -108,21 +108,15 @@ type
     procedure Geomer_SetOutputChannel(N_Src: int; fVal: double; TimeHold: UINT);
   end;
 
-  TSocketList = class
+  TSocketList = class(TList<TGeomerSocket>)
   private
     FSynch: TMultiReadExclusiveWriteSynchronizer;
-    FSocket: TServerWinSocket;
-  protected
-    function GetSocket(i: int): TGeomerSocket; virtual;
-    function GetCout: int; virtual;
   public
-    constructor Create(ASocket: TServerWinSocket);
+    constructor Create();
     destructor Destroy(); override;
-    property Sockets[i: int]: TGeomerSocket read GetSocket; default;
     function SocketByIdObj(ID_Obj: int): TGeomerSocket;
     function SocketByNCar(N_Car, ObjType: int): TGeomerSocket;
     procedure CheckSocketOldNCars(Sckt: TGeomerSocket);
-    property Count: int read GetCout;
   end;
 
 var
@@ -132,7 +126,7 @@ implementation
 
 uses Devices.UBZ, DB, Devices.Vacon, HTTPApp, XMLDoc, GMBlockValues,
   Devices.Ancom, Threads.AncomGPRS, ProgramLogFile, ClientResponce, UsefulQueries, Devices.TR101, Threads.Base,
-  Threads.ReqSpecDevTemplate, DateUtils, Connection.TCP, Connection.Base, RequestThreadsContainer, Winapi.ActiveX,
+  Threads.ReqSpecDevTemplate, DateUtils, Connection.TCP, RequestThreadsContainer, Winapi.ActiveX,
   System.NetEncoding, EsLogging;
 
 { TGeomerSocket }
@@ -857,6 +851,7 @@ begin
   glvBuffer := AglvBuffer;
   FExecSQLThread := nil;
   FLastReadUTime := NowGM();
+  lstSockets.Add(self);
 end;
 
 function TGeomerSocket.ProcessAncomID(buf: array of byte; cnt: int): bool;
@@ -1059,7 +1054,7 @@ begin
   FLastReadUTime := NowGM();
 end;
 
-procedure TGeomerSocket.ReadAndParseDataBlock();
+function TGeomerSocket.ReadAndParseDataBlock(): TCheckCOMResult;
 var
   cnt: int;
   buf: ArrayOfByte;
@@ -1076,7 +1071,8 @@ begin
       conn.WaitFirst := 10;
       conn.WaitNext := 10;
       action := 'ExchangeBlockData';
-      if conn.ExchangeBlockData(etRec) <> ccrBytes then
+      Result := conn.ExchangeBlockData(etRec);
+      if Result <> ccrBytes then
         Exit;
 
       UpdateLastReadTime();
@@ -1099,6 +1095,7 @@ end;
 destructor TGeomerSocket.Destroy;
 begin
   ProgramLog().AddMessage(ToString() + ' Destroy');
+  lstSockets.Remove(self);
   FreeAndNil(FAncomThread);
   FreeAndNil(FExecSQLThread);
   FreeAndNil(FReqList);
@@ -1157,23 +1154,24 @@ begin
     Exit;
 
   FSynch.BeginWrite();
-  for i := Count - 1 downto 0 do
-  begin
-    if (Sockets[i] <> Sckt) and (Sockets[i].N_Car = Sckt.N_Car) and (Sockets[i].SocketObjectType = Sckt.SocketObjectType)
-    then
+  try
+    for i := Count - 1 downto 0 do
     begin
-      Sockets[i].Free();
+      if (Items[i] <> Sckt) and (Items[i].N_Car = Sckt.N_Car) and (Items[i].SocketObjectType = Sckt.SocketObjectType) then
+      begin
+        Items[i].Free();
+        Delete(i);
+      end;
     end;
+  finally
+    FSynch.EndWrite();
   end;
-  FSynch.EndWrite();
 end;
 
-constructor TSocketList.Create(ASocket: TServerWinSocket);
+constructor TSocketList.Create();
 begin
   inherited Create();
-
   FSynch := TMultiReadExclusiveWriteSynchronizer.Create();
-  FSocket := ASocket;
 end;
 
 destructor TSocketList.Destroy;
@@ -1181,16 +1179,6 @@ begin
   FSynch.Free();
 
   inherited;
-end;
-
-function TSocketList.GetCout: int;
-begin
-  Result := FSocket.ActiveConnections;
-end;
-
-function TSocketList.GetSocket(i: int): TGeomerSocket;
-begin
-  Result := TGeomerSocket(FSocket.Connections[i]);
 end;
 
 function TSocketList.SocketByIdObj(ID_Obj: int): TGeomerSocket;
@@ -1217,9 +1205,9 @@ begin
   try
     for i := Count - 1 downto 0 do
     begin
-      if (Sockets[i].N_Car = N_Car) and (Sockets[i].SocketObjectType = ObjType) then
+      if (Items[i].N_Car = N_Car) and (Items[i].SocketObjectType = ObjType) then
       begin
-        Result := Sockets[i];
+        Result := Items[i];
         break;
       end;
     end;

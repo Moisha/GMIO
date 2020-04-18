@@ -32,7 +32,7 @@ type
 implementation
 
 uses
-  EsLogging;
+  EsLogging, Connection.Base;
 
 { TGMTCPServerDaemon }
 
@@ -117,13 +117,25 @@ begin
 end;
 
 procedure TGMTCPServerThread.SafeExecute;
+var
+  bData: bool;
+  startTime: UInt64;
+  res: TCheckCOMResult;
 begin
+  bData := false;
   FClientSocket.GetSins();
+  startTime := GetTickCount64();
   while not Terminated do
   begin
-    FGMSocket.ReadAndParseDataBlock();
+    res := FGMSocket.ReadAndParseDataBlock();
+    case res of
+      ccrBytes:
+        bData := true;
+      ccrError:
+        break;
+    end;
 
-    if FGMSocket.SendCurrentTime() <> 0 then
+    if not bData and (GetTickCount64() - startTime >= 5000) and (FGMSocket.SendCurrentTime() <> 0) then
       break;
   end;
 end;

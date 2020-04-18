@@ -1836,7 +1836,7 @@ end;
 
 function TBlockSocketHelper.IsWaitDataSocketError: bool;
 begin
-  Result := (LastError = 0) or (LastError = WSAETIMEDOUT);
+  Result := (LastError <> 0) and (LastError <> WSAETIMEDOUT);
 end;
 
 initialization

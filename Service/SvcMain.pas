@@ -550,7 +550,7 @@ begin
 
   glvBuffer := TGeomerLastValuesBuffer.Create();
 
-  lstSockets := TSocketList.Create({ssGeomer.Socket !!!!!!}nil);
+  lstSockets := TSocketList.Create();
   FUDPBindingsAndThreads := TUDPBindingsAndThreads.Create(udpSrv);
 end;
 
