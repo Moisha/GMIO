@@ -6,7 +6,7 @@ unit GMGlobals;
 interface
 uses SysUtils, Windows, StrUtils, Forms, IniFiles, DateUtils, Math, StdCtrls, Messages, Types, EsLogging,
      CheckLst, Classes, ComCtrls, Graphics, GMConst, Variants, zlib, cxDropDownEdit, cxTextEdit,
-     Controls, AnsiStrings, IdGlobal, SvcMgr, cxListBox, WinSock, blcksock;
+     Controls, AnsiStrings, IdGlobal, SvcMgr, cxListBox;
 
 type int = integer;
      SetOfInt = set of byte;
@@ -290,12 +290,6 @@ type
     constructor Create; overload;
     constructor Create(AValue: T); overload;
     destructor Destroy; override;
-  end;
-
-
-  TBlockSocketHelper = class helper for TBlockSocket
-  public
-    function IsWaitDataSocketError(): bool;
   end;
 
 const
@@ -1830,13 +1824,6 @@ end;
 function TSmartPointer<T>.Invoke: T;
 begin
   Result := FValue;
-end;
-
-{ TBlockSocketHelper }
-
-function TBlockSocketHelper.IsWaitDataSocketError: bool;
-begin
-  Result := (LastError <> 0) and (LastError <> WSAETIMEDOUT);
 end;
 
 initialization

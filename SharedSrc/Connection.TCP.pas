@@ -42,11 +42,16 @@ type
     procedure FreePort; override;
   end;
 
+  TBlockSocketHelper = class helper for TBlockSocket
+  public
+    function IsWaitDataSocketError(): bool;
+  end;
+
 implementation
 
 { TConnectionObjectTCP }
 
-uses ProgramLogFile;
+uses ProgramLogFile, Winapi.WinSock;
 
 function TConnectionObjectTCP.ExceptionLogInfo(e: Exception): string;
 begin
@@ -161,6 +166,13 @@ end;
 function TConnectionObjectTCP_IncomingSocket.LogSignature: string;
 begin
   Result := IfThen(LogPrefix <> '', LogPrefix, 'TCP Incoming');
+end;
+
+{ TBlockSocketHelper }
+
+function TBlockSocketHelper.IsWaitDataSocketError: bool;
+begin
+  Result := (LastError <> 0) and (LastError <> WSAETIMEDOUT);
 end;
 
 end.
