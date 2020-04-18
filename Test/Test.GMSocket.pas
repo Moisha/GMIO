@@ -19,14 +19,8 @@ type
   end;
 
   TSocketListForTest = class(TSocketList)
-  private
-    FList: TObjectList<TGeomerSocketForTest>;
-  protected
-    function GetSocket(i: int): TGeomerSocket; override;
-    function GetCout: int; override;
   public
-    constructor Create(ASocket: TServerWinSocket);
-    destructor Destroy(); override;
+    destructor Destroy; override;
   end;
 
   TDataOrderForTest = class(TDataOrder)
@@ -322,31 +316,37 @@ begin
 end;
 
 procedure TGMSocketTest.SetUp;
+var
+  s: TGeomerSocketForTest;
 begin
   inherited SetUp;
+
+  lstSockets := TSocketListForTest.Create();
+  s := TGeomerSocketForTest.Create(nil, glvBuffer);
+  s.SetSocketObjectType(OBJ_TYPE_GM);
+  s.N_Car := 100;
+  s := TGeomerSocketForTest.Create(nil, glvBuffer);
+  s.SetSocketObjectType(OBJ_TYPE_GM);
+  s.N_Car := 300;
 
   FSocket := TGeomerSocketForTest.Create(nil, glvBuffer);
   FOrder := TDataOrderForTest.Create();
   FRequestList := TList<TRequestDetails>.Create();
   ThreadsContainer := TRequestThreadsContainerForTest.Create();
 
-  lstSockets := TSocketListForTest.Create(nil);
-  TSocketListForTest(lstSockets).FList.Add(TGeomerSocketForTest.Create(nil, glvBuffer));
-  TGeomerSocketForTest(lstSockets[0]).SetSocketObjectType(OBJ_TYPE_GM);
-  lstSockets[0].N_Car := 100;
-  TSocketListForTest(lstSockets).FList.Add(TGeomerSocketForTest.Create(nil, glvBuffer));
-  TGeomerSocketForTest(lstSockets[1]).SetSocketObjectType(OBJ_TYPE_GM);
-  lstSockets[1].N_Car := 300;
-
   ExecSQL('delete from Commands');
 end;
 
 procedure TGMSocketTest.TearDown;
+var
+  i: int;
 begin
   inherited;
 
+  for i := lstSockets.Count - 1 downto 0 do
+    lstSockets.Items[i].Free();
+
   FreeAndNil(lstSockets);
-  FSocket.Free();
   FOrder.Free();
   FRequestList.Free();
   ThreadsContainer.Free();
@@ -504,7 +504,6 @@ end;
 destructor TGeomerSocketForTest.Destroy;
 begin
   FCommands.Free();
-  Socket.Free();
   inherited;
 end;
 
@@ -517,30 +516,6 @@ end;
 procedure TGeomerSocketForTest.SetSocketObjectType(objType: int);
 begin
   FSocketObjectType := objType;
-end;
-
-{ TSocketListForTest }
-
-constructor TSocketListForTest.Create(ASocket: TServerWinSocket);
-begin
-  inherited;
-  FList := TObjectList<TGeomerSocketForTest>.Create(true);
-end;
-
-destructor TSocketListForTest.Destroy;
-begin
-  FList.Free();
-  inherited;
-end;
-
-function TSocketListForTest.GetCout: int;
-begin
-  Result := FList.Count;
-end;
-
-function TSocketListForTest.GetSocket(i: int): TGeomerSocket;
-begin
-  Result := FList[i];
 end;
 
 { TGMRemoteSrvDataThreadXmlForTest }
@@ -605,6 +580,18 @@ begin
   buffers.BufRec := bufs.BufSend;
 
   Result := ccrBytes;
+end;
+
+{ TSocketListForTest }
+
+destructor TSocketListForTest.Destroy;
+var
+   i: int;
+begin
+  for i := Count - 1 downto 0 do
+    Items[i].Free();
+
+  inherited;
 end;
 
 initialization

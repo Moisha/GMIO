@@ -30,7 +30,7 @@ type
 implementation
 
 uses
-  IdGlobal;
+  IdGlobal, System.SysUtils;
 
 { TGMHangingThread }
 
@@ -61,7 +61,7 @@ procedure TGMThreadTest.GoodThreadPool;
 var
   pool: TGMThreadPool<TGMThread>;
   i: int;
-  t: uint64;
+  timeStart, t: uint64;
 begin
   pool := TGMThreadPool<TGMThread>.Create();
   pool.Add(TGMFinishedThread.Create());
@@ -70,9 +70,10 @@ begin
   for i := 0 to 100 do
     pool.Add(TGMGoodThread.Create());
 
-  t := GetTickCount64();
+  timeStart := GetTickCount64();
   pool.Free();
-  Check(GetTickCount64() - t < 2000);
+  t := GetTickCount64() - timeStart;
+  Check(t < 2000, IntToStr(t) + ' must be 2000 or less');
 end;
 
 procedure TGMThreadTest.Hanging;
@@ -91,7 +92,7 @@ procedure TGMThreadTest.HangingPool;
 var
   pool: TGMThreadPool<TGMThread>;
   i: int;
-  t, t1: int64;
+  t, t1, dt: int64;
 begin
   pool := TGMThreadPool<TGMThread>.Create();
   pool.Add(TGMFinishedThread.Create());
@@ -104,7 +105,8 @@ begin
   t := GetTickCount64();
   pool.Free();
   t1 := GetTickCount64();
-  Check(t1 - t >= 1000);
+  dt := t1 - t;
+  Check(dt < 1000, IntTostr(dt) + ' must be 1000 or less');
 end;
 
 initialization
