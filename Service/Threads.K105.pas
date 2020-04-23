@@ -120,7 +120,7 @@ begin
     n := GetEmptyID();
     if n < 0 then
     begin
-      Sleep(100);
+      SleepThread(100);
       CheckReplyList();
     end;
   until n >= 0;
@@ -151,7 +151,7 @@ begin
       ProgramLog.AddException('TConnectionObjectK105.ExchangeBlockData ' + e.Message);
   end;
 
-  Sleep(200);
+  SleepThread(200);
 end;
 
 procedure TRequestK105Devices.BeforeDestruction;

@@ -2,24 +2,27 @@ unit Threads.Base;
 
 interface
 
-uses Windows, Classes, SysUtils, GMGlobals, Math, Generics.Collections;
+uses Windows, Classes, SysUtils, GMGlobals, Math, Generics.Collections, SyncObjs;
 
 type
   TGMThread = class(TThread)
   private
     FTag: NativeInt;
     FRestartOnError: bool;
+    FTermEvent: TEvent;
   protected
     procedure SleepThread(TimeoutMs: int);
     procedure SafeExecute(); virtual; abstract;
     procedure Execute(); override;
     function GetTerminated: bool;
     function GetDescription: string; virtual;
+    procedure TerminatedSet; override;
   public
     property Description: string read GetDescription;
     property Tag: NativeInt read FTag write FTag;
     property RestartOnError: bool read FRestartOnError write FRestartOnError;
     function WaitForTimeout(TimeOut: int; KillUnterminated: bool = true): int; virtual;
+    constructor Create(createSuspended: bool = false);
     destructor Destroy; override;
   end;
 
@@ -41,9 +44,17 @@ uses ProgramLogFile, GMConst{$ifdef SQL_APP}, GMSqlQuery{$endif}, EsLogging;
 
 { TGMThread }
 
+constructor TGMThread.Create(createSuspended: bool);
+begin
+  inherited Create(createSuspended);
+  FTermEvent := TEvent.Create(nil, True, False, '');
+end;
+
 destructor TGMThread.Destroy;
 begin
   inherited;
+  //inherited calls TerminatedSet where FTermEvent should not be freed yet
+  FTermEvent.Free();
 {$ifdef SQL_APP}
   DropThreadConnection(ThreadID);
 {$endif}
@@ -72,6 +83,11 @@ begin
   until Terminated or done or (error and not FRestartOnError);
 end;
 
+procedure TGMThread.TerminatedSet;
+begin
+  FTermEvent.SetEvent;
+end;
+
 function TGMThread.GetDescription: string;
 begin
   Result := ClassName();
@@ -87,7 +103,7 @@ begin
   if TimeoutMs <= 0 then
     Exit;
 
-  WaitForSingleObject(Handle, TimeoutMs);
+  FTermEvent.WaitFor(TimeoutMs);
 end;
 
 function TGMThread.WaitForTimeout(TimeOut: int; KillUnterminated: bool = true): int;

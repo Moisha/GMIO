@@ -112,7 +112,7 @@ begin
       Exit;
     end;
 
-    Sleep(10);
+    SleepThread(10);
   end;
 end;
 
@@ -195,7 +195,7 @@ begin
     if not bData and not SendInitialCurrentTime() then
       break;
 
-    Sleep(0);
+    SleepThread(10);
   end;
 end;
 

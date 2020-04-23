@@ -86,7 +86,7 @@ begin
       if Terminated then Exit;
     end;
 
-    Sleep(2000);
+    SleepThread(2000);
   end;
 end;
 
