@@ -19,7 +19,6 @@ uses
   GMBlockValues in 'GMBlockValues.pas',
   Threads.GMCOM in 'Threads.GMCOM.pas',
   Threads.GMK104 in 'Threads.GMK104.pas',
-  Threads.GMSocket in 'Threads.GMSocket.pas',
   Threads.K105 in 'Threads.K105.pas',
   RecordsForRmSrv in 'RecordsForRmSrv.pas',
   Threads.ReqSpecDevTemplate in 'Threads.ReqSpecDevTemplate.pas',

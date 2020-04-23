@@ -2,7 +2,7 @@ unit Connection.TCP;
 
 interface
 
-uses Windows, SysUtils, GMConst, GMGlobals, Connection.Base, StrUtils, blcksock;
+uses Windows, SysUtils, GMConst, GMGlobals, Connection.Base, StrUtils, blcksock, System.Classes;
 
 type
   TConnectionObjectTCP = class(TConnectionObjectBase)
@@ -51,7 +51,7 @@ implementation
 
 { TConnectionObjectTCP }
 
-uses ProgramLogFile, Winapi.WinSock;
+uses ProgramLogFile, Winapi.WinSock, synautil;
 
 function TConnectionObjectTCP.ExceptionLogInfo(e: Exception): string;
 begin
@@ -66,20 +66,50 @@ begin
 end;
 
 function TConnectionObjectTCP.ReadFromSocket(): TCheckCOMResult;
+var
+  s: AnsiString;
+  ms: ISmartPointer<TMemoryStream>;
 begin
   try
-    buffers.NumberOfBytesRead := Socket.RecvBufferEx(@buffers.BufRec, Length(buffers.BufRec), WaitFirst);
-    if buffers.NumberOfBytesRead > 0 then
-      Result := ccrBytes
-    else
-    if Socket.IsWaitDataSocketError() then
-      Result := ccrError
-    else
-      Result := ccrEmpty;
+    buffers.NumberOfBytesRead := 0;
+    ms := TSmartPointer<TMemoryStream>.Create();
+
+    s := Socket.RecvPacket(WaitFirst);
+    case Socket.LastError of
+      0:
+        begin
+          WriteStrToStream(ms, s);
+          Result := ccrBytes;
+        end;
+      WSAETIMEDOUT:
+        Exit(ccrEmpty);
+      else
+        Exit(ccrError);
+    end;
+
+    if not CheckGetAllData() then
+      while true do
+      begin
+        s := Socket.RecvPacket(WaitNext);
+        if Socket.LastError = 0 then
+        begin
+          WriteStrToStream(ms, s);
+          if CheckGetAllData() then
+            break;
+        end
+        else
+          break;
+
+        Sleep(10);
+      end;
+
+    ms.Seek(0, soFromBeginning);
+    buffers.NumberOfBytesRead := ms.Size;
+    CopyMemory(@buffers.BufRec, ms.Memory, ms.Size);
   except
     on e: Exception do
     begin
-      HandleException(e, 'ReadFromWinSocketStream');
+      HandleException(e, 'ReadFromSocket');
       Result := ccrError;
     end;
   end;

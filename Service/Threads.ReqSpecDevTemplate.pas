@@ -50,6 +50,7 @@ type
     procedure CycleProc();
     procedure DoOneRequest(ri: TSpecDevReqListItem); virtual;
     function ConfigurePort(ri: TSpecDevReqListItem): bool; virtual;
+    procedure FreePort(); virtual;
     property CurrentRequest: TRequestDetails read FCurrentRequest;
     function CheckGetAllData: bool; virtual;
     procedure SafeExecute; override;
@@ -141,6 +142,11 @@ begin
   if FConnectionObject.ExchangeBlockData(etSenRec) = ccrBytes then
     PostGBV(ri.ReqDetails, FConnectionObject.buffers.bufRec, FConnectionObject.buffers.NumberOfBytesRead);
 
+  FreePort();
+end;
+
+procedure TRequestSpecDevices.FreePort();
+begin
   FConnectionObject.FreePort();
 end;
 

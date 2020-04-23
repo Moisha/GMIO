@@ -2,7 +2,7 @@ unit Threads.TcpServer;
 
 interface
 
-uses Windows, Classes, SysUtils, Threads.Base, blcksock, WinSock, GMGlobals, GMSocket, GeomerLastValue;
+uses Windows, Classes, SysUtils, Threads.Base, blcksock, WinSock, GMGlobals, GMSocket, GeomerLastValue, Connection.Base;
 
 type
   TGMTCPServerThread = class;
@@ -25,25 +25,33 @@ type
   private
     FClientSocket: TTCPBlockSocket;
     FGMSocket: TGeomerSocket;
+    FStartTime: UInt64;
+    FInitialSendTimeDelay: int;
+    FInitialCurrentTimeSent: bool;
   protected
+    property GMSocket: TGeomerSocket read FGMSocket;
     procedure SafeExecute; override;
     function CreateGMSocket(clientSocket: TTCPBlockSocket; glvBuffer: TGeomerLastValuesBuffer): TGeomerSocket; virtual;
+    function ReadAndParseDataBlock: TCheckCOMResult; virtual;
+    procedure BackgroundWork; virtual;
+    function SendInitialCurrentTime: bool; virtual;
+    function SocketLocked: bool;
   public
     constructor Create(clientSocket: TSocket; glvBuffer: TGeomerLastValuesBuffer);
     destructor Destroy; override;
+    property InitialSendTimeDelay: int read FInitialSendTimeDelay write FInitialSendTimeDelay;
   end;
 
 implementation
 
 uses
-  EsLogging, Connection.Base;
+  EsLogging;
 
 { TGMTCPServerDaemon }
 
 constructor TGMTCPServerDaemon.Create(port: int; glvBuffer: TGeomerLastValuesBuffer);
 begin
   inherited Create(true);
-  FreeOnTerminate := true;
   FPort := port;
   FGlvBuffer := glvBuffer;
   FServerSocket := TTCPBlockSocket.Create;
@@ -103,6 +111,8 @@ begin
       DefaultLogger.Error(FServerSocket.LastErrorDesc);
       Exit;
     end;
+
+    Sleep(10);
   end;
 end;
 
@@ -119,6 +129,8 @@ begin
   FClientSocket := TTCPBlockSocket.Create;
   FClientSocket.Socket := clientSocket;
   FGMSocket := CreateGMSocket(FClientSocket, glvBuffer);
+  FInitialSendTimeDelay := 5000;
+  FInitialCurrentTimeSent := false;
   FreeOnTerminate := true;
 end;
 
@@ -130,18 +142,48 @@ begin
   inherited;
 end;
 
+function TGMTCPServerThread.ReadAndParseDataBlock(): TCheckCOMResult;
+begin
+  Result := FGMSocket.ReadAndParseDataBlock();
+end;
+
+procedure TGMTCPServerThread.BackgroundWork();
+begin
+  FGMSocket.BackgroundWork();
+end;
+
+function TGMTCPServerThread.SendInitialCurrentTime: bool;
+begin
+  if FInitialCurrentTimeSent or (GetTickCount64() - FStartTime < FInitialSendTimeDelay) then
+    Exit(true);
+
+  DefaultLogger.Info('SendCurrentTime');
+  Result := FGMSocket.SendCurrentTime() = 0;
+  FInitialCurrentTimeSent := true;
+end;
+
+function TGMTCPServerThread.SocketLocked: bool;
+begin
+  Result := FGMSocket.Locked();
+end;
+
 procedure TGMTCPServerThread.SafeExecute;
 var
   bData: bool;
-  startTime: UInt64;
   res: TCheckCOMResult;
 begin
   bData := false;
   FClientSocket.GetSins();
-  startTime := GetTickCount64();
+  FStartTime := GetTickCount64();
   while not Terminated do
   begin
-    res := FGMSocket.ReadAndParseDataBlock();
+    if SocketLocked() then
+    begin
+      SleepThread(10);
+      continue;
+    end;
+
+    res := ReadAndParseDataBlock();
     case res of
       ccrBytes:
         bData := true;
@@ -149,8 +191,11 @@ begin
         break;
     end;
 
-    if not bData and (GetTickCount64() - startTime >= 5000) and (FGMSocket.SendCurrentTime() <> 0) then
+    BackgroundWork();
+    if not bData and not SendInitialCurrentTime() then
       break;
+
+    Sleep(0);
   end;
 end;
 

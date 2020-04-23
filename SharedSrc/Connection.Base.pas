@@ -214,7 +214,9 @@ end;
 procedure TConnectionObjectBase.LogBufRec(logEmpty: bool);
 begin
   if logEmpty or (buffers.NumberOfBytesRead > 0) then
-    ProgramLog.AddExchangeBuf(LogSignature(), COM_LOG_IN, buffers.BufRec, buffers.NumberOfBytesRead);
+    ProgramLog.AddExchangeBuf(LogSignature(), COM_LOG_IN, buffers.BufRec, buffers.NumberOfBytesRead)
+  else
+    ProgramLog.AddMessage(LogSignature() + ' - no answer');
 end;
 
 procedure TConnectionObjectBase.LogBufSend(AddCOMState: bool);

@@ -43,6 +43,7 @@ type
     lst485IDs: array [0 .. 255] of TRequestDetails;
     FRemoteId: string;
     FSocket: TTCPBlockSocket;
+    FLockThreadId: cardinal;
     procedure RemoteServerReport(var bufs: TTwoBuffers);
     procedure ProcessRemoteServerReport(report: IXMLGMIOResponceType);
     function RequestUniversal_SimpleResponce(req: IXMLGMIORequestType): IXMLGMIOResponceType;
@@ -106,6 +107,10 @@ type
     procedure RequestInfo0(count: int);
     procedure AddRequest(ReqDetails: TRequestDetails);
     procedure Geomer_SetOutputChannel(N_Src: int; fVal: double; TimeHold: UINT);
+
+    procedure Lock(threadId: cardinal);
+    procedure Unlock;
+    function Locked(): bool;
   end;
 
   TSocketList = class(TList<TGeomerSocket>)
@@ -654,7 +659,7 @@ begin
                             bufs.BufSend[1] := bufs.BufRec[0];
                           end;
 
-                          ProgramLog().AddError(ToString() + ' AnalyzeClientRequest: unknown request - ' + ArrayToString(bufs.BufRec, bufs.NumberOfBytesRead, true));
+                          ProgramLog().AddError(ToString() + ' AnalyzeClientRequest: unknown request - ' + ArrayToString(bufs.BufRec, bufs.NumberOfBytesRead, true, true));
                         end;
   except
     on e: Exception do
@@ -814,6 +819,18 @@ begin
   TRequestSpecDevices.LoadCommands(SQLReq_IdObjByNCar(FNCar, [FSocketObjectType]), 0, 0, AddRequest);
 end;
 
+procedure TGeomerSocket.Lock(threadId: cardinal);
+begin
+  FLockThreadId := threadId;
+end;
+
+function OpenThread(dwDesiredAccess: DWORD; bInheritHandle: BOOL;  dwThreadId: DWORD): THandle; stdcall; external 'KERNEL32.DLL';
+
+function TGeomerSocket.Locked: bool;
+begin
+  Result := (FLockThreadId > 0) and (OpenThread(READ_CONTROL, false, FLockThreadId) > 0);
+end;
+
 procedure TGeomerSocket.BackgroundWork;
 begin
   if (FSocketObjectType = OBJ_TYPE_GM) and (Abs(NowGM() - FLastBackGroundUTime) >= 2000) then
@@ -838,6 +855,7 @@ begin
   FInfo0LastReqUTime := 0;
   FLast485BuilderUTime := 0;
   FLastBackGroundUTime := 0;
+  FLockThreadId := 0;
 
   FReqList := TRequestCollection.Create();
 
@@ -1049,6 +1067,11 @@ begin
   until (cnt <= 0) or (iProcessed <= 0);
 end;
 
+procedure TGeomerSocket.Unlock;
+begin
+  FLockThreadId := 0;
+end;
+
 procedure TGeomerSocket.UpdateLastReadTime();
 begin
   FLastReadUTime := NowGM();
@@ -1061,10 +1084,10 @@ var
   conn: TConnectionObjectTCP_IncomingSocket;
   action: string;
 begin
-  ProgramLog.AddMessage('ReadAndParseDataBlock started');
   try
     action := 'CreateConn';
     conn := TConnectionObjectTCP_IncomingSocket.Create();
+
     try
       conn.Socket := Socket;
       // таймауты ставим поменьше, у нас вся посылка скорее всего в буфере
@@ -1075,6 +1098,7 @@ begin
       if Result <> ccrBytes then
         Exit;
 
+      ProgramLog.AddMessage('ReadAndParseDataBlock bytes');
       UpdateLastReadTime();
       action := 'SetLength';
       cnt := conn.buffers.NumberOfBytesRead;

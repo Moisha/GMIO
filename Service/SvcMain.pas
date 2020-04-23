@@ -98,7 +98,7 @@ implementation
 
 {$R *.DFM}
 
-uses WinSock, ProgramLogFile, AppConfigFile, IniFiles, ActiveX, Devices.Tecon, Threads.K105, Threads.GMSocket,
+uses WinSock, ProgramLogFile, AppConfigFile, IniFiles, ActiveX, Devices.Tecon, Threads.K105,
      StrUtils, UsefulQueries, GMBlockValues, Devices.Tecon.Common, EsLogging;
 
 procedure ServiceController(CtrlCode: DWord); stdcall;
@@ -285,6 +285,7 @@ end;
 
 procedure TGMIOPService.InitService();
 begin
+  ProgramLog.AddMessage('========== Starting Service ==========');
 {$ifndef Application}
   {$ifdef DEBUG}
   SleepMainThread(10000);
@@ -299,8 +300,6 @@ begin
 {$endif}
     if Terminated then Exit;
   end;
-
-  ProgramLog.AddMessage('========== Starting Service ==========');
 
   ThreadsContainer := TRequestThreadsContainer.Create();
   thrResponceParser := TResponceParserThread.Create(glvBuffer);
