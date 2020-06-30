@@ -99,7 +99,7 @@ implementation
 {$R *.DFM}
 
 uses WinSock, ProgramLogFile, AppConfigFile, IniFiles, ActiveX, Devices.Tecon, Threads.K105,
-     StrUtils, UsefulQueries, GMBlockValues, Devices.Tecon.Common, EsLogging;
+     StrUtils, UsefulQueries, GMBlockValues, Devices.Tecon.Common, EsLogging, System.Math;
 
 procedure ServiceController(CtrlCode: DWord); stdcall;
 begin
@@ -218,7 +218,7 @@ begin
       udpSrv.DefaultPort := f.ReadInteger('COMMON', 'UDP_PORT', 0);
       COMDevicesRequestInterval := f.ReadInteger('COMMON', 'COM_INTERVAL', 60);
       CommonWaitFirst := f.ReadInteger('COMMON', 'TIMEOUT', CommonWaitFirst);
-      CommonWaitNext := CommonWaitFirst div 3;
+      CommonWaitNext := Min(CommonWaitFirst div 3, 1000);
 
       remoteSrv := Trim(f.ReadString('COMMON', 'REMOTE_SRV', ''));
       if remoteSrv <> '' then
