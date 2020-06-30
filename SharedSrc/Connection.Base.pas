@@ -69,7 +69,7 @@ implementation
 
 { TConnectionObjectBase }
 
-uses ProgramLogFile, Math;
+uses ProgramLogFile, Math, EsLogging, System.SysUtils;
 
 function TConnectionObjectBase.CheckBufHeader(buf0, buf1, cnt: int): bool;
 begin
@@ -127,8 +127,19 @@ begin
           or ((etAction = etSend) and (Result = ccrEmpty))
           or (Attempt >= FNumAttempts);
 
-    if etAction in [etRec, etSenRec] then
-      LogBufRec();
+    if etAction = etSend then
+      Exit;
+
+    case Result of
+      ccrBytes:
+        LogBufRec();
+
+      ccrEmpty:
+        DefaultLogger.Debug(LogSignature() + ' - no answer, timeout = ' + IntToStr(WaitFirst));
+
+      ccrError:
+        DefaultLogger.Debug(LogSignature() + ' - error: ' + LastError);
+    end;
   end;
 end;
 
@@ -214,9 +225,7 @@ end;
 procedure TConnectionObjectBase.LogBufRec(logEmpty: bool);
 begin
   if logEmpty or (buffers.NumberOfBytesRead > 0) then
-    ProgramLog.AddExchangeBuf(LogSignature(), COM_LOG_IN, buffers.BufRec, buffers.NumberOfBytesRead)
-  else
-    ProgramLog.AddMessage(LogSignature() + ' - no answer');
+    ProgramLog.AddExchangeBuf(LogSignature(), COM_LOG_IN, buffers.BufRec, buffers.NumberOfBytesRead);
 end;
 
 procedure TConnectionObjectBase.LogBufSend(AddCOMState: bool);

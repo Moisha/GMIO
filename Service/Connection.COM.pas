@@ -106,7 +106,7 @@ begin
   if not PurgeComm(hPort, PURGE_TXABORT	or PURGE_RXABORT or PURGE_TXCLEAR or PURGE_RXCLEAR) then
   begin
     FLastError := 'PurgeComm '  + SysErrorMessage(GetLastError());
-    Result := ccrError;
+    Exit(ccrError);
   end;
 
   //Пауза в 0,01 сек
@@ -117,7 +117,7 @@ begin
   if not WriteFile(hPort, buffers.BufSend, buffers.LengthSend, NumberOfBytesWritten, NIL) then
   begin
     FLastError := 'WriteFile '  + SysErrorMessage(GetLastError());
-    Result := ccrError;
+    Exit(ccrError);
   end;
 
   //дождемся окончания приема, максимум тупим минуту
@@ -127,63 +127,66 @@ begin
 end;
 
 function TConnectionObjectCOM.ReceiveBuf(): TCheckCOMResult;
-var tick: int64;
+var tick: UInt64;
     Errors: DWORD;
     n: Cardinal;
-    Stat : TComStat;   // buffer for communications status
+    Stat: TComStat;   // buffer for communications status
     i: WORD;
     Buf: array [0..102400] of byte;
 begin
-  Result := ccrEmpty;
-
   //Ожидаем первого символа
-  tick := GetTickCount();
+  tick := GetTickCount64();
   Repeat
-    if ParentTerminated then Exit;
+    if ParentTerminated then
+      Exit(ccrEmpty);
+
     Sleep(100);
+    ZeroMemory(@Stat, SizeOf(Stat));
     if not ClearCommError(hPort, Errors, @Stat) then
     begin
       FLastError := 'ClearCommError '  + SysErrorMessage(GetLastError());
-      Result := ccrError;
+      Exit(ccrError);
     end;
-  Until (Abs(tick - GetTickCount()) > WaitFirst) or (Stat.cbInQue <> 0) or (Result = ccrError);
 
-  If (Stat.cbInQue = 0) Then
-    Exit;   // не отвечает
+    if Abs(tick - GetTickCount64()) > WaitFirst then
+      Exit(ccrEmpty);
 
-  tick := GetTickCount();
+  Until Stat.cbInQue > 0;
+
+  Result := ccrEmpty;
+  tick := GetTickCount64();
   Repeat
-    if not ReadFile(hPort, Buf, Stat.cbInQue, n, NIL) then
+    if Stat.cbInQue > 0 then
     begin
-      FLastError := 'ReadFile '  + SysErrorMessage(GetLastError());
-      Result := ccrError;
+      if not ReadFile(hPort, Buf, Stat.cbInQue, n, NIL) then
+      begin
+        FLastError := Format('ReadFile %d bytes - %s', [Stat.cbInQue, SysErrorMessage(GetLastError())]);
+        Exit(ccrError);
+      end;
+
+      if n>0 then
+      begin
+        for i:=0 to n-1 do
+          buffers.BufRec[buffers.NumberOfBytesRead + i] := Buf[i];
+
+        // Abs поставил, чтобы убить Warning, n и так всегда положительный
+        buffers.NumberOfBytesRead := buffers.NumberOfBytesRead + Abs(n);
+        Result := ccrBytes;
+        tick := GetTickCount64();
+      end;
+
+      if CheckGetAllData() then break;
     end;
-
-    if n>0 then
-    begin
-      for i:=0 to n-1 do
-        buffers.BufRec[buffers.NumberOfBytesRead + i] := Buf[i];
-
-      // Abs поставил, чтобы убить Warning, n и так всегда положительный
-      buffers.NumberOfBytesRead := buffers.NumberOfBytesRead + Abs(n);
-      Result := ccrBytes;
-      tick := GetTickCount();
-    end;
-
-    if CheckGetAllData() then break;
 
     Sleep(100);
 
     if not ClearCommError(hPort, Errors, @Stat) then
     begin
       FLastError := 'ClearCommError '  + SysErrorMessage(GetLastError());
-      Result := ccrError;
+      Exit(ccrError);
     end;
 
-  Until ParentTerminated
-        or (Result = ccrError)
-        or ((Stat.cbInQue = 0)
-        and (Abs(GetTickCount() - tick) > WaitNext));
+  Until ParentTerminated or ((Stat.cbInQue = 0)and (Abs(GetTickCount64() - tick) > WaitNext));
 
   PurgeComm(hPort, PURGE_TXABORT	or PURGE_RXABORT or PURGE_TXCLEAR or PURGE_RXCLEAR);
 end;
@@ -192,6 +195,7 @@ function TConnectionObjectCOM.MakeExchange(etAction: TExchangeType): TCheckCOMRe
 begin
   Result := ccrEmpty;
   buffers.NumberOfBytesRead := 0;
+
 
   if (etAction in [etSend, etSenRec]) and (buffers.LengthSend > 0) then
   begin
