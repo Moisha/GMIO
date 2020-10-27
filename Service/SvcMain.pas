@@ -218,7 +218,7 @@ begin
       udpSrv.DefaultPort := f.ReadInteger('COMMON', 'UDP_PORT', 0);
       COMDevicesRequestInterval := f.ReadInteger('COMMON', 'COM_INTERVAL', 60);
       CommonWaitFirst := f.ReadInteger('COMMON', 'TIMEOUT', CommonWaitFirst);
-      CommonWaitNext := Min(CommonWaitFirst div 3, 1000);
+      CommonWaitNext := Min(CommonWaitFirst div 10, 1000);
 
       remoteSrv := Trim(f.ReadString('COMMON', 'REMOTE_SRV', ''));
       if remoteSrv <> '' then

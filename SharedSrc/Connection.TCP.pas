@@ -11,7 +11,7 @@ type
     function ReadFromSocket(): TCheckCOMResult;
   protected
     FLastError: string;
-    procedure OpenSocket; virtual;
+    function OpenSocket(): int; virtual;
     procedure HandleException(e: Exception; const source: string);
     function MakeExchange(etAction: TExchangeType): TCheckCOMResult; override;
     function GetLastConnectionError: string; override;
@@ -32,7 +32,7 @@ type
     FPort: int;
   protected
     function LogSignature: string; override;
-    procedure OpenSocket; override;
+    function OpenSocket(): int; override;
     function ExceptionLogInfo(e: Exception): string; override;
   public
     constructor Create(); override;
@@ -120,16 +120,24 @@ begin
   Result := FLastError;
 end;
 
-procedure TConnectionObjectTCP.OpenSocket();
+function TConnectionObjectTCP.OpenSocket(): int;
 begin
-
+  Result := 0;
 end;
 
 function TConnectionObjectTCP.MakeExchange(etAction: TExchangeType): TCheckCOMResult;
+var
+  res: int;
 begin
   Result := ccrError;
   try
-    OpenSocket();
+    res := OpenSocket();
+    if res <> 0 then
+    begin
+      ProgramLog().AddError(GetGoodLastError(res));
+      Exit;
+    end;
+
     if etAction in [etSenRec, etSend] then
       Socket.SendBuffer(@buffers.BufSend, buffers.LengthSend);
 
@@ -180,10 +188,17 @@ begin
     Result := Result + ' ' + FHost + ' ' + IntToStr(FPort);
 end;
 
-procedure TConnectionObjectTCP_OwnSocket.OpenSocket;
+function TConnectionObjectTCP_OwnSocket.OpenSocket: int;
 begin
-  inherited;
+  Result := inherited OpenSocket;
+  if Result <> 0 then
+    Exit;
+
+  if FSocket.Socket <> INVALID_SOCKET then
+    Exit;
+
   FSocket.Connect(FHost, IntToStr(FPort));
+  Result := FSocket.LastError;
 end;
 
 { TConnectionObjectTCP_ExternalSocket }

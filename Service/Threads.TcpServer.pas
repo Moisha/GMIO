@@ -45,7 +45,7 @@ type
 implementation
 
 uses
-  EsLogging;
+  EsLogging, Winapi.ActiveX;
 
 { TGMTCPServerDaemon }
 
@@ -172,30 +172,35 @@ var
   bData: bool;
   res: TCheckCOMResult;
 begin
-  bData := false;
-  FClientSocket.GetSins();
-  FStartTime := GetTickCount64();
-  while not Terminated do
-  begin
-    if SocketLocked() then
+  CoInitialize(nil);
+  try
+    bData := false;
+    FClientSocket.GetSins();
+    FStartTime := GetTickCount64();
+    while not Terminated do
     begin
-      SleepThread(10);
-      continue;
-    end;
+      if SocketLocked() then
+      begin
+        SleepThread(10);
+        continue;
+      end;
 
-    res := ReadAndParseDataBlock();
-    case res of
-      ccrBytes:
-        bData := true;
-      ccrError:
+      res := ReadAndParseDataBlock();
+      case res of
+        ccrBytes:
+          bData := true;
+        ccrError:
+          break;
+      end;
+
+      BackgroundWork();
+      if not bData and not SendInitialCurrentTime() then
         break;
+
+      SleepThread(10);
     end;
-
-    BackgroundWork();
-    if not bData and not SendInitialCurrentTime() then
-      break;
-
-    SleepThread(10);
+  finally
+    CoUninitialize();
   end;
 end;
 

@@ -332,7 +332,7 @@ begin
     if nPrmsCount <> reqPrms.Count then break;
 
     Sleep(50);
-  until (Abs(GetTickCount() - t) > iReqPause * 1000) or Terminated;
+  until (Abs(int64(GetTickCount()) - t) > iReqPause * 1000) or Terminated;
 end;
 
 procedure TGMCOMThread.SafeExecute;
