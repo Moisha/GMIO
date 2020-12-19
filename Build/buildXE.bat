@@ -68,6 +68,8 @@ call :buildprog %PROJECTSROOT%\WatchDog GMWatchDog "%RELEASEDIR%\WatchDog"
 call :copyfile %PROJECTSROOT%\DB\pg_gm_db.sql %RELEASEDIR%\DB
 call :copyfile %PROJECTSROOT%\DB\POneParam.sql %RELEASEDIR%\DB
 
+call :copyfile %PROJECTSROOT%\CalcDll\CalcDevices.dll %RELEASEDIR%\Service
+
 rem батники для управления сервисом
 echo GMIOPSvc.exe /stop > "%RELEASEDIR%\Server\SvcStop.bat"
 echo GMIOPSvc.exe /start > "%RELEASEDIR%\Server\SvcStart.bat"
