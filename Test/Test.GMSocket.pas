@@ -62,7 +62,7 @@ type
     procedure ClearRemoteObjects;
     function FindThread(objType, ID_Obj: int): TRequestSpecDevices;
     procedure AddRequestToSendBuf(ReqDetails: TRequestDetails);
-    function GetParam(ID_Device, ID_Src, N_Src: int; userSrc: int = -1): int;
+    function GetParam(ID_Device, ID_Src, N_Src: int; userSrc: int = -1; currentsAddr: int = -1): int;
   protected
     procedure DoRequest; override;
     procedure SetUp; override;
@@ -75,6 +75,7 @@ type
     procedure ReadAndParseDataBlock();
 
     procedure SetChannelValueTCPModbus();
+    procedure SetChannelValueTCPModbusFnc10();
     procedure SetChannelValueComUBZ();
     procedure SetChannelValueGeomerVacon();
     procedure SetChannelValueGeomer();
@@ -227,11 +228,15 @@ begin
   CheckEquals(0, bufs.BufSend[2]);
 end;
 
-function TGMSocketTest.GetParam(ID_Device, ID_Src, N_Src: int; userSrc: int = -1): int;
+function TGMSocketTest.GetParam(ID_Device, ID_Src, N_Src: int; userSrc: int = -1; currentsAddr: int = -1): int;
 begin
   var sqlGetPrm := Format('select * from DeviceSystem where ID_Device = %d and ID_Src = %d and N_Src = %d', [ID_Device, ID_Src, N_Src]);
+
   if userSrc > 0 then
     sqlGetPrm := sqlGetPrm + ' and UserSrc = ' + IntToStr(userSrc);
+
+  if currentsAddr > 0 then
+    sqlGetPrm := sqlGetPrm + ' and CurrentsAddr = ' + IntToStr(currentsAddr);
 
   Result := StrToIntDef(QueryResult(sqlGetPrm), 0);
   Check(Result > 0, 'Param not found');
@@ -283,12 +288,24 @@ procedure TGMSocketTest.SetChannelValueTCPModbus;
 var
   thr: TRequestSpecDevices;
 begin
-  TestSetChannelValue(GetParam(5, 7, 0, 5), 1, 0);
+  TestSetChannelValue(GetParam(5, 7, 0, 5, 259), 1, 0);
 
   thr := FindThread(OBJ_TYPE_TCP, 4);
   TRequestSpecDevicesLocal(thr).LoadCommands();
   CheckEquals(1, thr.RequestList.Count);
   CheckEquals(12, thr.RequestList[0].ReqDetails.BufCnt);
+end;
+
+procedure TGMSocketTest.SetChannelValueTCPModbusFnc10;
+var
+  thr: TRequestSpecDevices;
+begin
+  TestSetChannelValue(GetParam(5, 7, 0, SRC_AO_10, 800), 1, 0);
+
+  thr := FindThread(OBJ_TYPE_TCP, 4);
+  TRequestSpecDevicesLocal(thr).LoadCommands();
+  CheckEquals(1, thr.RequestList.Count);
+  CheckEquals(15, thr.RequestList[0].ReqDetails.BufCnt);
 end;
 
 procedure TGMSocketTest.SetChannelValueRemote;

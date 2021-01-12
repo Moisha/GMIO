@@ -281,7 +281,7 @@ end;
 
 function CreateRequestSetChannelValueTCPFnc10(DevNumber, N_Src, Val: int): ArrayOfByte;
 begin
-  SetLength(Result, 12);
+  SetLength(Result, 15);
 
   // Transaction Identifier 2 Bytes
   Result[0] := 0;

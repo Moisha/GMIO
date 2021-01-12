@@ -67,7 +67,7 @@ const
   UserDefinedParamTypes = [SRC_SUM_AI, SRC_USR, SRC_FK, SRC_CNT_MTR];
   CounterParamTypes = [SRC_SUM_AI, SRC_CNT_DI, SRC_CNT_MTR];
   SubParamTypes = [SRC_SUM_AI, SRC_FK, SRC_CNT_MTR];
-  OutputParamTypes = [SRC_DO, SRC_AO];
+  OutputParamTypes = [SRC_DO, SRC_AO, SRC_AO_10];
 
   // Типы опроса объектов
   OBJ_TYPE_CLIENT = -2;

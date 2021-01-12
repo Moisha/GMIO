@@ -99,6 +99,9 @@ end; $$;
 insert into Params(ID_Device, ID_PT, ID_Src, n_src, UserSrc, CurrentsAddr, AgeAddr, SourcePrmID) select 5, 12, 7, 0, 5, 259, 700, 1;
 -- RegularControl Age
 insert into Params(ID_Device, ID_PT, ID_Src, n_src, UserSrc, CurrentsAddr) select 5, 12, 7, 0, 5, 700;
+-- ModbusFnc 0x10
+insert into Params(ID_Device, ID_PT, ID_Src, n_src, UserSrc, CurrentsAddr) select 5, 12, 7, 0, 10, 800;
+
 do $$ begin perform UpdateAutoindent(1); end; $$;
 
 -- И все каналы доступными
