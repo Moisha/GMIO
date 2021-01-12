@@ -445,6 +445,7 @@ begin
   slUserSrc.AddObject('MTR - Показания', TObject(SRC_CNT_MTR));
   slUserSrc.AddObject('AO - Аналоговый выход', TObject(SRC_AO));
   slUserSrc.AddObject('DO - Дискретный выход', TObject(SRC_DO));
+  slUserSrc.AddObject('AO_10 - Аналоговый выход ф-я 0x10', TObject(SRC_AO_10));
 
   slPrmArcType := TStringList.Create();
   slPrmArcType.AddObject('Хранить вечно', TObject(0));

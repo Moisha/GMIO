@@ -62,6 +62,7 @@ type
     procedure ClearRemoteObjects;
     function FindThread(objType, ID_Obj: int): TRequestSpecDevices;
     procedure AddRequestToSendBuf(ReqDetails: TRequestDetails);
+    function GetParam(ID_Device, ID_Src, N_Src: int; userSrc: int = -1): int;
   protected
     procedure DoRequest; override;
     procedure SetUp; override;
@@ -226,11 +227,21 @@ begin
   CheckEquals(0, bufs.BufSend[2]);
 end;
 
+function TGMSocketTest.GetParam(ID_Device, ID_Src, N_Src: int; userSrc: int = -1): int;
+begin
+  var sqlGetPrm := Format('select * from DeviceSystem where ID_Device = %d and ID_Src = %d and N_Src = %d', [ID_Device, ID_Src, N_Src]);
+  if userSrc > 0 then
+    sqlGetPrm := sqlGetPrm + ' and UserSrc = ' + IntToStr(userSrc);
+
+  Result := StrToIntDef(QueryResult(sqlGetPrm), 0);
+  Check(Result > 0, 'Param not found');
+end;
+
 procedure TGMSocketTest.SetChannelValueGeomer;
 var
   socket: TGeomerSocketForTest;
 begin
-  TestSetChannelValue(9, 25);
+  TestSetChannelValue(GetParam(1, 3, 1), 25);
   socket := TGeomerSocketForTest(lstSockets.SocketByIdObj(1));
   CheckNotNull(socket);
   socket.LoadCommands();
@@ -242,7 +253,7 @@ procedure TGMSocketTest.SetChannelValueGeomer_TimeHold;
 var
   socket: TGeomerSocketForTest;
 begin
-  TestSetChannelValue(9, 25, 7);
+  TestSetChannelValue(GetParam(1, 3, 1), 25, 7);
 
   socket := TGeomerSocketForTest(lstSockets.SocketByIdObj(1));
   CheckNotNull(socket);
@@ -255,7 +266,7 @@ procedure TGMSocketTest.SetChannelValueGeomerVacon;
 var
   socket: TGeomerSocketForTest;
 begin
-  TestSetChannelValue(162, 1);
+  TestSetChannelValue(GetParam(1008, 3, 1), 1);
   socket := TGeomerSocketForTest(lstSockets.SocketByIdObj(3));
   socket.LoadCommands();
   CheckNotNull(socket);
@@ -272,7 +283,7 @@ procedure TGMSocketTest.SetChannelValueTCPModbus;
 var
   thr: TRequestSpecDevices;
 begin
-  TestSetChannelValue(1072, 1, 0);
+  TestSetChannelValue(GetParam(5, 7, 0, 5), 1, 0);
 
   thr := FindThread(OBJ_TYPE_TCP, 4);
   TRequestSpecDevicesLocal(thr).LoadCommands();
@@ -306,7 +317,7 @@ procedure TGMSocketTest.SetChannelValueComUBZ;
 var
   thr: TRequestSpecDevices;
 begin
-  TestSetChannelValue(52, 8, 0);
+  TestSetChannelValue(GetParam(7, 3, 1), 8, 0);
 
   thr := FindThread(OBJ_TYPE_COM, 6);
   TRequestSpecDevicesLocal(thr).LoadCommands();

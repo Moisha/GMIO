@@ -61,7 +61,8 @@ const
   SRC_USR = 7;
   SRC_FK = 8;
   SRC_CNT_MTR = 9;
-  SRC_MAX = SRC_CNT_MTR;
+  SRC_AO_10 = 10;
+  SRC_MAX = SRC_AO_10;
 
   UserDefinedParamTypes = [SRC_SUM_AI, SRC_USR, SRC_FK, SRC_CNT_MTR];
   CounterParamTypes = [SRC_SUM_AI, SRC_CNT_DI, SRC_CNT_MTR];

@@ -23,7 +23,7 @@ type
   protected
     procedure AddModbusRequestToSendBuf(MemAddr, Cnt: int; rqtp: T485RequestType; ModbusFunction: byte = $03); virtual; abstract;
     function GetDefaultReqPackSize(): int; virtual; abstract;
-    procedure DoSetChannelValue(DevNumber, N_Src, Val: int); virtual; abstract;
+    procedure DoSetChannelValue(DevNumber, ID_Src, N_Src, Val: int); virtual; abstract;
     function PrepareCommand(var prmIds: TChannelIds; var Val: double): bool; override;
   public
     constructor Create(AddRequestToSendBuf: TGMAddRequestToSendBufProc; ReqDetails: TRequestDetails); override;
@@ -36,14 +36,14 @@ type
   protected
     procedure AddModbusRequestToSendBuf(MemAddr, Cnt: int; rqtp: T485RequestType; ModbusFunction: byte = $03); override;
     function GetDefaultReqPackSize(): int; override;
-    procedure DoSetChannelValue(DevNumber, N_Src, Val: int); override;
+    procedure DoSetChannelValue(DevNumber, ID_Src, N_Src, Val: int); override;
   end;
 
   TModbusRTUDevReqCreator = class(TModbusDevReqCreator)
   protected
     procedure AddModbusRequestToSendBuf(MemAddr, Cnt: int; rqtp: T485RequestType; ModbusFunction: byte = $03); override;
     function GetDefaultReqPackSize(): int; override;
-    procedure DoSetChannelValue(DevNumber, N_Src, Val: int); override;
+    procedure DoSetChannelValue(DevNumber, ID_Src, N_Src, Val: int); override;
  end;
 
 implementation
@@ -57,7 +57,7 @@ begin
   case userSrc of
     SRC_DI: Result := 2;  // Modbus Discrete Inputs
     SRC_AI, SRC_CNT_MTR, SRC_CNT_DI: Result := 4; // Modbus input register
-    SRC_AO, SRC_DO: Result := 3; // Modbus holding register
+    SRC_AO, SRC_AO_10, SRC_DO: Result := 3; // Modbus holding register
   end;
 end;
 
@@ -174,7 +174,7 @@ begin
      or not IsWord(N_Src)
      or (N_Src < 0) then Exit(false);
 
-  DoSetChannelValue(DevNumber, N_Src, Round(Val));
+  DoSetChannelValue(DevNumber, ID_Src, N_Src, Round(Val));
   Result := true;
 end;
 
@@ -188,7 +188,7 @@ end;
 
 function TModbusDevReqCreator.CheckOutputChannelType(ID_Src: int): bool;
 begin
-  Result := ID_Src in [SRC_AO];
+  Result := ID_Src in [SRC_AO, SRC_AO_10];
 end;
 
 constructor TModbusDevReqCreator.Create(AddRequestToSendBuf: TGMAddRequestToSendBufProc; ReqDetails: TRequestDetails);
@@ -248,7 +248,7 @@ begin
   Result := 500;
 end;
 
-function CreateRequestSetChannelValueTCP(DevNumber, N_Src, Val: int): ArrayOfByte;
+function CreateRequestSetChannelValueTCPFnc6(DevNumber, N_Src, Val: int): ArrayOfByte;
 begin
   SetLength(Result, 12);
 
@@ -279,10 +279,59 @@ begin
   Result[11] := LoByte(Val mod 65536);
 end;
 
-procedure TModbusTCPDevReqCreator.DoSetChannelValue(DevNumber, N_Src, Val: int);
+function CreateRequestSetChannelValueTCPFnc10(DevNumber, N_Src, Val: int): ArrayOfByte;
+begin
+  SetLength(Result, 12);
+
+  // Transaction Identifier 2 Bytes
+  Result[0] := 0;
+  Result[1] := 0;
+
+  // Protocol Identifier 2 Bytes 0 = MODBUS protocol
+  Result[2] := 0;
+  Result[3] := 0;
+
+  // Length 2 Bytes
+  Result[4] := 0;
+  Result[5] := 9;
+
+  // Unit Identifier 1 Byte
+  Result[6] := DevNumber and $FF;
+
+  // ‘ункци€ 6 - запись значени€ в несколько регистров хранени€
+  Result[7] := $10;
+
+  // адрес
+  Result[8] := HiByte(N_Src);
+  Result[9] := LoByte(N_Src);
+
+  // пишем 1 значение
+  Result[10] := 0;
+  Result[11] := 1;
+
+  //  оличество байт далее
+  Result[12] := 2;
+
+  // значение
+  Result[13] := HiByte(Val mod 65536);
+  Result[14] := LoByte(Val mod 65536);
+end;
+
+function CreateRequestSetChannelValueTCP(DevNumber, ID_Src, N_Src, Val: int): ArrayOfByte;
+begin
+  SetLength(Result, 0);
+  case ID_Src of
+    SRC_AO:
+      Result := CreateRequestSetChannelValueTCPFnc6(DevNumber, N_Src, Val);
+    SRC_AO_10:
+      Result := CreateRequestSetChannelValueTCPFnc10(DevNumber, N_Src, Val);
+  end;
+end;
+
+procedure TModbusTCPDevReqCreator.DoSetChannelValue(DevNumber, ID_Src, N_Src, Val: int);
 var buf: ArrayOfByte;
 begin
-  buf := CreateRequestSetChannelValueTCP(DevNumber, N_Src, Round(Val));
+  buf := CreateRequestSetChannelValueTCP(DevNumber, ID_Src, N_Src, Round(Val));
   AddBufRequestToSendBuf(buf, Length(buf), rqtCommand);
 end;
 
@@ -326,7 +375,7 @@ begin
   Result := 100;
 end;
 
-function CreateRequestSetChannelValueRTU(DevNumber, N_Src, Val: int): ArrayOfByte;
+function CreateRequestSetChannelValueRTUFnc6(DevNumber, N_Src, Val: int): ArrayOfByte;
 begin
   SetLength(Result, 8);
   Result[0] := DevNumber and $FF;
@@ -339,10 +388,40 @@ begin
   Modbus_CRC(Result, 6);
 end;
 
-procedure TModbusRTUDevReqCreator.DoSetChannelValue(DevNumber, N_Src, Val: int);
+function CreateRequestSetChannelValueRTUFnc10(DevNumber, N_Src, Val: int): ArrayOfByte;
+begin
+  SetLength(Result, 11);
+  Result[0] := DevNumber and $FF;
+  Result[1] := $10; // запись значени€ в несколько регистров хранени€
+  Result[2] := HiByte(N_Src);
+  Result[3] := LoByte(N_Src);
+  Result[4] := 0;
+  Result[5] := 1;  // 4, 5 -  оличество регистров
+  Result[6] := 2;  //  оличество байт далее
+  Result[7] := HiByte(Val mod 65536);
+  Result[8] := LoByte(Val mod 65536);
+
+  Modbus_CRC(Result, 9);
+end;
+
+function CreateRequestSetChannelValueRTU(DevNumber, ID_Src, N_Src, Val: int): ArrayOfByte;
+begin
+  SetLength(Result, 0);
+  case ID_Src of
+    SRC_AO: Result := CreateRequestSetChannelValueRTUFnc6(DevNumber, N_Src, Val);
+    SRC_AO_10: Result := CreateRequestSetChannelValueRTUFnc10(DevNumber, N_Src, Val);
+  end;
+end;
+
+procedure TModbusRTUDevReqCreator.DoSetChannelValue(DevNumber, ID_Src, N_Src, Val: int);
 var buf: ArrayOfByte;
 begin
-  buf := CreateRequestSetChannelValueRTU(DevNumber, N_Src, Val);
+  if FReqDetails.Converter = PROTOCOL_CONVETER_MODBUS_TCP_RTU then
+    buf := CreateRequestSetChannelValueTCP(DevNumber, ID_Src, N_Src, Val)
+  else
+    buf := CreateRequestSetChannelValueRTU(DevNumber, ID_Src, N_Src, Val);
+
+
   AddBufRequestToSendBuf(buf, Length(buf), rqtCommand);
 end;
 

@@ -11,5 +11,6 @@ begin
 	union select 'USR', 7
 	union select 'FK', 8
 	union select 'SRC_CNT_MTR', 9
+	union select 'AO_10', 10
 	) t where not exists (select * from SrcTypes s where s.ID_Src = t.s);
 end $$;
