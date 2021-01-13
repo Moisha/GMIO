@@ -421,7 +421,6 @@ begin
   else
     buf := CreateRequestSetChannelValueRTU(DevNumber, ID_Src, N_Src, Val);
 
-
   AddBufRequestToSendBuf(buf, Length(buf), rqtCommand);
 end;
 

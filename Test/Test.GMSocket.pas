@@ -76,6 +76,8 @@ type
 
     procedure SetChannelValueTCPModbus();
     procedure SetChannelValueTCPModbusFnc10();
+    procedure SetChannelValueRTUModbus();
+    procedure SetChannelValueRTUModbusFnc10();
     procedure SetChannelValueComUBZ();
     procedure SetChannelValueGeomerVacon();
     procedure SetChannelValueGeomer();
@@ -328,6 +330,30 @@ begin
   CheckEquals(id_prm, StrToIntDef(a[0], 0));
   Check(Abs(int64(NowGM()) - StrToIntDef(a[1], 0)) < 10);
   Check(CompareValue(11.4, MyStrToFloatDef(a[2], 0)) = 0);
+end;
+
+procedure TGMSocketTest.SetChannelValueRTUModbus;
+var
+  thr: TRequestSpecDevices;
+begin
+  TestSetChannelValue(GetParam(10, 7, 0, 5, 1), 1, 0);
+
+  thr := FindThread(OBJ_TYPE_COM, 6);
+  TRequestSpecDevicesLocal(thr).LoadCommands();
+  CheckEquals(1, thr.RequestList.Count);
+  CheckEquals(8, thr.RequestList[0].ReqDetails.BufCnt);
+end;
+
+procedure TGMSocketTest.SetChannelValueRTUModbusFnc10;
+var
+  thr: TRequestSpecDevices;
+begin
+  TestSetChannelValue(GetParam(10, 7, 0, 10, 2), 1, 0);
+
+  thr := FindThread(OBJ_TYPE_COM, 6);
+  TRequestSpecDevicesLocal(thr).LoadCommands();
+  CheckEquals(1, thr.RequestList.Count);
+  CheckEquals(11, thr.RequestList[0].ReqDetails.BufCnt);
 end;
 
 procedure TGMSocketTest.SetChannelValueComUBZ;

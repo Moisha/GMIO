@@ -41,6 +41,7 @@ insert into devices(ID_Device, id_obj, id_devtype, devname, number) select 6, 5,
 insert into devices(ID_Device, id_obj, id_devtype, devname, number) select 7, 6, 3, 'Управление УБЗ', 1;
 insert into devices(ID_Device, id_obj, id_devtype, devname, number) select 8, 6, 8, 'Управление Vacon', 2;
 insert into devices(ID_Device, id_obj, id_devtype, devname, number) select 9, 6, 5, 'Управление TR-101', 3;
+insert into devices(ID_Device, id_obj, id_devtype, devname, number) select 10, 6, 36, 'Modbus RTU', 4;
 
 insert into Devices(ID_Device, id_obj, id_devtype, devname, number)
   select 1000 + ID_DevType, 3, ID_DevType, name, ID_DevType from DevTypes; -- не менять ID_Obj = 3, используется в тестах
@@ -99,8 +100,12 @@ end; $$;
 insert into Params(ID_Device, ID_PT, ID_Src, n_src, UserSrc, CurrentsAddr, AgeAddr, SourcePrmID) select 5, 12, 7, 0, 5, 259, 700, 1;
 -- RegularControl Age
 insert into Params(ID_Device, ID_PT, ID_Src, n_src, UserSrc, CurrentsAddr) select 5, 12, 7, 0, 5, 700;
--- ModbusFnc 0x10
+-- ModbusFnc 0x10 TCP
 insert into Params(ID_Device, ID_PT, ID_Src, n_src, UserSrc, CurrentsAddr) select 5, 12, 7, 0, 10, 800;
+-- ModbusFnc RTU управление
+insert into Params(ID_Device, ID_PT, ID_Src, n_src, UserSrc, CurrentsAddr) select 10, 12, 7, 0, 5, 1;
+-- ModbusFnc 0x10 RTU
+insert into Params(ID_Device, ID_PT, ID_Src, n_src, UserSrc, CurrentsAddr) select 10, 12, 7, 0, 10, 2;
 
 do $$ begin perform UpdateAutoindent(1); end; $$;
 
