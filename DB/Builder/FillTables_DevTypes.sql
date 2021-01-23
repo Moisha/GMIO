@@ -66,4 +66,5 @@ begin
 	perform SetDevType (36, 'Modbus RTU', 0, null, 1);
 	perform SetDevType (37, 'ДРК-4ОП', 1);
 	perform SetDevType (38, 'ADCP ChannelMaster', 1, null, 1);
+	perform SetDevType (39, 'Streamlux 700f', 1, null, 1);
 end; $$;

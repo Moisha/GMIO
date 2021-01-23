@@ -76,7 +76,8 @@ uses
   Devices.DRK in 'Devices.DRK.pas',
   Devices.ADCPChannelMaster in 'Devices.ADCPChannelMaster.pas',
   Devices.Geomer in 'Devices.Geomer.pas',
-  Threads.TcpServer in 'Threads.TcpServer.pas';
+  Threads.TcpServer in 'Threads.TcpServer.pas',
+  Devices.Streamlux700f in 'Devices.Streamlux700f.pas';
 
 procedure ConfigureLogging();
   var

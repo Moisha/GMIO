@@ -141,6 +141,7 @@ const
   DEVTYPE_MODBUS_RTU = 36;
   DEVTYPE_DRK = 37;
   DEVTYPE_ADCP_CHANNEL_MASTER = 38;
+  DEVTYPE_STREAMLUX700F = 39;
 
   Tecon19_Family = [DEVTYPE_TECON_19_01..DEVTYPE_TECON_19_14];
   GeomerFamily = [DEVTYPE_GM, DEVTYPE_GM_ISCO, DEVTYPE_GM_UBZ];
@@ -400,7 +401,9 @@ type
 
                       rqtADCP_Channel_Master,
 
-                      rqtMainSrv
+                      rqtMainSrv,
+
+                      rqtStreamlux700f
                      );
 
   T485RequestTypeHelper = record helper for T485RequestType

@@ -278,6 +278,7 @@
         <DCCReference Include="Test.Devices.ADCPChannelMaster.pas"/>
         <DCCReference Include="Test.RequestListBuilder.pas"/>
         <DCCReference Include="Test.Threads.Base.pas"/>
+        <DCCReference Include="Test.Devices.Streamlux700f.pas"/>
         <BuildConfiguration Include="Debug">
             <Key>Cfg_2</Key>
             <CfgParent>Base</CfgParent>

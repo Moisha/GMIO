@@ -55,7 +55,8 @@ uses Devices.UBZ, Devices.Owen, Devices.Vzlet, Devices.Vacon, Devices.Tecon.Comm
      DateUtils, ProgramLogFile, ArchIntervalBuilder, Devices.Termotronic, Devices.Mercury,
      Devices.TR101, Devices.ICP, Devices.Isco4250, Devices.Simag, Devices.Altistart22, Devices.Geostream,
      Devices.AllenBradley.Micro8xx, Devices.MainSrv, Devices.Logica.SPT941, Devices.Logica.SPT943,
-     Devices.Logica.SPT961, Devices.Modbus.ReqCreatorBase, Devices.ModbusBase, Devices.DRK, Devices.ADCPChannelMaster, Devices.Geomer;
+     Devices.Logica.SPT961, Devices.Modbus.ReqCreatorBase, Devices.ModbusBase, Devices.DRK, Devices.ADCPChannelMaster, Devices.Geomer,
+     Devices.Streamlux700f;
 
 constructor T485RequestCreator.Create(AAddRequestToSendBuf: TGMAddRequestToSendBufProc);
 begin
@@ -95,6 +96,7 @@ begin
       DEVTYPE_MODBUS_RTU: Result := TModbusRTUDevReqCreator;
       DEVTYPE_DRK: Result := TDRK4OPReqCreator;
       DEVTYPE_ADCP_CHANNEL_MASTER: Result := TADCPChannelMasterReqCreator;
+      DEVTYPE_STREAMLUX700F: Result := TStreamlux700fReqCreator;
     end;
 end;
 
