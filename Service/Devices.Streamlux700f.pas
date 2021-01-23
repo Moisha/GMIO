@@ -42,7 +42,7 @@ begin
       end;
     SRC_CNT_MTR:
       case N_Src of
-        1: ; //AddRequestString('DQD');
+        1: AddRequestString('POS');
       end;
   end;
 end;

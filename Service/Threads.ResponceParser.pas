@@ -38,6 +38,7 @@ type
     function CheckDRKChannel_Val(gbv: TGeomerBlockValues; pos: int): double;
     function CheckDRKChannel_Val_Digit(src: byte): byte;
     function CheckADCPChannelMasterChannel(gbv: TGeomerBlockValues): TRecognizeChannelResult;
+    function CheckStreamlux700fChannel(gbv: TGeomerBlockValues): bool;
   protected
     ChannelIDs: TChannelIds;
 
@@ -1210,6 +1211,38 @@ begin
             CheckDRKChannel_Val_Digit(gbv.gmBufRec[pos + 3]);
 end;
 
+function TResponceParserThread.CheckStreamlux700fChannel(gbv: TGeomerBlockValues): bool;
+begin
+  if (gbv.ReqDetails.rqtp <> rqtStreamlux700f) or (gbv.gmLenRec < 10) then
+    Exit(false);
+
+  var l := High(gbv.gmBufRec);
+  if (gbv.gmBufRec[l - 1] <> 13) or (gbv.gmBufRec[l] <> 10) then
+    Exit(false);
+
+  var s: AnsiString;
+  var n := 0;
+  while n < l do
+  begin
+    if not CharInSet(AnsiChar(gbv.gmBufRec[n]), ['0'..'9', '.', '+', '-', 'E', 'e']) then
+      break;
+
+    s := s + AnsiChar(gbv.gmBufRec[n]);
+    inc(n);
+  end;
+
+  var c: int;
+  var v: double;
+  Val(string(s), V, c);
+  if c > 0 then
+    Exit(false);
+
+  Result := true;
+  Values[0].UTime := gbv.gmTime;
+  Values[0].Val := V;
+  Values[0].Chn := pointer(gbv.ReqDetails.ID_Prm);
+end;
+
 function TResponceParserThread.CheckDRKChannel(gbv: TGeomerBlockValues): bool;
 var
   coeff: double;
@@ -1551,6 +1584,7 @@ begin
               DEVTYPE_MAIN_SRV: res := CheckMainSrvUniversalResponce(gbv);
               DEVTYPE_MODBUS_RTU: res := CheckModbusRTUUserDefinedChannel(gbv);
               DEVTYPE_DRK: res := CheckDRKChannel(gbv);
+              DEVTYPE_STREAMLUX700F: res := CheckStreamlux700fChannel(gbv);
             end;
 
             if res then

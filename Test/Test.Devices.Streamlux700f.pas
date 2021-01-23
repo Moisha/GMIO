@@ -18,15 +18,13 @@ type
     function GetDevType(): int; override;
     function GetThreadClass(): TSQLWriteThreadForTestClass; override;
   published
-    procedure String1;
-    procedure StringWithEmpties;
-    procedure RealData;
+    procedure Test1;
   end;
 
 implementation
 
 uses
-  Threads.ResponceParser, Devices.ModbusBase, SysUtils;
+  Threads.ResponceParser, Devices.ModbusBase, SysUtils, System.Math;
 
 { TADCPChannelMasterReqCreatorTest }
 
@@ -39,6 +37,7 @@ begin
   CheckReqString(4, 'AI1'#13);
   CheckReqString(5, 'DC'#13);
   CheckReqString(6, 'DL'#13);
+  CheckReqString(7, 'POS'#13);
 end;
 
 function TStreamlux700fReqCreatorTest.GetDevType: int;
@@ -61,99 +60,29 @@ begin
   Result := TLocalSQLWriteThreadForTest;
 end;
 
-procedure TStreamlux700fParserTest.RealData;
-const
-  ai_vals: array [1..4] of double = (31.55, 0.34, 3.13, 21);
-var
-  i: int;
+procedure TStreamlux700fParserTest.Test1;
 begin
-  gbv.ReqDetails.rqtp := rqtADCP_Channel_Master;
+  gbv.ReqDetails.rqtp := rqtStreamlux700f;
   gbv.gmTime := NowGM();
-  gbv.SetBufRec('PRDIQ,+196,+743201.31,+3.13,+31.55,+0.34,+91.87,+21.00,+0.00,+0.00,0'#13#10);
+  gbv.SetBufRec('+3.405755E+01m3/m'#13#10);
 
-  TLocalSQLWriteThreadForTest(thread).ChannelIds.ID_DevType := DEVTYPE_ADCP_CHANNEL_MASTER;
+  TLocalSQLWriteThreadForTest(thread).ChannelIds.ID_DevType := DEVTYPE_STREAMLUX700F;
   TLocalSQLWriteThreadForTest(thread).ChannelIds.ID_Src := SRC_AI;
 
-  for i := 1 to 4 do
-  begin
-    TLocalSQLWriteThreadForTest(thread).ChannelIds.N_Src := i;
-    Check(TLocalSQLWriteThreadForTest(thread).RecognizeAndCheckChannel(gbv) = recchnresData, 'AI' + IntToStr(i));
-    Check(Length(TLocalSQLWriteThreadForTest(thread).Values) = 1, 'AI' + IntToStr(i));
-    Check(TLocalSQLWriteThreadForTest(thread).Values[0].Val = ai_vals[i], 'AI' + IntToStr(i));
-    Check(TLocalSQLWriteThreadForTest(thread).Values[0].UTime = gbv.gmTime, 'AI' + IntToStr(i));
-  end;
+  TLocalSQLWriteThreadForTest(thread).ChannelIds.N_Src := 1;
+  Check(TLocalSQLWriteThreadForTest(thread).RecognizeAndCheckChannel(gbv) = recchnresData, 'AI1');
+  Check(Length(TLocalSQLWriteThreadForTest(thread).Values) = 1, 'AI1');
+  Check(CompareFloatRelative(TLocalSQLWriteThreadForTest(thread).Values[0].Val, 34.05755), 'AI1');
+  Check(TLocalSQLWriteThreadForTest(thread).Values[0].UTime = gbv.gmTime, 'AI1');
 
-  i := 1;
-  TLocalSQLWriteThreadForTest(thread).ChannelIds.ID_Src := SRC_CNT_MTR;
-  TLocalSQLWriteThreadForTest(thread).ChannelIds.N_Src := i;
-  Check(TLocalSQLWriteThreadForTest(thread).RecognizeAndCheckChannel(gbv) = recchnresData, 'MTR' + IntToStr(i));
-  Check(Length(TLocalSQLWriteThreadForTest(thread).Values) = 1, 'MTR' + IntToStr(i));
-  Check(CompareFloatRelative(TLocalSQLWriteThreadForTest(thread).Values[0].Val, 196743201.31), 'MTR' + IntToStr(i));
-  Check(TLocalSQLWriteThreadForTest(thread).Values[0].UTime = gbv.gmTime, 'MTR' + IntToStr(i));
-end;
-
-procedure TStreamlux700fParserTest.String1;
-const
-  ai_vals: array [1..4] of double = (234.45, 0.65, 2.45, 15.12);
-var
-  i: int;
-begin
-  gbv.ReqDetails.rqtp := rqtADCP_Channel_Master;
   gbv.gmTime := NowGM();
-  gbv.SetBufRec('PRDIQ, 12, 432456.123, 2.45, 234.45, 0.65, 345.33, 15.12, 2.56, -0.32, 0'#13#10);
-
-  TLocalSQLWriteThreadForTest(thread).ChannelIds.ID_DevType := DEVTYPE_ADCP_CHANNEL_MASTER;
-  TLocalSQLWriteThreadForTest(thread).ChannelIds.ID_Src := SRC_AI;
-
-  for i := 1 to 4 do
-  begin
-    TLocalSQLWriteThreadForTest(thread).ChannelIds.N_Src := i;
-    Check(TLocalSQLWriteThreadForTest(thread).RecognizeAndCheckChannel(gbv) = recchnresData, 'AI' + IntToStr(i));
-    Check(Length(TLocalSQLWriteThreadForTest(thread).Values) = 1, 'AI' + IntToStr(i));
-    Check(TLocalSQLWriteThreadForTest(thread).Values[0].Val = ai_vals[i], 'AI' + IntToStr(i));
-    Check(TLocalSQLWriteThreadForTest(thread).Values[0].UTime = gbv.gmTime, 'AI' + IntToStr(i));
-  end;
-
-  i := 1;
+  gbv.SetBufRec('+3.211965E+01 m3'#13#10);
   TLocalSQLWriteThreadForTest(thread).ChannelIds.ID_Src := SRC_CNT_MTR;
-  TLocalSQLWriteThreadForTest(thread).ChannelIds.N_Src := i;
-  Check(TLocalSQLWriteThreadForTest(thread).RecognizeAndCheckChannel(gbv) = recchnresData, 'MTR' + IntToStr(i));
-  Check(Length(TLocalSQLWriteThreadForTest(thread).Values) = 1, 'MTR' + IntToStr(i));
-  Check(CompareFloatRelative(TLocalSQLWriteThreadForTest(thread).Values[0].Val, 12432456.123), 'MTR' + IntToStr(i));
-  Check(TLocalSQLWriteThreadForTest(thread).Values[0].UTime = gbv.gmTime, 'MTR' + IntToStr(i));
-end;
-
-procedure TStreamlux700fParserTest.StringWithEmpties;
-var
-  i: int;
-begin
-  gbv.ReqDetails.rqtp := rqtADCP_Channel_Master;
-  gbv.gmTime := NowGM();
-  gbv.SetBufRec('PRDIQ,-140674992,-0.000000001,,,,,+21.00,+0.00,+0.00,10'#13#10);
-
-  TLocalSQLWriteThreadForTest(thread).ChannelIds.ID_DevType := DEVTYPE_ADCP_CHANNEL_MASTER;
-  TLocalSQLWriteThreadForTest(thread).ChannelIds.ID_Src := SRC_AI;
-
-  for i := 1 to 3 do
-  begin
-    TLocalSQLWriteThreadForTest(thread).ChannelIds.N_Src := i;
-    Check(TLocalSQLWriteThreadForTest(thread).RecognizeAndCheckChannel(gbv) = recchnresEmpty, 'AI' + IntToStr(i));
-  end;
-
-  i := 4;
-  TLocalSQLWriteThreadForTest(thread).ChannelIds.N_Src := i;
-  Check(TLocalSQLWriteThreadForTest(thread).RecognizeAndCheckChannel(gbv) = recchnresData, 'AI' + IntToStr(i));
-  Check(Length(TLocalSQLWriteThreadForTest(thread).Values) = 1, 'AI' + IntToStr(i));
-  Check(CompareFloatRelative(TLocalSQLWriteThreadForTest(thread).Values[0].Val, 21), 'AI' + IntToStr(i));
-  Check(TLocalSQLWriteThreadForTest(thread).Values[0].UTime = gbv.gmTime, 'AI' + IntToStr(i));
-
-  i := 1;
-  TLocalSQLWriteThreadForTest(thread).ChannelIds.ID_Src := SRC_CNT_MTR;
-  TLocalSQLWriteThreadForTest(thread).ChannelIds.N_Src := i;
-  Check(TLocalSQLWriteThreadForTest(thread).RecognizeAndCheckChannel(gbv) = recchnresData, 'MTR' + IntToStr(i));
-  Check(Length(TLocalSQLWriteThreadForTest(thread).Values) = 1, 'MTR' + IntToStr(i));
-  Check(CompareFloatRelative(TLocalSQLWriteThreadForTest(thread).Values[0].Val, -140674992e6 - 0.000000001), 'MTR' + IntToStr(i));
-  Check(TLocalSQLWriteThreadForTest(thread).Values[0].UTime = gbv.gmTime, 'MTR' + IntToStr(i));
+  TLocalSQLWriteThreadForTest(thread).ChannelIds.N_Src := 1;
+  Check(TLocalSQLWriteThreadForTest(thread).RecognizeAndCheckChannel(gbv) = recchnresData, 'MTR1');
+  Check(Length(TLocalSQLWriteThreadForTest(thread).Values) = 1, 'MTR1');
+  Check(CompareFloatRelative(TLocalSQLWriteThreadForTest(thread).Values[0].Val, 32.11965), 'MTR1');
+  Check(TLocalSQLWriteThreadForTest(thread).Values[0].UTime = gbv.gmTime, 'MTR1');
 end;
 
 initialization
