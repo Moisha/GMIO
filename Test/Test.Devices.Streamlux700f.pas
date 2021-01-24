@@ -13,13 +13,13 @@ type
   end;
 
   TStreamlux700fParserTest = class(TDeviceReqParserTestBase)
-  private
   protected
     function GetDevType(): int; override;
     function GetThreadClass(): TSQLWriteThreadForTestClass; override;
   published
-    procedure Test1;
-    procedure DV;
+    procedure CommonVal;
+    procedure Quality;
+    procedure ErrorCode;
   end;
 
 implementation
@@ -35,7 +35,7 @@ begin
   CheckReqString(1, 'DQH'#13);
   CheckReqString(2, 'DQS'#13);
   CheckReqString(3, 'DV'#13);
-  CheckReqString(4, 'AI1'#13);
+  CheckReqString(4, 'DS'#13);
   CheckReqString(5, 'DC'#13);
   CheckReqString(6, 'DL'#13);
   CheckReqString(7, 'DI+'#13);
@@ -61,7 +61,42 @@ begin
   Result := TLocalSQLWriteThreadForTest;
 end;
 
-procedure TStreamlux700fParserTest.Test1;
+procedure TStreamlux700fParserTest.Quality;
+begin
+  gbv.ReqDetails.rqtp := rqtStreamlux700f;
+  gbv.gmTime := NowGM();
+  gbv.SetBufRec('UP:01.0,DN:34.5,Q=67'#13#10);
+
+  TLocalSQLWriteThreadForTest(thread).ChannelIds.ID_DevType := DEVTYPE_STREAMLUX700F;
+  TLocalSQLWriteThreadForTest(thread).ChannelIds.ID_Src := SRC_AI;
+  TLocalSQLWriteThreadForTest(thread).ChannelIds.N_Src := 7;
+
+  Check(TLocalSQLWriteThreadForTest(thread).RecognizeAndCheckChannel(gbv) = recchnresData, 'AI1');
+  Check(Length(TLocalSQLWriteThreadForTest(thread).Values) = 1, 'AI1');
+  Check(CompareFloatRelative(TLocalSQLWriteThreadForTest(thread).Values[0].Val, 67), 'AI1');
+  Check(TLocalSQLWriteThreadForTest(thread).Values[0].UTime = gbv.gmTime, 'AI1');
+end;
+
+procedure TStreamlux700fParserTest.ErrorCode;
+begin
+  gbv.ReqDetails.rqtp := rqtStreamlux700f;
+  gbv.gmTime := NowGM();
+  gbv.SetBufRec('*I'#13#10);
+
+  TLocalSQLWriteThreadForTest(thread).ChannelIds.ID_DevType := DEVTYPE_STREAMLUX700F;
+  TLocalSQLWriteThreadForTest(thread).ChannelIds.ID_Src := SRC_AI;
+  TLocalSQLWriteThreadForTest(thread).ChannelIds.N_Src := 6;
+
+  Check(TLocalSQLWriteThreadForTest(thread).RecognizeAndCheckChannel(gbv) = recchnresData, 'RecognizeAndCheckChannel');
+  Check(Length(TLocalSQLWriteThreadForTest(thread).Values) = 1, 'count');
+  CheckEquals(ord('I'), TLocalSQLWriteThreadForTest(thread).Values[0].Val, 'val');
+  Check(TLocalSQLWriteThreadForTest(thread).Values[0].UTime = gbv.gmTime, 'time');
+
+  gbv.SetBufRec('*M'#13#10);
+  Check(TLocalSQLWriteThreadForTest(thread).RecognizeAndCheckChannel(gbv) = recchnresUnknown, 'RecognizeAndCheckChannel wrong');
+end;
+
+procedure TStreamlux700fParserTest.CommonVal;
 begin
   gbv.ReqDetails.rqtp := rqtStreamlux700f;
   gbv.gmTime := NowGM();
@@ -69,8 +104,8 @@ begin
 
   TLocalSQLWriteThreadForTest(thread).ChannelIds.ID_DevType := DEVTYPE_STREAMLUX700F;
   TLocalSQLWriteThreadForTest(thread).ChannelIds.ID_Src := SRC_AI;
-
   TLocalSQLWriteThreadForTest(thread).ChannelIds.N_Src := 1;
+
   Check(TLocalSQLWriteThreadForTest(thread).RecognizeAndCheckChannel(gbv) = recchnresData, 'AI1');
   Check(Length(TLocalSQLWriteThreadForTest(thread).Values) = 1, 'AI1');
   Check(CompareFloatRelative(TLocalSQLWriteThreadForTest(thread).Values[0].Val, 34.05755), 'AI1');
@@ -84,22 +119,6 @@ begin
   Check(Length(TLocalSQLWriteThreadForTest(thread).Values) = 1, 'MTR1');
   Check(CompareFloatRelative(TLocalSQLWriteThreadForTest(thread).Values[0].Val, 32.11965), 'MTR1');
   Check(TLocalSQLWriteThreadForTest(thread).Values[0].UTime = gbv.gmTime, 'MTR1');
-end;
-
-procedure TStreamlux700fParserTest.DV;
-begin
-  gbv.ReqDetails.rqtp := rqtStreamlux700f;
-  gbv.gmTime := NowGM();
-  gbv.SetBufRec('+0.000000E+00m/s'#13#10);
-
-  TLocalSQLWriteThreadForTest(thread).ChannelIds.ID_DevType := DEVTYPE_STREAMLUX700F;
-  TLocalSQLWriteThreadForTest(thread).ChannelIds.ID_Src := SRC_AI;
-
-  TLocalSQLWriteThreadForTest(thread).ChannelIds.N_Src := 1;
-  Check(TLocalSQLWriteThreadForTest(thread).RecognizeAndCheckChannel(gbv) = recchnresData, 'AI1');
-  Check(Length(TLocalSQLWriteThreadForTest(thread).Values) = 1, 'AI1');
-  Check(CompareFloatRelative(TLocalSQLWriteThreadForTest(thread).Values[0].Val, 0), 'AI1');
-  Check(TLocalSQLWriteThreadForTest(thread).Values[0].UTime = gbv.gmTime, 'AI1');
 end;
 
 initialization

@@ -39,6 +39,9 @@ type
     function CheckDRKChannel_Val_Digit(src: byte): byte;
     function CheckADCPChannelMasterChannel(gbv: TGeomerBlockValues): TRecognizeChannelResult;
     function CheckStreamlux700fChannel(gbv: TGeomerBlockValues): bool;
+    function CheckStreamlux700fChannel_ErrorCode(resp: AnsiString): bool;
+    function CheckStreamlux700fChannel_SignalQuality(resp: AnsiString): bool;
+    function CheckStreamlux700fChannel_CommonVal(gbv: TGeomerBlockValues): bool;
   protected
     ChannelIDs: TChannelIds;
 
@@ -1211,18 +1214,51 @@ begin
             CheckDRKChannel_Val_Digit(gbv.gmBufRec[pos + 3]);
 end;
 
-function TResponceParserThread.CheckStreamlux700fChannel(gbv: TGeomerBlockValues): bool;
+function TResponceParserThread.CheckStreamlux700fChannel_ErrorCode(resp: AnsiString): bool;
 begin
-  if (gbv.ReqDetails.rqtp <> rqtStreamlux700f) or (gbv.gmLenRec < 10) then
+  Result := false;
+  var n := 1;
+  while n <= Length(resp) do
+  begin
+    if CharInSet(resp[n], ['R', 'I', 'H', 'E', 'Q', 'F', 'G', 'K']) then
+    begin
+      Values[0].Val := Ord(resp[n]);
+      Exit(true);
+    end;
+
+    inc(n);
+  end;
+end;
+
+function TResponceParserThread.CheckStreamlux700fChannel_SignalQuality(resp: AnsiString): bool;
+begin
+  var n := Pos('Q=', string(resp));
+  if n <= 0 then
     Exit(false);
 
-  var l := High(gbv.gmBufRec);
-  if (gbv.gmBufRec[l - 1] <> 13) or (gbv.gmBufRec[l] <> 10) then
+  inc(n, 2);
+  var s: AnsiString := '';
+  while (n < Length(resp)) and (CharInSet(resp[n], ['0'..'9'])) do
+  begin
+    s := s + resp[n];
+    inc(n);
+  end;
+
+  var c: int;
+  var v: double;
+  System.Val(string(s), V, c);
+  if c > 0 then
     Exit(false);
 
+  Result := true;
+  Values[0].Val := V;
+end;
+
+function TResponceParserThread.CheckStreamlux700fChannel_CommonVal(gbv: TGeomerBlockValues): bool;
+begin
   var s: AnsiString;
   var n := 0;
-  while n < l do
+  while n < Length(gbv.gmBufRec) do
   begin
     if not CharInSet(AnsiChar(gbv.gmBufRec[n]), ['0'..'9', '.', '+', '-', 'E', 'e']) then
       break;
@@ -1233,14 +1269,36 @@ begin
 
   var c: int;
   var v: double;
-  Val(string(s), V, c);
+  System.Val(string(s), V, c);
   if c > 0 then
     Exit(false);
 
   Result := true;
-  Values[0].UTime := gbv.gmTime;
   Values[0].Val := V;
-  Values[0].Chn := pointer(gbv.ReqDetails.ID_Prm);
+end;
+
+function TResponceParserThread.CheckStreamlux700fChannel(gbv: TGeomerBlockValues): bool;
+begin
+  if (gbv.ReqDetails.rqtp <> rqtStreamlux700f) or (gbv.gmLenRec < 2) then
+    Exit(false);
+
+  var l := High(gbv.gmBufRec);
+  if (gbv.gmBufRec[l - 1] <> 13) or (gbv.gmBufRec[l] <> 10) then
+    Exit(false);
+
+  if (ChannelIds.ID_Src = SRC_AI) and (ChannelIds.N_Src = 6) then
+    Result := CheckStreamlux700fChannel_ErrorCode(gbv.BufRecString)
+  else
+  if (ChannelIds.ID_Src = SRC_AI) and (ChannelIds.N_Src = 7) then
+    Result := CheckStreamlux700fChannel_SignalQuality(gbv.BufRecString)
+  else
+    Result := CheckStreamlux700fChannel_CommonVal(gbv);
+
+  if Result then
+  begin
+    Values[0].UTime := gbv.gmTime;
+    Values[0].Chn := pointer(gbv.ReqDetails.ID_Prm);
+  end;
 end;
 
 function TResponceParserThread.CheckDRKChannel(gbv: TGeomerBlockValues): bool;
@@ -1975,6 +2033,8 @@ begin
       q.Close();
       q.SQL.Text := GetPrmQueryTxt(gbv.ReqDetails);
       q.Open();
+
+      Defaultlogger.Warn('GetPrmQueryTxt empty result. ' + q.SQL.Text);
 
       // если это данные от УБЗ, то обработаем блок УБЗ
       if not q.Eof and (gbv.gbt = gbt485) then

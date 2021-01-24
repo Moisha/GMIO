@@ -36,7 +36,7 @@ begin
         2: AddRequestString('DQH');
         3: AddRequestString('DQS');
         4: AddRequestString('DV');
-        5: AddRequestString('AI1');
+        5: AddRequestString('DS');
         6: AddRequestString('DC');
         7: AddRequestString('DL');
       end;
