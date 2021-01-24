@@ -2034,7 +2034,8 @@ begin
       q.SQL.Text := GetPrmQueryTxt(gbv.ReqDetails);
       q.Open();
 
-      Defaultlogger.Warn('GetPrmQueryTxt empty result. ' + q.SQL.Text);
+      if q.Eof then
+        Defaultlogger.Warn('GetPrmQueryTxt empty result. ' + q.SQL.Text);
 
       // если это данные от УБЗ, то обработаем блок УБЗ
       if not q.Eof and (gbv.gbt = gbt485) then
