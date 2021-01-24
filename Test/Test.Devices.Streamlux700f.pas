@@ -19,6 +19,7 @@ type
     function GetThreadClass(): TSQLWriteThreadForTestClass; override;
   published
     procedure Test1;
+    procedure DV;
   end;
 
 implementation
@@ -37,7 +38,7 @@ begin
   CheckReqString(4, 'AI1'#13);
   CheckReqString(5, 'DC'#13);
   CheckReqString(6, 'DL'#13);
-  CheckReqString(7, 'POS'#13);
+  CheckReqString(7, 'DI+'#13);
 end;
 
 function TStreamlux700fReqCreatorTest.GetDevType: int;
@@ -83,6 +84,22 @@ begin
   Check(Length(TLocalSQLWriteThreadForTest(thread).Values) = 1, 'MTR1');
   Check(CompareFloatRelative(TLocalSQLWriteThreadForTest(thread).Values[0].Val, 32.11965), 'MTR1');
   Check(TLocalSQLWriteThreadForTest(thread).Values[0].UTime = gbv.gmTime, 'MTR1');
+end;
+
+procedure TStreamlux700fParserTest.DV;
+begin
+  gbv.ReqDetails.rqtp := rqtStreamlux700f;
+  gbv.gmTime := NowGM();
+  gbv.SetBufRec('+0.000000E+00m/s'#13#10);
+
+  TLocalSQLWriteThreadForTest(thread).ChannelIds.ID_DevType := DEVTYPE_STREAMLUX700F;
+  TLocalSQLWriteThreadForTest(thread).ChannelIds.ID_Src := SRC_AI;
+
+  TLocalSQLWriteThreadForTest(thread).ChannelIds.N_Src := 1;
+  Check(TLocalSQLWriteThreadForTest(thread).RecognizeAndCheckChannel(gbv) = recchnresData, 'AI1');
+  Check(Length(TLocalSQLWriteThreadForTest(thread).Values) = 1, 'AI1');
+  Check(CompareFloatRelative(TLocalSQLWriteThreadForTest(thread).Values[0].Val, 0), 'AI1');
+  Check(TLocalSQLWriteThreadForTest(thread).Values[0].UTime = gbv.gmTime, 'AI1');
 end;
 
 initialization

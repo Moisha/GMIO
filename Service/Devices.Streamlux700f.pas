@@ -42,7 +42,7 @@ begin
       end;
     SRC_CNT_MTR:
       case N_Src of
-        1: AddRequestString('POS');
+        1: AddRequestString('DI+');
       end;
   end;
 end;
