@@ -806,7 +806,7 @@ end;
 
 procedure TGeomerSocket.CheckInfo0;
 begin
-  if (FInfo0Queue > 0) and (Abs(FInfo0LastReqUTime - NowGM()) > 5000) then
+  if (FSocketObjectType = OBJ_TYPE_GM) and (FInfo0Queue > 0) and (Abs(FInfo0LastReqUTime - NowGM()) > 5000) then
   begin
     GMSendText(#13#10'INFO:0'#13#10);
     FInfo0LastReqUTime := NowGM();
@@ -895,7 +895,7 @@ begin
     ProgramLog.AddMessage('ProcessAncomID.ID_Obj = ' + IntToStr(ID_Obj));
     if ID_Obj > 0 then
     begin
-      FAncomThread := TRequestAncomGPRS.Create(ID_Obj);
+      FAncomThread := TRequestAncomGPRS.Create(ID_Obj, self);
       GMPostMessage(WM_DEVICE_ONLINE, ID_Obj, 0, DefaultLogger);
     end;
   end;

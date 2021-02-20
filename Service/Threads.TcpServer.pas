@@ -28,6 +28,7 @@ type
     FStartTime: UInt64;
     FInitialSendTimeDelay: int;
     FInitialCurrentTimeSent: bool;
+    FLastDataRead: UInt64;
   protected
     property GMSocket: TGeomerSocket read FGMSocket;
     procedure SafeExecute; override;
@@ -45,7 +46,7 @@ type
 implementation
 
 uses
-  EsLogging, Winapi.ActiveX;
+  EsLogging, Winapi.ActiveX, System.Math;
 
 { TGMTCPServerDaemon }
 
@@ -131,6 +132,7 @@ begin
   FGMSocket := CreateGMSocket(FClientSocket, glvBuffer);
   FInitialSendTimeDelay := 5000;
   FInitialCurrentTimeSent := false;
+  FLastDataRead := 0;
   FreeOnTerminate := true;
 end;
 
@@ -169,33 +171,54 @@ end;
 
 procedure TGMTCPServerThread.SafeExecute;
 var
-  bData: bool;
   res: TCheckCOMResult;
+  FLastLockTime: UInt64;
 begin
   CoInitialize(nil);
   try
-    bData := false;
     FClientSocket.GetSins();
     FStartTime := GetTickCount64();
+    FLastLockTime := 0;
     while not Terminated do
     begin
       if SocketLocked() then
       begin
+        if FLastLockTime = 0 then
+          FLastLockTime := GetTickCount64();
+
+        if GetTickCount64() - FLastLockTime > 300 * 1000 then
+        begin
+          DefaultLogger.Info('Too long lock, breaking');
+          break;
+        end;
+
         SleepThread(10);
         continue;
-      end;
+      end
+      else
+        FLastLockTime := 0;
 
       res := ReadAndParseDataBlock();
       case res of
         ccrBytes:
-          bData := true;
+          FLastDataRead := GetTickCount64();
         ccrError:
           break;
       end;
 
       BackgroundWork();
-      if not bData and not SendInitialCurrentTime() then
+
+      if (FLastDataRead = 0) and not SendInitialCurrentTime() then
+      begin
+        DefaultLogger.Info('SendInitialCurrentTime failed');
         break;
+      end;
+
+      if GetTickCount64() - Max(FLastDataRead, FStartTime) > 300 * 1000 then
+      begin
+        DefaultLogger.Info('Too long idle, breaking');
+        break;
+      end;
 
       SleepThread(10);
     end;

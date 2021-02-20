@@ -130,19 +130,21 @@ begin
   if not ConfigurePort(ri) then
     Exit;
 
-  FCurrentRequest := ri.ReqDetails;
+  try
+    FCurrentRequest := ri.ReqDetails;
 
-  ext.ReqID := FReqID;
-  ri.PrepareBuffer(ext);
-  FReqID := (FReqID + 1) and $FF;
+    ext.ReqID := FReqID;
+    ri.PrepareBuffer(ext);
+    FReqID := (FReqID + 1) and $FF;
 
-  WriteBuf(FConnectionObject.buffers.BufSend, 0, ri.ReqDetails.buf, ri.ReqDetails.BufCnt);
-  FConnectionObject.buffers.LengthSend := ri.ReqDetails.BufCnt;
+    WriteBuf(FConnectionObject.buffers.BufSend, 0, ri.ReqDetails.buf, ri.ReqDetails.BufCnt);
+    FConnectionObject.buffers.LengthSend := ri.ReqDetails.BufCnt;
 
-  if FConnectionObject.ExchangeBlockData(etSenRec) = ccrBytes then
-    PostGBV(ri.ReqDetails, FConnectionObject.buffers.bufRec, FConnectionObject.buffers.NumberOfBytesRead);
-
-  FreePort();
+    if FConnectionObject.ExchangeBlockData(etSenRec) = ccrBytes then
+      PostGBV(ri.ReqDetails, FConnectionObject.buffers.bufRec, FConnectionObject.buffers.NumberOfBytesRead);
+  finally
+    FreePort();
+  end;
 end;
 
 procedure TRequestSpecDevices.FreePort();

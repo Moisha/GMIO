@@ -10,12 +10,12 @@ uses Windows, Threads.ReqSpecDevTemplate, ScktComp, GMGlobals, SysUtils, GMSocke
 type
   TRequestAncomGPRS = class(TRequestSpecDevices)
   private
-    function GetSocket: TGeomerSocket;
+    FSocket: TGeomerSocket;
   protected
     function ConfigurePort(ri: TSpecDevReqListItem): bool; override;
     procedure FreePort; override;
   public
-    constructor Create(id_obj: int);
+    constructor Create(id_obj: int; socket: TGeomerSocket);
   end;
 
 implementation
@@ -41,35 +41,28 @@ end;
 
 { TRequestAncomGPRS }
 
-function TRequestAncomGPRS.GetSocket: TGeomerSocket;
-begin
-  Result := lstSockets.SocketByIdObj(ID_Obj);
-end;
-
 function TRequestAncomGPRS.ConfigurePort(ri: TSpecDevReqListItem): bool;
-var
-  Sckt: TGeomerSocket;
 begin
-  Sckt := GetSocket();
-  if Sckt = nil then
+  if FSocket = nil then
     Exit(false);
 
   Result := inherited ConfigurePort(ri);
-  TConnectionObjectTCP_IncomingSocket(ConnectionObject).Socket := Sckt.Socket;
-  ConnectionObject.LogPrefix := 'Ancom_' + IntToStr(Sckt.N_Car);
-  Sckt.Lock(ThreadId);
+  FSocket.Lock(ThreadId);
 end;
 
-constructor TRequestAncomGPRS.Create(id_obj: int);
+constructor TRequestAncomGPRS.Create(id_obj: int; socket: TGeomerSocket);
 begin
   inherited Create(OBJ_TYPE_ANCOM, id_obj);
+  FSocket := socket;
   CreateConnectionObject(TConnectionObjectTCP_IncomingSocketForAncom);
+  TConnectionObjectTCP_IncomingSocketForAncom(ConnectionObject).Socket := FSocket.Socket;
+  ConnectionObject.LogPrefix := 'Ancom_' + IntToStr(FSocket.N_Car);
 end;
 
 procedure TRequestAncomGPRS.FreePort;
 begin
   inherited;
-  GetSocket().Unlock();
+  FSocket.Unlock();
 end;
 
 end.
