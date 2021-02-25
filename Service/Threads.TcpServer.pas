@@ -146,8 +146,14 @@ end;
 function TGMTCPServerThread.ReadAndParseDataBlock(): TCheckCOMResult;
 begin
   Result := ccrEmpty;
-  if FGMSocket.SocketObjectType in [OBJ_TYPE_UNKNOWN, OBJ_TYPE_CLIENT, OBJ_TYPE_GM, OBJ_TYPE_REMOTE_SRV, OBJ_TYPE_K105] then
-    Result := FGMSocket.ReadAndParseDataBlock();
+  case FGMSocket.SocketObjectType of
+    OBJ_TYPE_UNKNOWN,
+    OBJ_TYPE_CLIENT,
+    OBJ_TYPE_GM,
+    OBJ_TYPE_REMOTE_SRV,
+    OBJ_TYPE_K105:
+      Result := FGMSocket.ReadAndParseDataBlock();
+  end;
 end;
 
 procedure TGMTCPServerThread.BackgroundWork();

@@ -135,7 +135,8 @@ begin
         LogBufRec();
 
       ccrEmpty:
-        DefaultLogger.Debug(LogSignature() + ' - no answer, timeout = ' + IntToStr(WaitFirst));
+        if etAction = etSenRec then
+          DefaultLogger.Debug(LogSignature() + ' - no answer, timeout = ' + IntToStr(WaitFirst));
 
       ccrError:
         DefaultLogger.Debug(LogSignature() + ' - error: ' + LastError);

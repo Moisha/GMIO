@@ -61,7 +61,7 @@ call :insertversion "%PROJECTSROOT%\Service\uac.manifest"
 call :buildprog %PROJECTSROOT%\Service GMIOPSvc "%RELEASEDIR%\Server" 1
 
 call :buildprog %PROJECTSROOT%\Tools\Terminal GMCOMTerminal "%RELEASEDIR%\Tools" 1 
-call :buildprog %PROJECTSROOT%\Tools\GMCfg GMCfg "%RELEASEDIR%\Tools"
+rem call :buildprog %PROJECTSROOT%\Tools\GMCfg GMCfg "%RELEASEDIR%\Tools"
 call :buildprog %PROJECTSROOT%\Tools\LogReader GMLogReader "%RELEASEDIR%\Tools" 1
 call :buildprog %PROJECTSROOT%\WatchDog GMWatchDog "%RELEASEDIR%\WatchDog"
 
