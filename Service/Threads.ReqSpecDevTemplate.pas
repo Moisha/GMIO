@@ -40,6 +40,8 @@ type
     FReqList: TRequestCollection;
     FCurrentRequest: TRequestDetails;
 
+    FLastReadUTime: UInt64;
+
     procedure RequestDataFromCOM;
     procedure RequestDataWithPriority(priority: TRequestPriority; count: int);
     function CheckTerminated(): bool;
@@ -59,6 +61,7 @@ type
   public
     property ObjType: int read FObjType;
     property ID_Obj: int read FID_Obj;
+    property LastReadUTime: UInt64 read FLastReadUTime;
     destructor Destroy; override;
     property ConnectionObject: TConnectionObjectBase read FConnectionObject;
     procedure AddRequest(reqDetails: TRequestDetails);
@@ -84,6 +87,7 @@ begin
   FObjType := ObjType;
   FID_Obj := ID_Obj;
   FReqID := 0;
+  FLastReadUTime := 0;
 
   FReqList := TRequestCollection.Create();
   ReqListBuilder := TRequestListBuilder.Create(ObjType, ID_Obj);
@@ -125,7 +129,8 @@ begin
 end;
 
 procedure TRequestSpecDevices.DoOneRequest(ri: TSpecDevReqListItem);
-var ext: TPrepareRequestBufferInfo;
+var
+  ext: TPrepareRequestBufferInfo;
 begin
   if not ConfigurePort(ri) then
     Exit;
@@ -141,7 +146,10 @@ begin
     FConnectionObject.buffers.LengthSend := ri.ReqDetails.BufCnt;
 
     if FConnectionObject.ExchangeBlockData(etSenRec) = ccrBytes then
+    begin
       PostGBV(ri.ReqDetails, FConnectionObject.buffers.bufRec, FConnectionObject.buffers.NumberOfBytesRead);
+      FLastReadUTime := NowGM();
+    end;
   finally
     FreePort();
   end;

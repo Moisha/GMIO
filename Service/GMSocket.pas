@@ -6,7 +6,7 @@ unit GMSocket;
 
 interface
 
-uses Windows, SysUtils, ScktComp, GMGlobals, Winsock, Classes, RecordsForRmSrv, Math,
+uses Windows, SysUtils, ScktComp, GMGlobals, Winsock, Classes, RecordsForRmSrv, Math, Threads.ReqSpecDevTemplate,
   GMSqlQuery, GMConst, zlib, StrUtils, StdRequest, StdResponce, ConnParamsStorage,
   GeomerLastValue, GMGenerics, GM485, Generics.Collections, RequestList, Threads.SQLExecuter, blcksock, Connection.Base;
 
@@ -25,9 +25,9 @@ type
 
   TGeomerSocket = class
   private
-    FLastReadUTime: int64;
+    FLastReadUTime: Uint64;
     RmSrvRec: TRemoteSrvRecords;
-    FAncomThread: TThread;
+    FAncomThread: TRequestSpecDevices;
     FExecSQLThread: TGeomerSocketSQLExecuteThread;
     FNCar: int;
     glvBuffer: TGeomerLastValuesBuffer;
@@ -90,7 +90,7 @@ type
     constructor Create(ASocket: TTCPBlockSocket; AglvBuffer: TGeomerLastValuesBuffer);
     destructor Destroy; override;
 
-    property LastReadUTime: int64 read FLastReadUTime;
+    property LastReadUTime: Uint64 read FLastReadUTime;
     property SocketObjectType: int read FSocketObjectType;
     property N_Car: int read FNCar write SetNCar;
     property RemoteId: string read FRemoteId;
@@ -131,7 +131,7 @@ implementation
 
 uses Devices.UBZ, DB, Devices.Vacon, HTTPApp, XMLDoc, GMBlockValues,
   Devices.Ancom, Threads.AncomGPRS, ProgramLogFile, ClientResponce, UsefulQueries, Devices.TR101, Threads.Base,
-  Threads.ReqSpecDevTemplate, DateUtils, Connection.TCP, RequestThreadsContainer, Winapi.ActiveX,
+  DateUtils, Connection.TCP, RequestThreadsContainer, Winapi.ActiveX,
   System.NetEncoding, EsLogging;
 
 { TGeomerSocket }
@@ -833,6 +833,9 @@ end;
 
 procedure TGeomerSocket.BackgroundWork;
 begin
+  if FAncomThread <> nil then
+    FLastReadUTime := Max(FLastReadUTime, FAncomThread.LastReadUTime);
+
   if (FSocketObjectType = OBJ_TYPE_GM) and (Abs(NowGM() - FLastBackGroundUTime) >= 2000) then
   begin
     CheckInfo0();

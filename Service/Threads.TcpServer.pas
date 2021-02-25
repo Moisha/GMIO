@@ -40,13 +40,12 @@ type
   public
     constructor Create(clientSocket: TSocket; glvBuffer: TGeomerLastValuesBuffer);
     destructor Destroy; override;
-    property InitialSendTimeDelay: int read FInitialSendTimeDelay write FInitialSendTimeDelay;
   end;
 
 implementation
 
 uses
-  EsLogging, Winapi.ActiveX, System.Math;
+  EsLogging, Winapi.ActiveX, System.Math, GMConst;
 
 { TGMTCPServerDaemon }
 
@@ -130,7 +129,7 @@ begin
   FClientSocket := TTCPBlockSocket.Create;
   FClientSocket.Socket := clientSocket;
   FGMSocket := CreateGMSocket(FClientSocket, glvBuffer);
-  FInitialSendTimeDelay := 5000;
+  FInitialSendTimeDelay := 5;
   FInitialCurrentTimeSent := false;
   FLastDataRead := 0;
   FreeOnTerminate := true;
@@ -146,7 +145,9 @@ end;
 
 function TGMTCPServerThread.ReadAndParseDataBlock(): TCheckCOMResult;
 begin
-  Result := FGMSocket.ReadAndParseDataBlock();
+  Result := ccrEmpty;
+  if FGMSocket.SocketObjectType in [OBJ_TYPE_UNKNOWN, OBJ_TYPE_CLIENT, OBJ_TYPE_GM, OBJ_TYPE_REMOTE_SRV, OBJ_TYPE_K105] then
+    Result := FGMSocket.ReadAndParseDataBlock();
 end;
 
 procedure TGMTCPServerThread.BackgroundWork();
@@ -156,7 +157,7 @@ end;
 
 function TGMTCPServerThread.SendInitialCurrentTime: bool;
 begin
-  if FInitialCurrentTimeSent or (GetTickCount64() - FStartTime < FInitialSendTimeDelay) then
+  if FInitialCurrentTimeSent or (NowGM() - FStartTime < FInitialSendTimeDelay) then
     Exit(true);
 
   DefaultLogger.Info('SendCurrentTime');
@@ -177,7 +178,7 @@ begin
   CoInitialize(nil);
   try
     FClientSocket.GetSins();
-    FStartTime := GetTickCount64();
+    FStartTime := NowGM();
     FLastLockTime := 0;
     while not Terminated do
     begin
@@ -199,14 +200,11 @@ begin
         FLastLockTime := 0;
 
       res := ReadAndParseDataBlock();
-      case res of
-        ccrBytes:
-          FLastDataRead := GetTickCount64();
-        ccrError:
-          break;
-      end;
+      if res = ccrError then
+        break;
 
       BackgroundWork();
+      FLastDataRead := GMSocket.LastReadUTime;
 
       if (FLastDataRead = 0) and not SendInitialCurrentTime() then
       begin
@@ -214,7 +212,7 @@ begin
         break;
       end;
 
-      if GetTickCount64() - Max(FLastDataRead, FStartTime) > 300 * 1000 then
+      if Abs(NowGM() - Max(FLastDataRead, FStartTime)) > 300 then
       begin
         DefaultLogger.Info('Too long idle, breaking');
         break;
